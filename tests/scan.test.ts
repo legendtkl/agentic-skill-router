@@ -1,0 +1,146 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, mkdir, writeFile, rm, cp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { ClaudeCodeHost } from "../src/hosts/claude-code.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FIXTURE_SKILLS = join(__dirname, "fixtures/skills");
+
+async function makeFakeClaudeHome(): Promise<{ home: string; cleanup: () => Promise<void> }> {
+  const home = await mkdtemp(join(tmpdir(), "skill-router-home-"));
+  // Fake user-level skills root
+  await mkdir(join(home, "skills"), { recursive: true });
+  await cp(FIXTURE_SKILLS, join(home, "skills"), { recursive: true });
+
+  // Fake plugin install: one plugin "myplugin@official" with two skills:
+  //  - keep      (enabled)
+  //  - drop      (disabled by us)
+  const pluginPath = join(home, "plugins/cache/official/myplugin/1.0.0");
+  await mkdir(join(pluginPath, "skills/keep"), { recursive: true });
+  await writeFile(
+    join(pluginPath, "skills/keep/SKILL.md"),
+    "---\nname: keep\ndescription: should appear\n---\n",
+  );
+  await mkdir(join(pluginPath, "skills/drop"), { recursive: true });
+  await writeFile(
+    join(pluginPath, "skills/drop/SKILL.md.skill-router-disabled"),
+    "---\nname: drop\ndescription: should appear as disabled\n---\n",
+  );
+
+  // installed_plugins.json
+  await mkdir(join(home, "plugins"), { recursive: true });
+  await writeFile(
+    join(home, "plugins/installed_plugins.json"),
+    JSON.stringify({
+      version: 2,
+      plugins: {
+        "myplugin@official": [
+          { scope: "user", installPath: pluginPath, version: "1.0.0", installedAt: "2026-01-01T00:00:00Z" },
+        ],
+      },
+    }),
+  );
+
+  // settings.json with the plugin enabled
+  await writeFile(
+    join(home, "settings.json"),
+    JSON.stringify({ enabledPlugins: { "myplugin@official": true } }),
+  );
+
+  return { home, cleanup: () => rm(home, { recursive: true, force: true }) };
+}
+
+test("listSkills enumerates user, plugin, and builtin sources", async () => {
+  const { home, cleanup } = await makeFakeClaudeHome();
+  try {
+    const host = new ClaudeCodeHost({ claudeHome: home });
+    const skills = await host.listSkills();
+    const byId = new Map(skills.map((s) => [s.id, s]));
+
+    // User-level fixtures: foo (live), bar (live), zap-disabled (disabled)
+    assert.equal(byId.get("user:foo")?.isDisabled, false);
+    assert.equal(byId.get("user:foo")?.description, "A test skill named foo");
+    assert.equal(byId.get("user:bar")?.description, "飞书 — bar with quoted Chinese");
+    const zap = byId.get("user:zap-disabled");
+    assert.ok(zap, "zap-disabled skill should be listed");
+    assert.equal(zap!.isDisabled, true);
+    assert.match(zap!.skillMdPath, /SKILL\.md\.skill-router-disabled$/);
+
+    // Plugin skills
+    const keep = byId.get("plugin:myplugin@official:keep");
+    assert.ok(keep);
+    assert.equal(keep!.source, "plugin");
+    assert.equal(keep!.pluginKey, "myplugin@official");
+    assert.equal(keep!.isDisabled, false);
+    assert.equal(keep!.isPluginDisabled, false);
+
+    const drop = byId.get("plugin:myplugin@official:drop");
+    assert.ok(drop);
+    assert.equal(drop!.isDisabled, true);
+
+    // Built-ins are present and not disable-able
+    const init = byId.get("builtin:init");
+    assert.ok(init);
+    assert.equal(init!.canDisable, false);
+    assert.equal(init!.source, "builtin");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("plugin disabled in enabledPlugins surfaces as isPluginDisabled", async () => {
+  const { home, cleanup } = await makeFakeClaudeHome();
+  try {
+    // Override settings to disable the plugin
+    await writeFile(
+      join(home, "settings.json"),
+      JSON.stringify({ enabledPlugins: { "myplugin@official": false } }),
+    );
+    const host = new ClaudeCodeHost({ claudeHome: home });
+    const skills = await host.listSkills();
+    const keep = skills.find((s) => s.id === "plugin:myplugin@official:keep");
+    assert.ok(keep);
+    assert.equal(keep!.isPluginDisabled, true);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("disable + enable round-trip on a user skill", async () => {
+  const { home, cleanup } = await makeFakeClaudeHome();
+  try {
+    const host = new ClaudeCodeHost({ claudeHome: home });
+    const skills = await host.listSkills();
+    const foo = skills.find((s) => s.id === "user:foo");
+    assert.ok(foo);
+    await host.disable(foo!, "test");
+
+    const after = await host.listSkills();
+    const fooAfter = after.find((s) => s.id === "user:foo");
+    assert.ok(fooAfter);
+    assert.equal(fooAfter!.isDisabled, true);
+
+    await host.enable(fooAfter!);
+    const final = await host.listSkills();
+    const fooFinal = final.find((s) => s.id === "user:foo");
+    assert.equal(fooFinal!.isDisabled, false);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("disable on builtin skill throws", async () => {
+  const { home, cleanup } = await makeFakeClaudeHome();
+  try {
+    const host = new ClaudeCodeHost({ claudeHome: home });
+    const skills = await host.listSkills();
+    const init = skills.find((s) => s.id === "builtin:init");
+    assert.ok(init);
+    await assert.rejects(() => host.disable(init!, "x"), /BuiltinSkillCannotDisable/);
+  } finally {
+    await cleanup();
+  }
+});

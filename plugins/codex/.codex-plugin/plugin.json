@@ -1,0 +1,34 @@
+{
+  "name": "skill-router",
+  "version": "0.1.0",
+  "description": "Manage installed Codex skills based on usage. Reports last-used time per skill, suggests stale ones, and disables them by renaming SKILL.md files.",
+  "author": {
+    "name": "skill-router contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "cleanup",
+    "codex",
+    "context"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Skill Router",
+    "shortDescription": "Audit and manage stale Codex skills",
+    "longDescription": "Skill Router audits Codex skills, suggests unused or stale entries, and safely disables selected skills by renaming SKILL.md files so they can be restored later.",
+    "developerName": "skill-router contributors",
+    "category": "Engineering",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Slim down my Codex skills",
+      "Show unused Codex skills",
+      "Restore a disabled Codex skill"
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}

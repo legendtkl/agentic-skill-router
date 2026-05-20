@@ -1,0 +1,6 @@
+{
+  "name": "skill-router",
+  "version": "0.1.0",
+  "description": "Manage installed Claude Code skills based on usage. Reports last-used time per skill, suggests stale ones, and disables them by renaming SKILL.md files.",
+  "skills": "./skills/"
+}
