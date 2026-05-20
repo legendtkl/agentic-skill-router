@@ -4,13 +4,19 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  DCI_BUDGET,
+  dciFindInSkill,
   dciGrepDisabledSkills,
   dciInspectSkill,
+  dciOpenSkillWindow,
   dciReadSkill,
+  dciRouteDisabledSkills,
   dciSearchDisabledSkills,
   dciSelectSkill,
+  dciSelectSkills,
   routableDisabledSkills,
 } from "../src/dci.ts";
+import { routeDisabledSkillsAuto } from "../src/auto-route.ts";
 import { routeDisabledSkills } from "../src/route.ts";
 import type { Skill } from "../src/types.ts";
 
@@ -140,9 +146,79 @@ test("DCI search finds body-only evidence that lexical route cannot select", asy
 
     const result = await dciSearchDisabledSkills(corpus.skills, query, { topK: 5, maxSnippets: 2 });
     assert.equal(result.action, "inspect-or-read-candidates");
+    assert.deepEqual(result.queries, [query]);
+    assert.equal(result.budget.maxSelections, DCI_BUDGET.maxSelections);
     assert.equal(result.corpus.scanned, 161);
+    assert.match(result.matches[0]?.ref ?? "", /^dci-[a-f0-9]{10}$/);
     assert.equal(result.matches[0]?.id, "user:codex:body-only-probe");
+    assert.equal(result.matches[0]?.matchedQuery, query);
     assert.match(result.matches[0]?.snippets[0]?.text ?? "", /dci-orchid-ledger-repair/);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI search supports bounded multi-query retrieval with stable candidate refs", async () => {
+  const corpus = await makeCorpus();
+  try {
+    const result = await dciSearchDisabledSkills(
+      corpus.skills,
+      ["unrelated request", "dci-orchid-ledger-repair", "dci-orchid-ledger-repair", "ignored extra query"],
+      { topK: 5, maxQueries: 3 },
+    );
+    assert.deepEqual(result.queries, ["unrelated request", "dci-orchid-ledger-repair", "ignored extra query"]);
+    assert.equal(result.matches[0]?.id, "user:codex:body-only-probe");
+    assert.equal(result.matches[0]?.matchedQuery, "dci-orchid-ledger-repair");
+
+    const inspectedByRef = dciInspectSkill(corpus.skills, result.matches[0]!.ref);
+    assert.equal(inspectedByRef.id, "user:codex:body-only-probe");
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI search and grep enforce the candidate budget even with large topK", async () => {
+  const corpus = await makeCorpus();
+  try {
+    const search = await dciSearchDisabledSkills(corpus.skills, "helper", { topK: 50 });
+    assert.equal(search.budget.maxCandidates, DCI_BUDGET.maxCandidates);
+    assert.equal(search.matches.length, DCI_BUDGET.maxCandidates);
+
+    const grep = await dciGrepDisabledSkills(corpus.skills, "helper", { topK: 50 });
+    assert.equal(grep.budget.maxCandidates, DCI_BUDGET.maxCandidates);
+    assert.equal(grep.matches.length, DCI_BUDGET.maxCandidates);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI route checks ambiguity before applying topK", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const body = "Use this skill when the request mentions dci-pearl-ledger-repair.";
+    corpus.skills.push(await writeCorpusSkill(corpus.root, {
+      id: "user:codex:alpha-pearl",
+      name: "alpha-pearl",
+      description: "Generic disabled helper",
+      body,
+      isDisabled: true,
+    }));
+    corpus.skills.push(await writeCorpusSkill(corpus.root, {
+      id: "user:codex:beta-pearl",
+      name: "beta-pearl",
+      description: "Generic disabled helper",
+      body,
+      isDisabled: true,
+    }));
+
+    const result = await dciRouteDisabledSkills(corpus.skills, "please handle dci-pearl-ledger-repair", { topK: 1 });
+    assert.equal(result.matches.length, 1);
+    assert.equal(result.matches[0]?.confidence, "medium");
+    assert.equal(result.selected, null);
+    assert.deepEqual(
+      result.diagnostics?.dci?.matches.slice(0, 2).map((match) => match.id),
+      ["user:codex:alpha-pearl", "user:codex:beta-pearl"],
+    );
   } finally {
     await corpus.cleanup();
   }
@@ -177,6 +253,49 @@ test("DCI grep treats patterns literally unless regex is explicit", async () => 
   }
 });
 
+test("DCI find and open operate on a single disabled candidate ref", async () => {
+  const corpus = await makeCorpus();
+  try {
+    const search = await dciSearchDisabledSkills(corpus.skills, "dci-orchid-ledger-repair");
+    const ref = search.matches[0]!.ref;
+
+    const found = await dciFindInSkill(corpus.skills, ref, "final answer", { maxSnippets: 1 });
+    assert.equal(found.id, "user:codex:body-only-probe");
+    assert.equal(found.action, "inspect-or-open-candidate");
+    assert.equal(found.snippets.length, 1);
+    assert.match(found.snippets[0]?.text ?? "", /final answer/);
+
+    const opened = await dciOpenSkillWindow(corpus.skills, ref, { line: found.snippets[0]!.line, window: 3 });
+    assert.equal(opened.action, "read-skill-window");
+    assert.equal(opened.id, "user:codex:body-only-probe");
+    assert.ok(opened.endLine - opened.startLine + 1 <= 3);
+    assert.match(opened.content, /\d+: .*final answer/);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI open enforces a total character budget for long lines", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const longSkill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:long-line-probe",
+      name: "long-line-probe",
+      description: "Long line disabled helper",
+      body: "x".repeat(40_000),
+      isDisabled: true,
+    });
+    corpus.skills.push(longSkill);
+
+    const opened = await dciOpenSkillWindow(corpus.skills, "user:codex:long-line-probe", { line: 6, window: 1 });
+    assert.equal(opened.truncated, true);
+    assert.equal(opened.maxChars, DCI_BUDGET.maxOpenChars);
+    assert.equal(opened.content.length, DCI_BUDGET.maxOpenChars);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI inspect and read reject non-routable skills", async () => {
   const corpus = await makeCorpus();
   try {
@@ -203,6 +322,96 @@ test("DCI read truncates content and select returns a read action", async () => 
     assert.equal(selected.action, "read-skill-file");
     assert.equal(selected.confidence, "high");
     assert.match(selected.skillMdPath, /SKILL\.md\.skill-router-disabled$/);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI multi-select records a bounded set of disabled skills", async () => {
+  const corpus = await makeCorpus();
+  try {
+    const search = await dciSearchDisabledSkills(corpus.skills, ["dci-orchid-ledger-repair", "helper"], { topK: 4 });
+    const selected = dciSelectSkills(
+      corpus.skills,
+      [search.matches[0]!.ref, search.matches[1]!.id, search.matches[2]!.ref],
+      "medium",
+      "bounded multi-selection",
+    );
+    assert.equal(selected.action, "read-skill-files");
+    assert.equal(selected.maxSelections, DCI_BUDGET.maxSelections);
+    assert.equal(selected.selected.length, 3);
+    assert.equal(selected.selected[0]?.id, "user:codex:body-only-probe");
+
+    assert.throws(
+      () => dciSelectSkills(corpus.skills, search.matches.slice(0, 4).map((m) => m.ref), "medium", "too many"),
+      /too many DCI selections/,
+    );
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("auto route upgrades a suspicious lexical winner to DCI evidence", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    corpus.skills.push(await writeCorpusSkill(corpus.root, {
+      id: "user:codex:bytedance-devflow",
+      name: "bytedance-devflow",
+      description: "面向 DevFlow 任务创建/查看/关闭、Meego 绑定、资源查询、服务部署/删除部署/开启 debug，以及 TCC key 查询/创建/修改/删除的统一入口。当用户提到 DevFlow、服务信息、部署情况、泳道信息、服务MR信息、服务部署、在 DevFlow 上开启或重启 debug、Meego 关联任务查询、将 Meego 绑定到 DevFlow task 或 TCC 配置管理时使用。",
+      body: "DevFlow task and service deployment entrypoint.",
+      isDisabled: true,
+    }));
+    corpus.skills.push(await writeCorpusSkill(corpus.root, {
+      id: "user:codex:bytedance-env",
+      name: "bytedance-env",
+      description: "Operate ENV platform via bytedcli: list/search env, baseline create flow, deploy TCE/TCC, manage devices, deploy bytefaas (ByteCloud FaaS) services to PPE swimlanes, and inspect tickets.",
+      body: "Use for ENV platform baseline create flow, bytefaas FaaS deployment to PPE swimlane, ticket inspection, 把 bytefaas/FaaS 服务部署到 PPE swimlane 并检查 ticket.",
+      isDisabled: true,
+    }));
+
+    const query = "用 ENV platform 做 baseline create flow，把 bytefaas/FaaS 服务部署到 PPE swimlane 并检查 ticket";
+    const lexical = routeDisabledSkills(corpus.skills, query, { topK: 3 });
+    assert.equal(lexical.selected?.skill.id, "user:codex:bytedance-devflow");
+
+    const auto = await routeDisabledSkillsAuto(corpus.skills, query, { topK: 3 });
+    assert.equal(auto.routeMode, "auto");
+    assert.equal(auto.diagnostics?.auto?.escalated, true);
+    assert.equal(auto.selected?.skill.id, "user:codex:bytedance-env");
+
+    const topOne = await routeDisabledSkillsAuto(corpus.skills, query, { topK: 1 });
+    assert.equal(topOne.matches.length, 1);
+    assert.equal(topOne.diagnostics?.auto?.escalated, true);
+    assert.equal(topOne.selected?.skill.id, "user:codex:bytedance-env");
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("auto route upgrades umbrella skills to DCI evidence", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    corpus.skills.push(await writeCorpusSkill(corpus.root, {
+      id: "user:codex:bytedcli",
+      name: "bytedcli",
+      description: "Unified skill for the bytedcli command surface. Covers auth/tokens, TCE, TCC, ENV, TOS, RDS, Hive, Dorado, ES, Cache, BMQ, Log, APM, and many internal platforms.",
+      body: "Generic bytedcli umbrella command surface.",
+      isDisabled: true,
+    }));
+    corpus.skills.push(await writeCorpusSkill(corpus.root, {
+      id: "user:codex:bytedance-auth",
+      name: "bytedance-auth",
+      description: "Operate bytedcli authentication flows. Use when user asks to login/logout, check auth status, fetch user info, prepare SSO JWT, or prepare ByteCloud Auth tokens.",
+      body: "Use for bytedcli auth login logout status user info SSO JWT ByteCloud Auth token workflows.",
+      isDisabled: true,
+    }));
+
+    const query = "操作 bytedcli auth：login/logout/status，获取当前 user info，准备 SSO JWT 或 ByteCloud Auth token";
+    const lexical = routeDisabledSkills(corpus.skills, query, { topK: 3 });
+    assert.equal(lexical.selected?.skill.id, "user:codex:bytedcli");
+
+    const auto = await routeDisabledSkillsAuto(corpus.skills, query, { topK: 3 });
+    assert.equal(auto.diagnostics?.auto?.reason, "lexical-selected-umbrella-skill");
+    assert.equal(auto.selected?.skill.id, "user:codex:bytedance-auth");
   } finally {
     await corpus.cleanup();
   }

@@ -154,6 +154,34 @@ test("routeDisabledSkills uses matched CJK action cues despite query parameters"
   assert.equal(result.selected?.confidence, "high");
 });
 
+test("routeDisabledSkills does not let one generic CJK cue override distinctive terms", () => {
+  const skills = [
+    mkSkill({
+      id: "user:codex:tea-data-query",
+      name: "tea-data-query",
+      description: "TEA 数据查询工具。输入一个 TEA 的 URL 链接，自动解析 project_id、dashboard_id 或 report_id，通过 DataOpen API 查询并展示数据。支持 Dashboard 和 Report。",
+      isDisabled: true,
+      skillMdPath: "/tmp/tea-data-query/SKILL.md.skill-router-disabled",
+    }),
+    mkSkill({
+      id: "user:codex:bytedance-es",
+      name: "bytedance-es",
+      description: "Query Elasticsearch via Kibana console API: execute ES DSL queries, search indices, retrieve documents, and get ES index mapping.",
+      isDisabled: true,
+      skillMdPath: "/tmp/bytedance-es/SKILL.md.skill-router-disabled",
+    }),
+  ];
+
+  const result = routeDisabledSkills(
+    skills,
+    "通过 Kibana console API 执行 Elasticsearch DSL 查询并获取 index mapping",
+    { topK: 2 },
+  );
+
+  assert.equal(result.selected, null);
+  assert.equal(result.matches[0]?.skill.id, "user:codex:bytedance-es");
+});
+
 test("routeDisabledSkills does not select a multi-domain keyword pile", () => {
   const skills = [
     mkSkill({

@@ -1,21 +1,28 @@
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { ClaudeCodeHost } from "./hosts/claude-code.ts";
 import { CodexHost } from "./hosts/codex.ts";
 import type { Host } from "./hosts/base.ts";
 import { lookupUsage } from "./usage.ts";
 import { suggest } from "./policy.ts";
-import { routeDisabledSkills, type SkillRouteMatch } from "./route.ts";
+import { routeDisabledSkillsAuto } from "./auto-route.ts";
+import { routeDisabledSkills, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
 import {
+  DCI_BUDGET,
+  dciRouteDisabledSkills,
+  dciFindInSkill,
   dciGrepDisabledSkills,
   dciInspectSkill,
+  dciOpenSkillWindow,
   dciReadSkill,
   dciSearchDisabledSkills,
-  dciSelectSkill,
+  dciSelectSkills,
 } from "./dci.ts";
 import { disableSkill, enableSkill, findOrphanMarkers, reapplyMissing } from "./apply.ts";
-import { loadConfig, resolveUnusedForDays } from "./config.ts";
+import { loadConfig, parseRouteMode, resolveUnusedForDays } from "./config.ts";
 import { loadState, recordRoutedSkill, saveState, statePathForHost } from "./state.ts";
-import type { Confidence, HostName, Skill, Suggestion, UsageStat } from "./types.ts";
+import type { Confidence, HostName, RouteMode, Skill, Suggestion, UsageStat } from "./types.ts";
 
 export async function run(argv: string[]): Promise<number> {
   const { hostName, args } = parseGlobalArgs(argv);
@@ -94,18 +101,21 @@ function usage(code = 0): number {
 USAGE
   skill-router [--host=claude-code|codex] skills list [--json]
   skill-router [--host=claude-code|codex] skills suggest [--unused-for=<dur>] [--json]
-  skill-router [--host=claude-code|codex] skills route --query=<text> [--json] [--top-k=N] [--no-record]
-  skill-router [--host=claude-code|codex] skills dci search --query=<text> [--json] [--top-k=N]
+  skill-router [--host=claude-code|codex] skills route --query=<text> [--mode=auto|lexical|dci] [--json] [--top-k=N] [--no-record]
+  skill-router [--host=claude-code|codex] skills dci search --query=<text> [--query=<text>...] [--json] [--top-k=N]
   skill-router [--host=claude-code|codex] skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
-  skill-router [--host=claude-code|codex] skills dci inspect <id> [--json]
-  skill-router [--host=claude-code|codex] skills dci read <id> [--json] [--max-chars=N]
-  skill-router [--host=claude-code|codex] skills dci select <id> --query=<text> --confidence=high|medium --reason=<text> [--json]
+  skill-router [--host=claude-code|codex] skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]
+  skill-router [--host=claude-code|codex] skills dci open <id-or-ref> [--line=N] [--window=N] [--json]
+  skill-router [--host=claude-code|codex] skills dci inspect <id-or-ref> [--json]
+  skill-router [--host=claude-code|codex] skills dci read <id-or-ref> [--json] [--max-chars=N]
+  skill-router [--host=claude-code|codex] skills dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
+  skill-router [--host=claude-code|codex] skills dci budget [--json]
   skill-router [--host=claude-code|codex] skills disable <id...> | --all-suggested [--unused-for=<dur>] [--yes] [--reason=<text>]
   skill-router [--host=claude-code|codex] skills enable <id...>
   skill-router [--host=claude-code|codex] skills status [--json]
 
 DURATION  bare integer = days. Suffixed: 30d / 2w / 3m / 1y
-CONFIG    ~/.skill-router/config.json   { "unusedForDays": 30 }
+CONFIG    ~/.skill-router/config.json   { "unusedForDays": 30, "routeMode": "auto" }
 STATE     ~/.skill-router/state-<host>.json
 `);
   return code;
@@ -153,6 +163,7 @@ async function cmdRoute(argv: string[], hostName: HostName): Promise<number> {
       query: { type: "string", short: "q" },
       json: { type: "boolean" },
       "top-k": { type: "string" },
+      mode: { type: "string" },
       "no-record": { type: "boolean" },
     },
     allowPositionals: true,
@@ -169,10 +180,16 @@ async function cmdRoute(argv: string[], hostName: HostName): Promise<number> {
     console.error("--top-k must be a positive integer");
     return 2;
   }
+  const config = await loadConfig();
+  const routeMode = resolveRouteMode(values.mode as string | undefined, config.routeMode);
+  if (!routeMode) {
+    console.error("--mode must be one of: auto, lexical, dci");
+    return 2;
+  }
 
   const host = createHost(hostName);
   const skills = await host.listSkills();
-  const result = routeDisabledSkills(skills, query, topK === undefined ? {} : { topK });
+  const result = await routeByMode(skills, query, routeMode, topK === undefined ? {} : { topK });
   const selected = result.selected;
   let recorded = false;
   const warnings: string[] = [];
@@ -223,14 +240,28 @@ async function cmdRoute(argv: string[], hostName: HostName): Promise<number> {
   return 0;
 }
 
+async function routeByMode(
+  skills: Skill[],
+  query: string,
+  mode: RouteMode,
+  opts: { topK?: number },
+) {
+  if (mode === "lexical") return routeDisabledSkills(skills, query, opts);
+  if (mode === "dci") return dciRouteDisabledSkills(skills, query, opts);
+  return routeDisabledSkillsAuto(skills, query, opts);
+}
+
 async function cmdDci(argv: string[], hostName: HostName): Promise<number> {
   const [subcommand, ...rest] = argv;
   switch (subcommand) {
     case "search": return cmdDciSearch(rest, hostName);
     case "grep": return cmdDciGrep(rest, hostName);
+    case "find": return cmdDciFind(rest, hostName);
+    case "open": return cmdDciOpen(rest, hostName);
     case "inspect": return cmdDciInspect(rest, hostName);
     case "read": return cmdDciRead(rest, hostName);
     case "select": return cmdDciSelect(rest, hostName);
+    case "budget": return cmdDciBudget(rest);
     case undefined:
     case "-h":
     case "--help":
@@ -245,16 +276,19 @@ async function cmdDciSearch(argv: string[], hostName: HostName): Promise<number>
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
-      query: { type: "string", short: "q" },
+      query: { type: "string", short: "q", multiple: true },
       json: { type: "boolean" },
       "top-k": { type: "string" },
       "max-snippets": { type: "string" },
+      "max-queries": { type: "string" },
     },
     allowPositionals: true,
     strict: false,
   });
-  const query = ((values.query as string | undefined) ?? positionals.join(" ")).trim();
-  if (query === "") {
+  const queries = stringValues(values.query);
+  const positionalQuery = positionals.join(" ").trim();
+  if (positionalQuery) queries.push(positionalQuery);
+  if (queries.length === 0) {
     console.error("specify --query=<text> or pass the query as positional text");
     return 2;
   }
@@ -262,11 +296,14 @@ async function cmdDciSearch(argv: string[], hostName: HostName): Promise<number>
   if (topK === null) return 2;
   const maxSnippets = parsePositiveFlag(values["max-snippets"] as string | undefined, "--max-snippets");
   if (maxSnippets === null) return 2;
+  const maxQueries = parsePositiveFlag(values["max-queries"] as string | undefined, "--max-queries");
+  if (maxQueries === null) return 2;
 
   const host = createHost(hostName);
-  const result = await dciSearchDisabledSkills(await host.listSkills(), query, {
+  const result = await dciSearchDisabledSkills(await host.listSkills(), queries, {
     ...(topK === undefined ? {} : { topK }),
     ...(maxSnippets === undefined ? {} : { maxSnippets }),
+    ...(maxQueries === undefined ? {} : { maxQueries }),
   });
   if (values.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -321,6 +358,95 @@ async function cmdDciGrep(argv: string[], hostName: HostName): Promise<number> {
   return result.matches.length > 0 ? 0 : 1;
 }
 
+async function cmdDciFind(argv: string[], hostName: HostName): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      pattern: { type: "string", short: "p" },
+      json: { type: "boolean" },
+      regex: { type: "boolean" },
+      "max-snippets": { type: "string" },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
+  const idOrRef = positionals[0];
+  if (!idOrRef) {
+    console.error("specify <id-or-ref>");
+    return 2;
+  }
+  const pattern = (values.pattern as string | undefined)?.trim();
+  if (!pattern) {
+    console.error("specify --pattern=<text>");
+    return 2;
+  }
+  const maxSnippets = parsePositiveFlag(values["max-snippets"] as string | undefined, "--max-snippets");
+  if (maxSnippets === null) return 2;
+  if (values.regex) {
+    try {
+      new RegExp(pattern, "iu");
+    } catch (err) {
+      console.error(`invalid --regex pattern: ${(err as Error).message}`);
+      return 2;
+    }
+  }
+
+  const host = createHost(hostName);
+  try {
+    const result = await dciFindInSkill(await host.listSkills(), idOrRef, pattern, {
+      regex: Boolean(values.regex),
+      ...(maxSnippets === undefined ? {} : { maxSnippets }),
+    });
+    if (values.json) process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    else printDciFind(result);
+    return result.snippets.length > 0 ? 0 : 1;
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
+  }
+}
+
+async function cmdDciOpen(argv: string[], hostName: HostName): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      json: { type: "boolean" },
+      line: { type: "string" },
+      window: { type: "string" },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
+  const idOrRef = positionals[0];
+  if (!idOrRef) {
+    console.error("specify <id-or-ref>");
+    return 2;
+  }
+  const line = parsePositiveFlag(values.line as string | undefined, "--line");
+  if (line === null) return 2;
+  const window = parsePositiveFlag(values.window as string | undefined, "--window");
+  if (window === null) return 2;
+
+  const host = createHost(hostName);
+  try {
+    const result = await dciOpenSkillWindow(await host.listSkills(), idOrRef, {
+      ...(line === undefined ? {} : { line }),
+      ...(window === undefined ? {} : { window }),
+    });
+    if (values.json) process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    else {
+      process.stdout.write(result.content + (result.content.endsWith("\n") ? "" : "\n"));
+      if (result.truncated) {
+        process.stdout.write(`[truncated at ${result.maxChars} chars]\n`);
+      }
+    }
+    return 0;
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
+  }
+}
+
 async function cmdDciInspect(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseArgs({
     args: argv,
@@ -330,7 +456,7 @@ async function cmdDciInspect(argv: string[], hostName: HostName): Promise<number
   });
   const id = positionals[0];
   if (!id) {
-    console.error("specify <id>");
+    console.error("specify <id-or-ref>");
     return 2;
   }
   const host = createHost(hostName);
@@ -357,7 +483,7 @@ async function cmdDciRead(argv: string[], hostName: HostName): Promise<number> {
   });
   const id = positionals[0];
   if (!id) {
-    console.error("specify <id>");
+    console.error("specify <id-or-ref>");
     return 2;
   }
   const maxChars = parsePositiveFlag(values["max-chars"] as string | undefined, "--max-chars");
@@ -389,7 +515,7 @@ async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number>
   });
   const id = positionals[0];
   if (!id) {
-    console.error("specify <id>");
+    console.error("specify <id-or-ref...>");
     return 2;
   }
   const query = (values.query as string | undefined)?.trim();
@@ -411,22 +537,26 @@ async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number>
   const host = createHost(hostName);
   const skills = await host.listSkills();
   try {
-    const selected = dciSelectSkill(skills, id, confidence, reason);
+    const selected = dciSelectSkills(skills, positionals, confidence, reason);
     const warnings: string[] = [];
     let recorded = false;
     if (!values["no-record"]) {
       try {
         const statePath = statePathForHost(host.name);
-        const state = await loadState(statePath, host.name);
-        await saveState(recordRoutedSkill(state, {
-          id: selected.id,
-          pluginKey: selected.pluginKey,
-          skillMdPath: selected.skillMdPath,
-          name: selected.name,
-          query,
-          confidence,
-          routedAt: new Date().toISOString(),
-        }), statePath);
+        let state = await loadState(statePath, host.name);
+        const routedAt = new Date().toISOString();
+        for (const item of selected.selected) {
+          state = recordRoutedSkill(state, {
+            id: item.id,
+            pluginKey: item.pluginKey,
+            skillMdPath: item.skillMdPath,
+            name: item.name,
+            query,
+            confidence,
+            routedAt,
+          });
+        }
+        await saveState(state, statePath);
         recorded = true;
       } catch (err) {
         const warning = `routed usage was not recorded: ${(err as Error).message}`;
@@ -434,13 +564,17 @@ async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number>
         process.stderr.write(`warning: ${warning}\n`);
       }
     }
-    const result = { ...selected, query, recorded, warnings };
+    const result = selected.selected.length === 1
+      ? { ...selected.selected[0]!, query, recorded, warnings, selected: selected.selected, maxSelections: selected.maxSelections }
+      : { ...selected, query, recorded, warnings };
     if (values.json) {
       process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     } else {
-      console.log(`select: [${result.confidence}] ${result.id}`);
-      console.log(`read:   ${result.skillMdPath}`);
-      console.log(`why:    ${result.reason}`);
+      for (const item of selected.selected) {
+        console.log(`select: [${item.confidence}] ${item.id} (${item.ref})`);
+        console.log(`read:   ${item.skillMdPath}`);
+      }
+      console.log(`why:    ${selected.reason}`);
       if (recorded) console.log("usage:  recorded routed use");
     }
     return 0;
@@ -448,6 +582,27 @@ async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number>
     console.error((err as Error).message);
     return 2;
   }
+}
+
+async function cmdDciBudget(argv: string[]): Promise<number> {
+  const { values } = parseArgs({
+    args: argv,
+    options: { json: { type: "boolean" } },
+    strict: false,
+  });
+  if (values.json) {
+    process.stdout.write(JSON.stringify(DCI_BUDGET, null, 2) + "\n");
+    return 0;
+  }
+  console.log(`max queries:        ${DCI_BUDGET.maxQueries}`);
+  console.log(`max candidates:     ${DCI_BUDGET.maxCandidates}`);
+  console.log(`max find/open ops:  ${DCI_BUDGET.maxFindsOrOpens}`);
+  console.log(`max full reads:     ${DCI_BUDGET.maxFullReads}`);
+  console.log(`max selections:     ${DCI_BUDGET.maxSelections}`);
+  console.log(`default window:     ${DCI_BUDGET.defaultWindowLines} lines`);
+  console.log(`max window:         ${DCI_BUDGET.maxWindowLines} lines`);
+  console.log(`max open output:    ${DCI_BUDGET.maxOpenChars} chars`);
+  return 0;
 }
 
 async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
@@ -632,7 +787,7 @@ function projectSuggestion(s: Suggestion) {
   };
 }
 
-function projectRoute(result: ReturnType<typeof routeDisabledSkills>, recorded: boolean, warnings: string[] = []) {
+function projectRoute(result: SkillRouteResult, recorded: boolean, warnings: string[] = []) {
   const projectMatch = (m: SkillRouteMatch) => ({
     id: m.skill.id,
     name: m.skill.name,
@@ -643,15 +798,18 @@ function projectRoute(result: ReturnType<typeof routeDisabledSkills>, recorded: 
     confidence: m.confidence,
     score: m.score,
     reason: m.reason,
+    signals: m.signals,
   });
   return {
     query: result.query,
     mode: result.mode,
+    routeMode: result.routeMode,
     action: result.selected ? "read-skill-file" as const : "no-confident-match" as const,
     recorded,
     warnings,
     selected: result.selected ? { ...projectMatch(result.selected), action: "read-skill-file" as const } : null,
     matches: result.matches.map(projectMatch),
+    diagnostics: result.diagnostics,
   };
 }
 
@@ -677,17 +835,38 @@ function parseConfidence(value: string | undefined): Confidence | null {
   return null;
 }
 
-function printDciMatches(matches: Array<{ id: string; score: number; reason: string; snippets: Array<{ line: number; text: string }> }>): void {
+function resolveRouteMode(cliValue: string | undefined, configValue: RouteMode): RouteMode | null {
+  if (cliValue === undefined || cliValue === "") return parseRouteMode(process.env["SKILL_ROUTER_ROUTE_MODE"]) ?? configValue;
+  return parseRouteMode(cliValue);
+}
+
+function stringValues(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  return typeof value === "string" ? [value] : [];
+}
+
+function printDciMatches(matches: Array<{ ref?: string; id: string; score: number; reason: string; snippets: Array<{ line: number; text: string }> }>): void {
   if (matches.length === 0) {
     console.log("no disabled-skill corpus candidates found.");
     return;
   }
   for (const m of matches) {
-    console.log(`${m.id} (${m.score})`);
+    console.log(`${m.ref ? `${m.ref}  ` : ""}${m.id} (${m.score})`);
     console.log(`  ${m.reason}`);
     for (const snippet of m.snippets) {
       console.log(`  L${snippet.line}: ${snippet.text}`);
     }
+  }
+}
+
+function printDciFind(result: { ref: string; id: string; action: string; snippets: Array<{ line: number; text: string }> }): void {
+  if (result.snippets.length === 0) {
+    console.log(`no matches in ${result.ref}  ${result.id}`);
+    return;
+  }
+  console.log(`${result.ref}  ${result.id}`);
+  for (const snippet of result.snippets) {
+    console.log(`  L${snippet.line}: ${snippet.text}`);
   }
 }
 
@@ -747,8 +926,19 @@ function pad(s: string, w: number): string {
   return s.length >= w ? s : s + " ".repeat(w - s.length);
 }
 
-// Entry point when run as a script (handled by __main__ section in the bundle)
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+
+  const modulePath = fileURLToPath(import.meta.url);
+  try {
+    return realpathSync(modulePath) === realpathSync(entry);
+  } catch {
+    return modulePath === entry;
+  }
+}
+
+if (isMainModule()) {
   const code = await run(process.argv.slice(2));
   process.exit(code);
 }

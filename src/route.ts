@@ -1,4 +1,4 @@
-import type { Confidence, Skill } from "./types.ts";
+import type { Confidence, RouteMode, Skill } from "./types.ts";
 
 export interface RouteOptions {
   topK?: number;
@@ -9,13 +9,44 @@ export interface SkillRouteMatch {
   confidence: Confidence;
   score: number;
   reason: string;
+  signals: SkillRouteSignals;
+}
+
+export interface SkillRouteSignals {
+  hitCount: number;
+  tokenCount: number;
+  candidateHitCount: number;
+  candidateTokenCount: number;
+  cueHitCount: number;
+  matchedName: boolean;
+  matchedPhrase: boolean;
 }
 
 export interface SkillRouteResult {
   query: string;
   mode: "disabled-only";
+  routeMode: RouteMode;
   selected: SkillRouteMatch | null;
   matches: SkillRouteMatch[];
+  diagnostics?: RouteDiagnostics;
+}
+
+export interface RouteDiagnostics {
+  lexical?: {
+    selectedId: string | null;
+    action: "read-skill-file" | "no-confident-match";
+    matches: Array<{ id: string; confidence: Confidence; score: number; reason: string }>;
+  };
+  dci?: {
+    selectedId: string | null;
+    action: "read-skill-file" | "no-confident-match";
+    matches: Array<{ id: string; ref?: string; confidence: Confidence; score: number; reason: string }>;
+  };
+  auto?: {
+    escalated: boolean;
+    reason: string | null;
+    selectedSource: "lexical" | "dci" | null;
+  };
 }
 
 interface ScoredCandidate {
@@ -42,7 +73,7 @@ export function routeDisabledSkills(
 ): SkillRouteResult {
   const trimmedQuery = query.trim();
   if (trimmedQuery === "") {
-    return { query: trimmedQuery, mode: "disabled-only", selected: null, matches: [] };
+    return { query: trimmedQuery, mode: "disabled-only", routeMode: "lexical", selected: null, matches: [] };
   }
 
   const topK = normalizeTopK(opts.topK);
@@ -125,7 +156,7 @@ export function routeDisabledSkills(
   const selectionWindow = scored.slice(0, 2).map(toRouteMatch);
   const selected = selectMatch(selectionWindow);
   const matches = scored.slice(0, topK).map(toRouteMatch);
-  return { query: trimmedQuery, mode: "disabled-only", selected, matches };
+  return { query: trimmedQuery, mode: "disabled-only", routeMode: "lexical", selected, matches };
 }
 
 export function isRoutableDisabledSkill(skill: Skill): boolean {
@@ -142,6 +173,15 @@ function toRouteMatch(candidate: ScoredCandidate): SkillRouteMatch {
     score: Number(candidate.score.toFixed(4)),
     confidence: confidenceForScore(candidate.score),
     reason: reasonFor(candidate),
+    signals: {
+      hitCount: candidate.hitCount,
+      tokenCount: candidate.tokenCount,
+      candidateHitCount: candidate.candidateHitCount,
+      candidateTokenCount: candidate.candidateTokenCount,
+      cueHitCount: candidate.cueHitCount,
+      matchedName: candidate.matchedName,
+      matchedPhrase: candidate.matchedPhrase,
+    },
   };
 }
 
@@ -214,7 +254,10 @@ function termsFor(input: string): Set<string> {
 
 function isHighSignalCue(term: string): boolean {
   if (/^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+$/u.test(term)) {
-    return Array.from(term).length >= 3;
+    const chars = Array.from(term);
+    if (chars.length < 3) return false;
+    if (term.startsWith("并") || term.endsWith("并")) return false;
+    return true;
   }
   return false;
 }

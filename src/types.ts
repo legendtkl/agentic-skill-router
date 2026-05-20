@@ -1,4 +1,5 @@
 export type HostName = "claude-code" | "codex";
+export type RouteMode = "lexical" | "dci" | "auto";
 
 export type SkillSource = "user" | "plugin" | "builtin";
 
@@ -68,6 +69,7 @@ export interface State {
 
 export interface Config {
   unusedForDays: number;
+  routeMode: RouteMode;
 }
 
 export class BuiltinSkillCannotDisableError extends Error {

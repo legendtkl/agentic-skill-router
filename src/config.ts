@@ -1,13 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import type { Config } from "./types.ts";
+import type { Config, RouteMode } from "./types.ts";
 
 export const CONFIG_PATH = join(homedir(), ".skill-router", "config.json");
 export const DEFAULT_UNUSED_FOR_DAYS = 30;
 
 export const DEFAULT_CONFIG: Config = {
   unusedForDays: DEFAULT_UNUSED_FOR_DAYS,
+  routeMode: "auto",
 };
 
 export async function loadConfig(path: string = CONFIG_PATH): Promise<Config> {
@@ -29,7 +30,13 @@ export async function loadConfig(path: string = CONFIG_PATH): Promise<Config> {
   if (typeof obj.unusedForDays === "number" && Number.isFinite(obj.unusedForDays) && obj.unusedForDays >= 0) {
     cfg.unusedForDays = Math.floor(obj.unusedForDays);
   }
+  const routeMode = parseRouteMode(obj.routeMode);
+  if (routeMode) cfg.routeMode = routeMode;
   return cfg;
+}
+
+export function parseRouteMode(value: unknown): RouteMode | null {
+  return value === "lexical" || value === "dci" || value === "auto" ? value : null;
 }
 
 /**

@@ -6,3 +6,4 @@ plugins/codex/lib/
 *.tmp
 *.tmp.*
 .claude/worktrees/
+artifacts/

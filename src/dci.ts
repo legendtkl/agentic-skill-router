@@ -1,18 +1,41 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { Confidence, Skill } from "./types.ts";
-import { isRoutableDisabledSkill } from "./route.ts";
+import { isRoutableDisabledSkill, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
 
 export interface DciOptions {
   topK?: number;
   maxSnippets?: number;
   maxChars?: number;
+  maxQueries?: number;
 }
+
+export interface DciRouteOptions extends DciOptions {}
 
 export interface DciGrepOptions extends DciOptions {
   regex?: boolean;
 }
 
+export interface DciFindOptions extends DciGrepOptions {}
+
+export interface DciOpenOptions {
+  line?: number;
+  window?: number;
+}
+
+export interface DciBudget {
+  maxQueries: number;
+  maxCandidates: number;
+  maxFindsOrOpens: number;
+  maxFullReads: number;
+  maxSelections: number;
+  defaultWindowLines: number;
+  maxWindowLines: number;
+  maxOpenChars: number;
+}
+
 export interface DciSkillRef {
+  ref: string;
   id: string;
   name: string;
   source: Skill["source"];
@@ -29,12 +52,15 @@ export interface DciSnippet {
 export interface DciSearchMatch extends DciSkillRef {
   score: number;
   reason: string;
+  matchedQuery: string;
   snippets: DciSnippet[];
 }
 
 export interface DciSearchResult {
   query: string;
+  queries: string[];
   action: "inspect-or-read-candidates" | "no-candidates";
+  budget: DciBudget;
   corpus: {
     mode: "disabled-only";
     scanned: number;
@@ -47,12 +73,37 @@ export interface DciGrepResult {
   pattern: string;
   mode: "literal" | "regex";
   action: "inspect-or-read-candidates" | "no-candidates";
+  budget: DciBudget;
   corpus: {
     mode: "disabled-only";
     scanned: number;
     matched: number;
   };
   matches: DciSearchMatch[];
+}
+
+export interface DciFindResult extends DciSkillRef {
+  pattern: string;
+  mode: "literal" | "regex";
+  action: "inspect-or-open-candidate" | "no-matches";
+  budget: DciBudget;
+  corpus: {
+    mode: "single-disabled-skill";
+    matchedLines: number;
+  };
+  snippets: DciSnippet[];
+}
+
+export interface DciOpenResult extends DciSkillRef {
+  action: "read-skill-window";
+  startLine: number;
+  endLine: number;
+  anchorLine: number;
+  totalLines: number;
+  window: number;
+  content: string;
+  truncated: boolean;
+  maxChars: number;
 }
 
 export interface DciInspectResult extends DciSkillRef {
@@ -75,6 +126,14 @@ export interface DciSelectResult extends DciSkillRef {
   reason: string;
 }
 
+export interface DciSelectManyResult {
+  action: "read-skill-files";
+  confidence: Confidence;
+  reason: string;
+  maxSelections: number;
+  selected: DciSelectResult[];
+}
+
 interface LoadedSkill {
   skill: Skill;
   content: string;
@@ -86,29 +145,87 @@ interface ScoredLoadedSkill extends LoadedSkill {
   hitCount: number;
   queryTermCount: number;
   phraseMatched: boolean;
+  matchedQuery: string;
   snippets: DciSnippet[];
 }
+
+export const DCI_BUDGET: DciBudget = {
+  maxQueries: 3,
+  maxCandidates: 8,
+  maxFindsOrOpens: 3,
+  maxFullReads: 2,
+  maxSelections: 3,
+  defaultWindowLines: 80,
+  maxWindowLines: 240,
+  maxOpenChars: 24_000,
+};
 
 const DEFAULT_TOP_K = 8;
 const DEFAULT_MAX_SNIPPETS = 3;
 const DEFAULT_MAX_READ_CHARS = 12_000;
-const MAX_TOP_K = 50;
 const MAX_SNIPPETS = 10;
 const MAX_READ_CHARS = 80_000;
+const DCI_AMBIGUOUS_SELECTION_MARGIN = 0.08;
+const DCI_SELECTABLE_CONFIDENCES: ReadonlySet<Confidence> = new Set(["high", "medium"]);
+
+export async function dciRouteDisabledSkills(
+  skills: Skill[],
+  query: string,
+  opts: DciRouteOptions = {},
+): Promise<SkillRouteResult> {
+  const trimmedQuery = query.trim();
+  if (trimmedQuery === "") {
+    return { query: trimmedQuery, mode: "disabled-only", routeMode: "dci", selected: null, matches: [] };
+  }
+
+  const displayTopK = normalizePositiveInt(opts.topK, DEFAULT_TOP_K, DCI_BUDGET.maxCandidates);
+  const search = await dciSearchDisabledSkills(skills, trimmedQuery, {
+    topK: DCI_BUDGET.maxCandidates,
+    ...(opts.maxSnippets === undefined ? {} : { maxSnippets: opts.maxSnippets }),
+    ...(opts.maxQueries === undefined ? {} : { maxQueries: opts.maxQueries }),
+  });
+  const byId = new Map(skills.map((skill) => [skill.id, skill]));
+  const selectionMatches = search.matches.flatMap((match): SkillRouteMatch[] => {
+    const skill = byId.get(match.id);
+    if (!skill) return [];
+    return [toDciRouteMatch(skill, match)];
+  });
+  const selected = selectDciMatch(selectionMatches);
+  const matches = selectionMatches.slice(0, displayTopK);
+  return {
+    query: trimmedQuery,
+    mode: "disabled-only",
+    routeMode: "dci",
+    selected,
+    matches,
+    diagnostics: {
+      dci: {
+        selectedId: selected?.skill.id ?? null,
+        action: selected ? "read-skill-file" : "no-confident-match",
+        matches: selectionMatches.map((match) => ({
+          id: match.skill.id,
+          ref: refForSkill(match.skill),
+          confidence: match.confidence,
+          score: match.score,
+          reason: match.reason,
+        })),
+      },
+    },
+  };
+}
 
 export async function dciSearchDisabledSkills(
   skills: Skill[],
-  query: string,
+  query: string | string[],
   opts: DciOptions = {},
 ): Promise<DciSearchResult> {
-  const trimmedQuery = query.trim();
+  const queries = normalizeQueries(query, normalizePositiveInt(opts.maxQueries, DCI_BUDGET.maxQueries, DCI_BUDGET.maxQueries));
+  const trimmedQuery = queries.join("\n");
   const candidates = routableDisabledSkills(skills);
-  if (trimmedQuery === "") {
-    return emptySearchResult(trimmedQuery, candidates.length);
+  if (queries.length === 0) {
+    return emptySearchResult("", [], candidates.length);
   }
 
-  const queryTerms = termsFor(trimmedQuery);
-  const queryPhrase = compact(trimmedQuery);
   const loaded = await loadSkills(candidates);
   const scored: ScoredLoadedSkill[] = [];
   const maxSnippets = normalizePositiveInt(opts.maxSnippets, DEFAULT_MAX_SNIPPETS, MAX_SNIPPETS);
@@ -117,29 +234,41 @@ export async function dciSearchDisabledSkills(
     const haystack = `${item.skill.id}\n${item.skill.name}\n${item.skill.description}\n${item.content}`;
     const haystackTerms = termsFor(haystack);
     const haystackPhrase = compact(haystack);
-    let hitCount = 0;
-    for (const term of queryTerms) {
-      if (haystackTerms.has(term) || haystackPhrase.includes(term)) hitCount++;
+    let best: ScoredLoadedSkill | null = null;
+
+    for (const currentQuery of queries) {
+      const queryTerms = termsFor(currentQuery);
+      const queryPhrase = compact(currentQuery);
+      let hitCount = 0;
+      for (const term of queryTerms) {
+        if (haystackTerms.has(term) || haystackPhrase.includes(term)) hitCount++;
+      }
+      const phraseMatched = queryPhrase.length >= 4 && haystackPhrase.includes(queryPhrase);
+      const score = scoreSearchMatch(hitCount, queryTerms.size, phraseMatched);
+      if (score <= 0) continue;
+      const candidate: ScoredLoadedSkill = {
+        ...item,
+        score,
+        hitCount,
+        queryTermCount: queryTerms.size,
+        phraseMatched,
+        matchedQuery: currentQuery,
+        snippets: snippetsForTerms(item.lines, queryTerms, queryPhrase, maxSnippets),
+      };
+      if (!best || compareScored(candidate, best) < 0) best = candidate;
     }
-    const phraseMatched = queryPhrase.length >= 4 && haystackPhrase.includes(queryPhrase);
-    const score = scoreSearchMatch(hitCount, queryTerms.size, phraseMatched);
-    if (score <= 0) continue;
-    scored.push({
-      ...item,
-      score,
-      hitCount,
-      queryTermCount: queryTerms.size,
-      phraseMatched,
-      snippets: snippetsForTerms(item.lines, queryTerms, queryPhrase, maxSnippets),
-    });
+
+    if (best) scored.push(best);
   }
 
   scored.sort(compareScored);
-  const topK = normalizePositiveInt(opts.topK, DEFAULT_TOP_K, MAX_TOP_K);
+  const topK = normalizePositiveInt(opts.topK, DEFAULT_TOP_K, DCI_BUDGET.maxCandidates);
   const matches = scored.slice(0, topK).map(projectSearchMatch);
   return {
     query: trimmedQuery,
+    queries,
     action: matches.length > 0 ? "inspect-or-read-candidates" : "no-candidates",
+    budget: DCI_BUDGET,
     corpus: { mode: "disabled-only", scanned: candidates.length, matched: scored.length },
     matches,
   };
@@ -158,6 +287,7 @@ export async function dciGrepDisabledSkills(
       pattern: trimmedPattern,
       mode,
       action: "no-candidates",
+      budget: DCI_BUDGET,
       corpus: { mode: "disabled-only", scanned: candidates.length, matched: 0 },
       matches: [],
     };
@@ -180,24 +310,92 @@ export async function dciGrepDisabledSkills(
       ...skillRef(item.skill),
       score: snippets.length,
       reason: `matched ${snippets.length} line(s)`,
+      matchedQuery: trimmedPattern,
       snippets,
     });
   }
 
   matches.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-  const topK = normalizePositiveInt(opts.topK, DEFAULT_TOP_K, MAX_TOP_K);
+  const topK = normalizePositiveInt(opts.topK, DEFAULT_TOP_K, DCI_BUDGET.maxCandidates);
   const topMatches = matches.slice(0, topK);
   return {
     pattern: trimmedPattern,
     mode,
     action: topMatches.length > 0 ? "inspect-or-read-candidates" : "no-candidates",
+    budget: DCI_BUDGET,
     corpus: { mode: "disabled-only", scanned: candidates.length, matched: matches.length },
     matches: topMatches,
   };
 }
 
-export function dciInspectSkill(skills: Skill[], id: string): DciInspectResult {
-  const skill = findRoutableSkillOrThrow(skills, id);
+export async function dciFindInSkill(
+  skills: Skill[],
+  idOrRef: string,
+  pattern: string,
+  opts: DciFindOptions = {},
+): Promise<DciFindResult> {
+  const trimmedPattern = pattern.trim();
+  const skill = findRoutableSkillOrThrow(skills, idOrRef);
+  const mode = opts.regex ? "regex" : "literal";
+  const maxSnippets = normalizePositiveInt(opts.maxSnippets, DEFAULT_MAX_SNIPPETS, MAX_SNIPPETS);
+  const content = await readFile(skill.skillMdPath, "utf8");
+  const lines = content.split(/\r?\n/);
+  const snippets: DciSnippet[] = [];
+
+  if (trimmedPattern !== "") {
+    const matcher = createGrepMatcher(trimmedPattern, mode);
+    for (let i = 0; i < lines.length && snippets.length < maxSnippets; i++) {
+      if (matcher(lines[i]!)) snippets.push({ line: i + 1, text: clampLine(lines[i]!) });
+    }
+  }
+
+  return {
+    ...skillRef(skill),
+    pattern: trimmedPattern,
+    mode,
+    action: snippets.length > 0 ? "inspect-or-open-candidate" : "no-matches",
+    budget: DCI_BUDGET,
+    corpus: { mode: "single-disabled-skill", matchedLines: snippets.length },
+    snippets,
+  };
+}
+
+export async function dciOpenSkillWindow(
+  skills: Skill[],
+  idOrRef: string,
+  opts: DciOpenOptions = {},
+): Promise<DciOpenResult> {
+  const skill = findRoutableSkillOrThrow(skills, idOrRef);
+  const anchorLine = normalizePositiveInt(opts.line, 1, Number.MAX_SAFE_INTEGER);
+  const window = normalizePositiveInt(opts.window, DCI_BUDGET.defaultWindowLines, DCI_BUDGET.maxWindowLines);
+  const content = await readFile(skill.skillMdPath, "utf8");
+  const lines = content.split(/\r?\n/);
+  const totalLines = lines.length;
+  const safeAnchor = Math.min(anchorLine, Math.max(1, totalLines));
+  const before = Math.floor((window - 1) / 2);
+  let startLine = Math.max(1, safeAnchor - before);
+  let endLine = Math.min(totalLines, startLine + window - 1);
+  startLine = Math.max(1, endLine - window + 1);
+  const numbered = lines.slice(startLine - 1, endLine).map((line, idx) => `${startLine + idx}: ${line}`).join("\n");
+  const truncated = numbered.length > DCI_BUDGET.maxOpenChars;
+  const boundedContent = truncated ? numbered.slice(0, DCI_BUDGET.maxOpenChars) : numbered;
+
+  return {
+    ...skillRef(skill),
+    action: "read-skill-window",
+    startLine,
+    endLine,
+    anchorLine: safeAnchor,
+    totalLines,
+    window,
+    content: boundedContent,
+    truncated,
+    maxChars: DCI_BUDGET.maxOpenChars,
+  };
+}
+
+export function dciInspectSkill(skills: Skill[], idOrRef: string): DciInspectResult {
+  const skill = findRoutableSkillOrThrow(skills, idOrRef);
   return {
     ...skillRef(skill),
     action: "read-skill-file",
@@ -209,10 +407,10 @@ export function dciInspectSkill(skills: Skill[], id: string): DciInspectResult {
 
 export async function dciReadSkill(
   skills: Skill[],
-  id: string,
+  idOrRef: string,
   opts: DciOptions = {},
 ): Promise<DciReadResult> {
-  const skill = findRoutableSkillOrThrow(skills, id);
+  const skill = findRoutableSkillOrThrow(skills, idOrRef);
   const maxChars = normalizePositiveInt(opts.maxChars, DEFAULT_MAX_READ_CHARS, MAX_READ_CHARS);
   const content = await readFile(skill.skillMdPath, "utf8");
   const truncated = content.length > maxChars;
@@ -227,11 +425,11 @@ export async function dciReadSkill(
 
 export function dciSelectSkill(
   skills: Skill[],
-  id: string,
+  idOrRef: string,
   confidence: Confidence,
   reason: string,
 ): DciSelectResult {
-  const skill = findRoutableSkillOrThrow(skills, id);
+  const skill = findRoutableSkillOrThrow(skills, idOrRef);
   return {
     ...skillRef(skill),
     action: "read-skill-file",
@@ -240,14 +438,48 @@ export function dciSelectSkill(
   };
 }
 
+export function dciSelectSkills(
+  skills: Skill[],
+  idOrRefs: string[],
+  confidence: Confidence,
+  reason: string,
+): DciSelectManyResult {
+  const selected: DciSelectResult[] = [];
+  const seen = new Set<string>();
+  for (const idOrRef of idOrRefs) {
+    const skill = findRoutableSkillOrThrow(skills, idOrRef);
+    if (seen.has(skill.id)) continue;
+    selected.push({
+      ...skillRef(skill),
+      action: "read-skill-file",
+      confidence,
+      reason,
+    });
+    seen.add(skill.id);
+  }
+  if (selected.length === 0) throw new Error("select at least one disabled skill");
+  if (selected.length > DCI_BUDGET.maxSelections) {
+    throw new Error(`too many DCI selections: max ${DCI_BUDGET.maxSelections}`);
+  }
+  return {
+    action: "read-skill-files",
+    confidence,
+    reason,
+    maxSelections: DCI_BUDGET.maxSelections,
+    selected,
+  };
+}
+
 export function routableDisabledSkills(skills: Skill[]): Skill[] {
   return skills.filter(isRoutableDisabledSkill);
 }
 
-function emptySearchResult(query: string, scanned: number): DciSearchResult {
+function emptySearchResult(query: string, queries: string[], scanned: number): DciSearchResult {
   return {
     query,
+    queries,
     action: "no-candidates",
+    budget: DCI_BUDGET,
     corpus: { mode: "disabled-only", scanned, matched: 0 },
     matches: [],
   };
@@ -266,13 +498,19 @@ async function loadSkills(skills: Skill[]): Promise<LoadedSkill[]> {
   return out;
 }
 
-function findRoutableSkillOrThrow(skills: Skill[], id: string): Skill {
-  const skill = skills.find((s) => s.id === id);
-  if (!skill) throw new Error(`unknown skill id: ${id}`);
+function findRoutableSkillOrThrow(skills: Skill[], idOrRef: string): Skill {
+  const skill = skills.find((s) => s.id === idOrRef) ?? resolveSkillRef(skills, idOrRef);
+  if (!skill) throw new Error(`unknown skill id/ref: ${idOrRef}`);
   if (!isRoutableDisabledSkill(skill)) {
-    throw new Error(`skill is not a routable disabled skill: ${id}`);
+    throw new Error(`skill is not a routable disabled skill: ${idOrRef}`);
   }
   return skill;
+}
+
+function resolveSkillRef(skills: Skill[], ref: string): Skill | undefined {
+  const matches = routableDisabledSkills(skills).filter((skill) => refForSkill(skill) === ref);
+  if (matches.length > 1) throw new Error(`ambiguous DCI candidate ref: ${ref}`);
+  return matches[0];
 }
 
 function projectSearchMatch(item: ScoredLoadedSkill): DciSearchMatch {
@@ -280,12 +518,52 @@ function projectSearchMatch(item: ScoredLoadedSkill): DciSearchMatch {
     ...skillRef(item.skill),
     score: Number(item.score.toFixed(4)),
     reason: reasonForSearch(item),
+    matchedQuery: item.matchedQuery,
     snippets: item.snippets,
   };
 }
 
+function toDciRouteMatch(skill: Skill, match: DciSearchMatch): SkillRouteMatch {
+  return {
+    skill,
+    score: match.score,
+    confidence: confidenceForDciScore(match.score),
+    reason: `DCI corpus match: ${match.reason}`,
+    signals: {
+      hitCount: 0,
+      tokenCount: 0,
+      candidateHitCount: 0,
+      candidateTokenCount: 0,
+      cueHitCount: 0,
+      matchedName: false,
+      matchedPhrase: match.reason.includes("matched query phrase"),
+    },
+  };
+}
+
+function confidenceForDciScore(score: number): Confidence {
+  if (score >= 0.75) return "high";
+  if (score >= 0.5) return "medium";
+  return "low";
+}
+
+function selectDciMatch(matches: SkillRouteMatch[]): SkillRouteMatch | null {
+  const first = matches[0];
+  if (!first || !DCI_SELECTABLE_CONFIDENCES.has(first.confidence)) return null;
+  const second = matches[1];
+  if (
+    second &&
+    DCI_SELECTABLE_CONFIDENCES.has(second.confidence) &&
+    first.score - second.score < DCI_AMBIGUOUS_SELECTION_MARGIN
+  ) {
+    return null;
+  }
+  return first;
+}
+
 function skillRef(skill: Skill): DciSkillRef {
   return {
+    ref: refForSkill(skill),
     id: skill.id,
     name: skill.name,
     source: skill.source,
@@ -295,10 +573,16 @@ function skillRef(skill: Skill): DciSkillRef {
   };
 }
 
+function refForSkill(skill: Skill): string {
+  const hash = createHash("sha256").update(skill.id).digest("hex").slice(0, 10);
+  return `dci-${hash}`;
+}
+
 function reasonForSearch(item: ScoredLoadedSkill): string {
   const parts: string[] = [];
   if (item.phraseMatched) parts.push("matched query phrase in skill corpus");
   if (item.queryTermCount > 0) parts.push(`matched ${item.hitCount}/${item.queryTermCount} query terms in skill corpus`);
+  if (item.matchedQuery) parts.push(`best query: ${item.matchedQuery}`);
   return parts.join("; ") || "matched skill corpus";
 }
 
@@ -357,6 +641,21 @@ function clampLine(line: string): string {
 function normalizePositiveInt(value: number | undefined, fallback: number, max: number): number {
   if (!value || !Number.isFinite(value) || value < 1) return fallback;
   return Math.min(Math.floor(value), max);
+}
+
+function normalizeQueries(input: string | string[], maxQueries: number): string[] {
+  const raw = Array.isArray(input) ? input : [input];
+  const queries: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const query = item.trim();
+    const key = normalizeLiteral(query);
+    if (!query || seen.has(key)) continue;
+    queries.push(query);
+    seen.add(key);
+    if (queries.length >= maxQueries) break;
+  }
+  return queries;
 }
 
 function termsFor(input: string): Set<string> {

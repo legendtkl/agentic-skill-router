@@ -366,12 +366,86 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    const route = await execFileAsync(
+    const budget = await execFileAsync(
       process.execPath,
-      ["--import", "tsx", cli, "--host=codex", "skills", "route", "--query", "please handle dci-amber-invoice-cascade", "--json"],
+      ["--import", "tsx", cli, "--host=codex", "skills", "dci", "budget", "--json"],
       { env },
     );
-    assert.equal((JSON.parse(route.stdout) as { action: string }).action, "no-confident-match");
+    const parsedBudget = JSON.parse(budget.stdout) as { maxQueries: number; maxSelections: number; maxOpenChars: number };
+    assert.equal(parsedBudget.maxQueries, 3);
+    assert.equal(parsedBudget.maxSelections, 3);
+    assert.equal(parsedBudget.maxOpenChars, 24_000);
+
+    const route = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "route",
+        "--mode=lexical",
+        "--query",
+        "please handle dci-amber-invoice-cascade",
+        "--json",
+      ],
+      { env: { ...env, SKILL_ROUTER_ROUTE_MODE: "dci" } },
+    );
+    const parsedLexicalRoute = JSON.parse(route.stdout) as { action: string; routeMode: string };
+    assert.equal(parsedLexicalRoute.action, "no-confident-match");
+    assert.equal(parsedLexicalRoute.routeMode, "lexical");
+
+    const envDciRoute = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "route",
+        "--query",
+        "please handle dci-amber-invoice-cascade",
+        "--no-record",
+        "--json",
+      ],
+      { env: { ...env, SKILL_ROUTER_ROUTE_MODE: "dci" } },
+    );
+    const parsedEnvDciRoute = JSON.parse(envDciRoute.stdout) as {
+      action: string;
+      routeMode: string;
+      selected: { id: string } | null;
+    };
+    assert.equal(parsedEnvDciRoute.action, "read-skill-file");
+    assert.equal(parsedEnvDciRoute.routeMode, "dci");
+    assert.equal(parsedEnvDciRoute.selected?.id, "user:codex:dci-body-probe");
+
+    const dciRoute = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "route",
+        "--mode=dci",
+        "--query",
+        "please handle dci-amber-invoice-cascade",
+        "--no-record",
+        "--json",
+      ],
+      { env },
+    );
+    const parsedDciRoute = JSON.parse(dciRoute.stdout) as {
+      action: string;
+      routeMode: string;
+      selected: { id: string } | null;
+    };
+    assert.equal(parsedDciRoute.action, "read-skill-file");
+    assert.equal(parsedDciRoute.routeMode, "dci");
+    assert.equal(parsedDciRoute.selected?.id, "user:codex:dci-body-probe");
 
     const search = await execFileAsync(
       process.execPath,
@@ -384,6 +458,8 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "dci",
         "search",
         "--query",
+        "generic disabled invoice helper",
+        "--query",
         "please handle dci-amber-invoice-cascade",
         "--json",
       ],
@@ -391,13 +467,17 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
     );
     const parsedSearch = JSON.parse(search.stdout) as {
       action: string;
+      queries: string[];
       corpus: { scanned: number };
-      matches: Array<{ id: string; snippets: Array<{ text: string }> }>;
+      matches: Array<{ ref: string; id: string; snippets: Array<{ line: number; text: string }> }>;
     };
     assert.equal(parsedSearch.action, "inspect-or-read-candidates");
+    assert.deepEqual(parsedSearch.queries, ["generic disabled invoice helper", "please handle dci-amber-invoice-cascade"]);
     assert.ok(parsedSearch.corpus.scanned >= 121);
     assert.equal(parsedSearch.matches[0]?.id, "user:codex:dci-body-probe");
+    assert.match(parsedSearch.matches[0]?.ref ?? "", /^dci-[a-f0-9]{10}$/);
     assert.ok(parsedSearch.matches[0]?.snippets.some((s) => /dci-amber-invoice-cascade/.test(s.text)));
+    const bodyProbeRef = parsedSearch.matches[0]!.ref;
 
     const literalGrep = await execFileAsync(
       process.execPath,
@@ -440,9 +520,53 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
     assert.equal(parsedRegexGrep.mode, "regex");
     assert.equal(parsedRegexGrep.matches[0]?.id, "user:codex:dci-body-probe");
 
+    const find = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "dci",
+        "find",
+        bodyProbeRef,
+        "--pattern",
+        "final answer",
+        "--json",
+      ],
+      { env },
+    );
+    const parsedFind = JSON.parse(find.stdout) as { id: string; snippets: Array<{ line: number; text: string }> };
+    assert.equal(parsedFind.id, "user:codex:dci-body-probe");
+    assert.match(parsedFind.snippets[0]?.text ?? "", /final answer/);
+
+    const open = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "dci",
+        "open",
+        bodyProbeRef,
+        "--line",
+        String(parsedFind.snippets[0]!.line),
+        "--window=4",
+        "--json",
+      ],
+      { env },
+    );
+    const parsedOpen = JSON.parse(open.stdout) as { id: string; action: string; content: string };
+    assert.equal(parsedOpen.action, "read-skill-window");
+    assert.equal(parsedOpen.id, "user:codex:dci-body-probe");
+    assert.match(parsedOpen.content, /dci-amber-invoice-loaded/);
+
     const read = await execFileAsync(
       process.execPath,
-      ["--import", "tsx", cli, "--host=codex", "skills", "dci", "read", "user:codex:dci-body-probe", "--json"],
+      ["--import", "tsx", cli, "--host=codex", "skills", "dci", "read", bodyProbeRef, "--json"],
       { env },
     );
     const parsedRead = JSON.parse(read.stdout) as { action: string; content: string };
@@ -459,7 +583,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "skills",
         "dci",
         "select",
-        "user:codex:dci-body-probe",
+        bodyProbeRef,
         "--query",
         "please handle dci-amber-invoice-cascade",
         "--confidence=high",
@@ -473,11 +597,13 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
       action: string;
       recorded: boolean;
       id: string;
+      selected: Array<{ id: string }>;
       skillMdPath: string;
     };
     assert.equal(parsedSelect.action, "read-skill-file");
     assert.equal(parsedSelect.recorded, true);
     assert.equal(parsedSelect.id, "user:codex:dci-body-probe");
+    assert.equal(parsedSelect.selected[0]?.id, "user:codex:dci-body-probe");
     assert.match(parsedSelect.skillMdPath, /SKILL\.md\.skill-router-disabled$/);
 
     const rawState = await readFile(join(fake.stateDir, "state-codex.json"), "utf8");
