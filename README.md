@@ -51,6 +51,7 @@ Codex:
 ```bash
 node plugins/codex/lib/skill-router.mjs --host=codex skills list
 node plugins/codex/lib/skill-router.mjs --host=codex skills suggest --json
+node plugins/codex/lib/skill-router.mjs --host=codex skills route --query "draft a Lark mail reply" --json
 node plugins/codex/lib/skill-router.mjs --host=codex skills disable user:codex:lark-mail --yes
 node plugins/codex/lib/skill-router.mjs --host=codex skills enable user:codex:lark-mail
 node plugins/codex/lib/skill-router.mjs --host=codex skills status
@@ -86,6 +87,13 @@ Disable mechanism:
   `~/.skill-router/state-codex.json`
 
 Built-in and system skills are listed but cannot be disabled.
+
+Disabled-skill routing:
+
+- `skills route --query "<request>" --json` searches disabled skills only.
+- A confident route returns `action: "read-skill-file"` and `selected.skillMdPath`.
+- The returned path may end in `SKILL.md.skill-router-disabled`; it is still safe to read as instructions.
+- Routed use is recorded in state so frequently proxied disabled skills can be identified later.
 
 ## Development
 

@@ -47,10 +47,23 @@ export interface DisableRecord {
   reason: string;
 }
 
+export interface RoutedSkillRecord {
+  id: string;
+  pluginKey: string | null;
+  skillMdPath: string;
+  name: string;
+  routeCount: number;
+  firstRoutedAt: string;
+  lastRoutedAt: string;
+  lastQuery: string;
+  lastConfidence: Confidence;
+}
+
 export interface State {
   schema: 1;
   host: HostName;
   disabledSkills: DisableRecord[];
+  routedSkills?: RoutedSkillRecord[];
 }
 
 export interface Config {

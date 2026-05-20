@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import type { DisableRecord, HostName, State } from "./types.ts";
+import type { Confidence, DisableRecord, HostName, RoutedSkillRecord, State } from "./types.ts";
 
 export const STATE_DIR = process.env["SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".skill-router");
 export const STATE_PATH = join(STATE_DIR, "state-claude-code.json");
@@ -37,6 +37,34 @@ function validateRecord(x: unknown): DisableRecord | null {
     reason: x["reason"],
     pluginKey: x["pluginKey"] as string | null,
   };
+}
+
+function validateRoutedRecord(x: unknown): RoutedSkillRecord | null {
+  if (!isPlainObject(x)) return null;
+  if (typeof x["id"] !== "string" || x["id"] === "") return null;
+  if (x["pluginKey"] !== null && typeof x["pluginKey"] !== "string") return null;
+  if (typeof x["skillMdPath"] !== "string" || x["skillMdPath"] === "") return null;
+  if (typeof x["name"] !== "string" || x["name"] === "") return null;
+  if (typeof x["routeCount"] !== "number" || !Number.isFinite(x["routeCount"]) || x["routeCount"] < 1) return null;
+  if (typeof x["firstRoutedAt"] !== "string") return null;
+  if (typeof x["lastRoutedAt"] !== "string") return null;
+  if (typeof x["lastQuery"] !== "string") return null;
+  if (!isConfidence(x["lastConfidence"])) return null;
+  return {
+    id: x["id"],
+    pluginKey: x["pluginKey"] as string | null,
+    skillMdPath: x["skillMdPath"],
+    name: x["name"],
+    routeCount: x["routeCount"],
+    firstRoutedAt: x["firstRoutedAt"],
+    lastRoutedAt: x["lastRoutedAt"],
+    lastQuery: x["lastQuery"],
+    lastConfidence: x["lastConfidence"],
+  };
+}
+
+function isConfidence(x: unknown): x is Confidence {
+  return x === "high" || x === "medium" || x === "low";
 }
 
 export async function loadState(path: string = STATE_PATH, host: HostName = "claude-code"): Promise<State> {
@@ -90,7 +118,22 @@ export async function loadState(path: string = STATE_PATH, host: HostName = "cla
       );
     }
   }
-  return { schema: 1, host, disabledSkills: validated };
+
+  const routedSkills: RoutedSkillRecord[] = [];
+  const rawRouted = parsed["routedSkills"];
+  if (Array.isArray(rawRouted)) {
+    let droppedRouted = 0;
+    for (const item of rawRouted) {
+      const v = validateRoutedRecord(item);
+      if (v) routedSkills.push(v);
+      else droppedRouted++;
+    }
+    if (droppedRouted > 0) {
+      process.stderr.write(`warning: ${droppedRouted} malformed routed skill record(s) in ${path} were ignored.\n`);
+    }
+  }
+
+  return { schema: 1, host, disabledSkills: validated, routedSkills };
 }
 
 export async function saveState(state: State, path: string = STATE_PATH): Promise<void> {
@@ -115,4 +158,34 @@ export function removeDisableRecord(state: State, id: string): State {
 
 export function findDisableRecord(state: State, id: string): DisableRecord | undefined {
   return state.disabledSkills.find((r) => r.id === id);
+}
+
+export function recordRoutedSkill(
+  state: State,
+  record: {
+    id: string;
+    pluginKey: string | null;
+    skillMdPath: string;
+    name: string;
+    query: string;
+    confidence: Confidence;
+    routedAt: string;
+  },
+): State {
+  const existing = state.routedSkills?.find((r) => r.id === record.id);
+  const routed: RoutedSkillRecord = {
+    id: record.id,
+    pluginKey: record.pluginKey,
+    skillMdPath: record.skillMdPath,
+    name: record.name,
+    routeCount: (existing?.routeCount ?? 0) + 1,
+    firstRoutedAt: existing?.firstRoutedAt ?? record.routedAt,
+    lastRoutedAt: record.routedAt,
+    lastQuery: record.query,
+    lastConfidence: record.confidence,
+  };
+  const rest = (state.routedSkills ?? []).filter((r) => r.id !== record.id);
+  rest.push(routed);
+  rest.sort((a, b) => b.lastRoutedAt.localeCompare(a.lastRoutedAt));
+  return { ...state, routedSkills: rest };
 }

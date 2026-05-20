@@ -9,6 +9,7 @@ import {
   addDisableRecord,
   removeDisableRecord,
   findDisableRecord,
+  recordRoutedSkill,
 } from "../src/state.ts";
 import type { DisableRecord } from "../src/types.ts";
 
@@ -79,6 +80,34 @@ test("removeDisableRecord drops the matching entry", () => {
     "user:foo",
   );
   assert.equal(after.disabledSkills.length, 0);
+});
+
+test("recordRoutedSkill increments routed usage by skill id", () => {
+  const initial = { schema: 1 as const, host: "codex" as const, disabledSkills: [] };
+  const first = recordRoutedSkill(initial, {
+    id: "user:agents:lark-mail",
+    pluginKey: null,
+    skillMdPath: "/tmp/lark-mail/SKILL.md.skill-router-disabled",
+    name: "lark-mail",
+    query: "draft mail",
+    confidence: "high",
+    routedAt: "2026-05-20T00:00:00.000Z",
+  });
+  const second = recordRoutedSkill(first, {
+    id: "user:agents:lark-mail",
+    pluginKey: null,
+    skillMdPath: "/tmp/lark-mail/SKILL.md.skill-router-disabled",
+    name: "lark-mail",
+    query: "reply mail",
+    confidence: "medium",
+    routedAt: "2026-05-21T00:00:00.000Z",
+  });
+
+  assert.equal(second.routedSkills?.length, 1);
+  assert.equal(second.routedSkills?.[0]?.routeCount, 2);
+  assert.equal(second.routedSkills?.[0]?.firstRoutedAt, "2026-05-20T00:00:00.000Z");
+  assert.equal(second.routedSkills?.[0]?.lastRoutedAt, "2026-05-21T00:00:00.000Z");
+  assert.equal(second.routedSkills?.[0]?.lastQuery, "reply mail");
 });
 
 test("loadState rejects malformed schema", async () => {

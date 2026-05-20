@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -190,6 +190,146 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
 
     await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "enable", "user:codex:unused-local"], { env });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI e2e routes to a disabled Codex skill and records routed usage", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+
+    const route = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "route",
+        "--query",
+        "draft a Lark mail reply",
+        "--json",
+      ],
+      { env },
+    );
+    const parsed = JSON.parse(route.stdout) as {
+      action: string;
+      recorded: boolean;
+      selected: { id: string; skillMdPath: string; confidence: string } | null;
+    };
+
+    assert.equal(parsed.action, "read-skill-file");
+    assert.equal(parsed.recorded, true);
+    assert.equal(parsed.selected?.id, "user:agents:lark-mail");
+    assert.match(parsed.selected?.skillMdPath ?? "", /SKILL\.md\.skill-router-disabled$/);
+
+    const rawState = await readFile(join(fake.stateDir, "state-codex.json"), "utf8");
+    const state = JSON.parse(rawState) as { routedSkills: Array<{ id: string; routeCount: number; lastQuery: string }> };
+    assert.equal(state.routedSkills[0]!.id, "user:agents:lark-mail");
+    assert.equal(state.routedSkills[0]!.routeCount, 1);
+    assert.equal(state.routedSkills[0]!.lastQuery, "draft a Lark mail reply");
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI JSON route reports weak matches without failing or read actions", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    const route = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "route",
+        "--query",
+        "task calendar approval mail",
+        "--json",
+      ],
+      { env },
+    );
+    const parsed = JSON.parse(route.stdout) as {
+      action: string;
+      selected: unknown;
+      matches: Array<{ id: string; confidence: string; action?: string }>;
+    };
+
+    assert.equal(parsed.action, "no-confident-match");
+    assert.equal(parsed.selected, null);
+    assert.equal(parsed.matches[0]?.id, "user:agents:lark-mail");
+    assert.equal(parsed.matches[0]?.confidence, "low");
+    assert.equal(parsed.matches[0]?.action, undefined);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI route still returns a selected skill when routed usage cannot be recorded", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    const badStateDir = join(fake.root, "state-dir-is-a-file");
+    await writeFile(badStateDir, "not a directory");
+
+    const route = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "route",
+        "--query",
+        "draft a Lark mail reply",
+        "--json",
+      ],
+      { env: { ...env, SKILL_ROUTER_STATE_DIR: badStateDir } },
+    );
+    const parsed = JSON.parse(route.stdout) as {
+      action: string;
+      recorded: boolean;
+      warnings: string[];
+      selected: { id: string; action: string } | null;
+    };
+
+    assert.equal(parsed.action, "read-skill-file");
+    assert.equal(parsed.recorded, false);
+    assert.equal(parsed.selected?.id, "user:agents:lark-mail");
+    assert.equal(parsed.selected?.action, "read-skill-file");
+    assert.match(route.stderr, /warning: routed usage was not recorded/);
+    assert.match(parsed.warnings[0] ?? "", /routed usage was not recorded/);
   } finally {
     await fake.cleanup();
   }

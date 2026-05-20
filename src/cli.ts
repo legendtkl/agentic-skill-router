@@ -4,9 +4,10 @@ import { CodexHost } from "./hosts/codex.ts";
 import type { Host } from "./hosts/base.ts";
 import { lookupUsage } from "./usage.ts";
 import { suggest } from "./policy.ts";
+import { routeDisabledSkills, type SkillRouteMatch } from "./route.ts";
 import { disableSkill, enableSkill, findOrphanMarkers, reapplyMissing } from "./apply.ts";
 import { loadConfig, resolveUnusedForDays } from "./config.ts";
-import { loadState, statePathForHost } from "./state.ts";
+import { loadState, recordRoutedSkill, saveState, statePathForHost } from "./state.ts";
 import type { HostName, Skill, Suggestion, UsageStat } from "./types.ts";
 
 export async function run(argv: string[]): Promise<number> {
@@ -17,6 +18,7 @@ export async function run(argv: string[]): Promise<number> {
     switch (subcommand) {
       case "list": return cmdList(rest, hostName);
       case "suggest": return cmdSuggest(rest, hostName);
+      case "route": return cmdRoute(rest, hostName);
       case "disable": return cmdDisable(rest, hostName);
       case "enable": return cmdEnable(rest, hostName);
       case "status": return cmdStatus(rest, hostName);
@@ -84,6 +86,7 @@ function usage(code = 0): number {
 USAGE
   skill-router [--host=claude-code|codex] skills list [--json]
   skill-router [--host=claude-code|codex] skills suggest [--unused-for=<dur>] [--json]
+  skill-router [--host=claude-code|codex] skills route --query=<text> [--json] [--top-k=N] [--no-record]
   skill-router [--host=claude-code|codex] skills disable <id...> | --all-suggested [--unused-for=<dur>] [--yes] [--reason=<text>]
   skill-router [--host=claude-code|codex] skills enable <id...>
   skill-router [--host=claude-code|codex] skills status [--json]
@@ -127,6 +130,83 @@ async function cmdSuggest(argv: string[], hostName: HostName): Promise<number> {
     return 0;
   }
   printSuggestions(suggestions, days);
+  return 0;
+}
+
+async function cmdRoute(argv: string[], hostName: HostName): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      query: { type: "string", short: "q" },
+      json: { type: "boolean" },
+      "top-k": { type: "string" },
+      "no-record": { type: "boolean" },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
+  const query = ((values.query as string | undefined) ?? positionals.join(" ")).trim();
+  if (query === "") {
+    console.error("specify --query=<text> or pass the query as positional text");
+    return 2;
+  }
+
+  const topK = parseTopK(values["top-k"] as string | undefined);
+  if (topK === null) {
+    console.error("--top-k must be a positive integer");
+    return 2;
+  }
+
+  const host = createHost(hostName);
+  const skills = await host.listSkills();
+  const result = routeDisabledSkills(skills, query, topK === undefined ? {} : { topK });
+  const selected = result.selected;
+  let recorded = false;
+  const warnings: string[] = [];
+
+  if (selected && !values["no-record"]) {
+    try {
+      const statePath = statePathForHost(host.name);
+      const state = await loadState(statePath, host.name);
+      await saveState(recordRoutedSkill(state, {
+        id: selected.skill.id,
+        pluginKey: selected.skill.pluginKey,
+        skillMdPath: selected.skill.skillMdPath,
+        name: selected.skill.name,
+        query,
+        confidence: selected.confidence,
+        routedAt: new Date().toISOString(),
+      }), statePath);
+      recorded = true;
+    } catch (err) {
+      const warning = `routed usage was not recorded: ${(err as Error).message}`;
+      warnings.push(warning);
+      process.stderr.write(`warning: ${warning}\n`);
+    }
+  }
+
+  const projected = projectRoute(result, recorded, warnings);
+  if (values.json) {
+    process.stdout.write(JSON.stringify(projected, null, 2) + "\n");
+    return 0;
+  }
+
+  if (!selected) {
+    console.log("no confident disabled-skill route found.");
+    if (projected.matches.length > 0) {
+      console.log("\ncandidate matches:");
+      for (const m of projected.matches) {
+        console.log(`  [${m.confidence}] ${m.id} (${m.score})`);
+        console.log(`       ${m.reason}`);
+      }
+    }
+    return 1;
+  }
+
+  console.log(`route: [${projected.selected!.confidence}] ${projected.selected!.id}`);
+  console.log(`read:  ${projected.selected!.skillMdPath}`);
+  console.log(`why:   ${projected.selected!.reason}`);
+  if (recorded) console.log("usage: recorded routed use");
   return 0;
 }
 
@@ -249,6 +329,7 @@ async function cmdStatus(argv: string[], hostName: HostName): Promise<number> {
       conflicted: reapplyResult.conflicted,
       orphanMarkers,
       disabled: state.disabledSkills,
+      routed: state.routedSkills ?? [],
     }, null, 2) + "\n");
     return reapplyResult.conflicted.length > 0 ? 1 : 0;
   }
@@ -270,6 +351,13 @@ async function cmdStatus(argv: string[], hostName: HostName): Promise<number> {
   if (orphanMarkers.length > 0) {
     console.log(`\norphan disabled markers (no state record; left from a previous tool or crash):`);
     for (const p of orphanMarkers) console.log(`  ${p}`);
+  }
+  const routed = state.routedSkills ?? [];
+  if (routed.length > 0) {
+    console.log(`\nrouted usage:`);
+    for (const r of routed) {
+      console.log(`  ${r.id}  (${r.routeCount} route(s), last ${r.lastRoutedAt}, ${r.lastConfidence})`);
+    }
   }
   return reapplyResult.conflicted.length > 0 ? 1 : 0;
 }
@@ -302,6 +390,36 @@ function projectSuggestion(s: Suggestion) {
     confidence: s.confidence,
     details: s.details,
   };
+}
+
+function projectRoute(result: ReturnType<typeof routeDisabledSkills>, recorded: boolean, warnings: string[] = []) {
+  const projectMatch = (m: SkillRouteMatch) => ({
+    id: m.skill.id,
+    name: m.skill.name,
+    source: m.skill.source,
+    pluginKey: m.skill.pluginKey,
+    isDisabled: m.skill.isDisabled,
+    skillMdPath: m.skill.skillMdPath,
+    confidence: m.confidence,
+    score: m.score,
+    reason: m.reason,
+  });
+  return {
+    query: result.query,
+    mode: result.mode,
+    action: result.selected ? "read-skill-file" as const : "no-confident-match" as const,
+    recorded,
+    warnings,
+    selected: result.selected ? { ...projectMatch(result.selected), action: "read-skill-file" as const } : null,
+    matches: result.matches.map(projectMatch),
+  };
+}
+
+function parseTopK(value: string | undefined): number | undefined | null {
+  if (value === undefined) return undefined;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return n;
 }
 
 function printSkillTable(skills: Skill[], usage: Map<string, UsageStat>): void {
