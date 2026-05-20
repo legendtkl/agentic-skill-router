@@ -5,10 +5,17 @@ import type { Host } from "./hosts/base.ts";
 import { lookupUsage } from "./usage.ts";
 import { suggest } from "./policy.ts";
 import { routeDisabledSkills, type SkillRouteMatch } from "./route.ts";
+import {
+  dciGrepDisabledSkills,
+  dciInspectSkill,
+  dciReadSkill,
+  dciSearchDisabledSkills,
+  dciSelectSkill,
+} from "./dci.ts";
 import { disableSkill, enableSkill, findOrphanMarkers, reapplyMissing } from "./apply.ts";
 import { loadConfig, resolveUnusedForDays } from "./config.ts";
 import { loadState, recordRoutedSkill, saveState, statePathForHost } from "./state.ts";
-import type { HostName, Skill, Suggestion, UsageStat } from "./types.ts";
+import type { Confidence, HostName, Skill, Suggestion, UsageStat } from "./types.ts";
 
 export async function run(argv: string[]): Promise<number> {
   const { hostName, args } = parseGlobalArgs(argv);
@@ -19,6 +26,7 @@ export async function run(argv: string[]): Promise<number> {
       case "list": return cmdList(rest, hostName);
       case "suggest": return cmdSuggest(rest, hostName);
       case "route": return cmdRoute(rest, hostName);
+      case "dci": return cmdDci(rest, hostName);
       case "disable": return cmdDisable(rest, hostName);
       case "enable": return cmdEnable(rest, hostName);
       case "status": return cmdStatus(rest, hostName);
@@ -87,6 +95,11 @@ USAGE
   skill-router [--host=claude-code|codex] skills list [--json]
   skill-router [--host=claude-code|codex] skills suggest [--unused-for=<dur>] [--json]
   skill-router [--host=claude-code|codex] skills route --query=<text> [--json] [--top-k=N] [--no-record]
+  skill-router [--host=claude-code|codex] skills dci search --query=<text> [--json] [--top-k=N]
+  skill-router [--host=claude-code|codex] skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
+  skill-router [--host=claude-code|codex] skills dci inspect <id> [--json]
+  skill-router [--host=claude-code|codex] skills dci read <id> [--json] [--max-chars=N]
+  skill-router [--host=claude-code|codex] skills dci select <id> --query=<text> --confidence=high|medium --reason=<text> [--json]
   skill-router [--host=claude-code|codex] skills disable <id...> | --all-suggested [--unused-for=<dur>] [--yes] [--reason=<text>]
   skill-router [--host=claude-code|codex] skills enable <id...>
   skill-router [--host=claude-code|codex] skills status [--json]
@@ -208,6 +221,233 @@ async function cmdRoute(argv: string[], hostName: HostName): Promise<number> {
   console.log(`why:   ${projected.selected!.reason}`);
   if (recorded) console.log("usage: recorded routed use");
   return 0;
+}
+
+async function cmdDci(argv: string[], hostName: HostName): Promise<number> {
+  const [subcommand, ...rest] = argv;
+  switch (subcommand) {
+    case "search": return cmdDciSearch(rest, hostName);
+    case "grep": return cmdDciGrep(rest, hostName);
+    case "inspect": return cmdDciInspect(rest, hostName);
+    case "read": return cmdDciRead(rest, hostName);
+    case "select": return cmdDciSelect(rest, hostName);
+    case undefined:
+    case "-h":
+    case "--help":
+      return usage();
+    default:
+      console.error(`unknown dci subcommand: ${subcommand}`);
+      return usage(2);
+  }
+}
+
+async function cmdDciSearch(argv: string[], hostName: HostName): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      query: { type: "string", short: "q" },
+      json: { type: "boolean" },
+      "top-k": { type: "string" },
+      "max-snippets": { type: "string" },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
+  const query = ((values.query as string | undefined) ?? positionals.join(" ")).trim();
+  if (query === "") {
+    console.error("specify --query=<text> or pass the query as positional text");
+    return 2;
+  }
+  const topK = parsePositiveFlag(values["top-k"] as string | undefined, "--top-k");
+  if (topK === null) return 2;
+  const maxSnippets = parsePositiveFlag(values["max-snippets"] as string | undefined, "--max-snippets");
+  if (maxSnippets === null) return 2;
+
+  const host = createHost(hostName);
+  const result = await dciSearchDisabledSkills(await host.listSkills(), query, {
+    ...(topK === undefined ? {} : { topK }),
+    ...(maxSnippets === undefined ? {} : { maxSnippets }),
+  });
+  if (values.json) {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  printDciMatches(result.matches);
+  return result.matches.length > 0 ? 0 : 1;
+}
+
+async function cmdDciGrep(argv: string[], hostName: HostName): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      pattern: { type: "string", short: "p" },
+      json: { type: "boolean" },
+      regex: { type: "boolean" },
+      "top-k": { type: "string" },
+      "max-snippets": { type: "string" },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
+  const pattern = ((values.pattern as string | undefined) ?? positionals.join(" ")).trim();
+  if (pattern === "") {
+    console.error("specify --pattern=<text> or pass the pattern as positional text");
+    return 2;
+  }
+  const topK = parsePositiveFlag(values["top-k"] as string | undefined, "--top-k");
+  if (topK === null) return 2;
+  const maxSnippets = parsePositiveFlag(values["max-snippets"] as string | undefined, "--max-snippets");
+  if (maxSnippets === null) return 2;
+  if (values.regex) {
+    try {
+      new RegExp(pattern, "iu");
+    } catch (err) {
+      console.error(`invalid --regex pattern: ${(err as Error).message}`);
+      return 2;
+    }
+  }
+
+  const host = createHost(hostName);
+  const result = await dciGrepDisabledSkills(await host.listSkills(), pattern, {
+    regex: Boolean(values.regex),
+    ...(topK === undefined ? {} : { topK }),
+    ...(maxSnippets === undefined ? {} : { maxSnippets }),
+  });
+  if (values.json) {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    return 0;
+  }
+  printDciMatches(result.matches);
+  return result.matches.length > 0 ? 0 : 1;
+}
+
+async function cmdDciInspect(argv: string[], hostName: HostName): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: { json: { type: "boolean" } },
+    allowPositionals: true,
+    strict: false,
+  });
+  const id = positionals[0];
+  if (!id) {
+    console.error("specify <id>");
+    return 2;
+  }
+  const host = createHost(hostName);
+  try {
+    const result = dciInspectSkill(await host.listSkills(), id);
+    if (values.json) process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    else printDciInspect(result);
+    return 0;
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
+  }
+}
+
+async function cmdDciRead(argv: string[], hostName: HostName): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      json: { type: "boolean" },
+      "max-chars": { type: "string" },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
+  const id = positionals[0];
+  if (!id) {
+    console.error("specify <id>");
+    return 2;
+  }
+  const maxChars = parsePositiveFlag(values["max-chars"] as string | undefined, "--max-chars");
+  if (maxChars === null) return 2;
+  const host = createHost(hostName);
+  try {
+    const result = await dciReadSkill(await host.listSkills(), id, maxChars === undefined ? {} : { maxChars });
+    if (values.json) process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    else process.stdout.write(result.content + (result.content.endsWith("\n") ? "" : "\n"));
+    return 0;
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
+  }
+}
+
+async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      query: { type: "string", short: "q" },
+      confidence: { type: "string" },
+      reason: { type: "string" },
+      json: { type: "boolean" },
+      "no-record": { type: "boolean" },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
+  const id = positionals[0];
+  if (!id) {
+    console.error("specify <id>");
+    return 2;
+  }
+  const query = (values.query as string | undefined)?.trim();
+  if (!query) {
+    console.error("specify --query=<text>");
+    return 2;
+  }
+  const confidence = parseConfidence(values.confidence as string | undefined);
+  if (!confidence || confidence === "low") {
+    console.error("--confidence must be high or medium");
+    return 2;
+  }
+  const reason = (values.reason as string | undefined)?.trim();
+  if (!reason) {
+    console.error("specify --reason=<text>");
+    return 2;
+  }
+
+  const host = createHost(hostName);
+  const skills = await host.listSkills();
+  try {
+    const selected = dciSelectSkill(skills, id, confidence, reason);
+    const warnings: string[] = [];
+    let recorded = false;
+    if (!values["no-record"]) {
+      try {
+        const statePath = statePathForHost(host.name);
+        const state = await loadState(statePath, host.name);
+        await saveState(recordRoutedSkill(state, {
+          id: selected.id,
+          pluginKey: selected.pluginKey,
+          skillMdPath: selected.skillMdPath,
+          name: selected.name,
+          query,
+          confidence,
+          routedAt: new Date().toISOString(),
+        }), statePath);
+        recorded = true;
+      } catch (err) {
+        const warning = `routed usage was not recorded: ${(err as Error).message}`;
+        warnings.push(warning);
+        process.stderr.write(`warning: ${warning}\n`);
+      }
+    }
+    const result = { ...selected, query, recorded, warnings };
+    if (values.json) {
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    } else {
+      console.log(`select: [${result.confidence}] ${result.id}`);
+      console.log(`read:   ${result.skillMdPath}`);
+      console.log(`why:    ${result.reason}`);
+      if (recorded) console.log("usage:  recorded routed use");
+    }
+    return 0;
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
+  }
 }
 
 async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
@@ -415,11 +655,47 @@ function projectRoute(result: ReturnType<typeof routeDisabledSkills>, recorded: 
   };
 }
 
+function parsePositiveFlag(value: string | undefined, flagName: string): number | undefined | null {
+  if (value === undefined) return undefined;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) {
+    console.error(`${flagName} must be a positive integer`);
+    return null;
+  }
+  return n;
+}
+
 function parseTopK(value: string | undefined): number | undefined | null {
   if (value === undefined) return undefined;
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) return null;
   return n;
+}
+
+function parseConfidence(value: string | undefined): Confidence | null {
+  if (value === "high" || value === "medium" || value === "low") return value;
+  return null;
+}
+
+function printDciMatches(matches: Array<{ id: string; score: number; reason: string; snippets: Array<{ line: number; text: string }> }>): void {
+  if (matches.length === 0) {
+    console.log("no disabled-skill corpus candidates found.");
+    return;
+  }
+  for (const m of matches) {
+    console.log(`${m.id} (${m.score})`);
+    console.log(`  ${m.reason}`);
+    for (const snippet of m.snippets) {
+      console.log(`  L${snippet.line}: ${snippet.text}`);
+    }
+  }
+}
+
+function printDciInspect(result: { id: string; name: string; description: string; skillMdPath: string }): void {
+  console.log(`${result.id}`);
+  console.log(`name: ${result.name}`);
+  console.log(`path: ${result.skillMdPath}`);
+  if (result.description) console.log(`description: ${result.description}`);
 }
 
 function printSkillTable(skills: Skill[], usage: Map<string, UsageStat>): void {

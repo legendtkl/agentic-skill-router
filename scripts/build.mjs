@@ -10,6 +10,10 @@ const outputs = [
   resolve(root, "plugins/claude-code/lib/skill-router.mjs"),
   resolve(root, "plugins/codex/lib/skill-router.mjs"),
 ];
+const binWrappers = [
+  resolve(root, "plugins/claude-code/bin/skill-router"),
+  resolve(root, "plugins/codex/bin/skill-router"),
+];
 
 for (const out of outputs) {
   await mkdir(dirname(out), { recursive: true });
@@ -30,4 +34,8 @@ for (const out of outputs) {
   await chmod(out, 0o755);
 
   console.log(`built ${out}`);
+}
+
+for (const bin of binWrappers) {
+  await chmod(bin, 0o755);
 }

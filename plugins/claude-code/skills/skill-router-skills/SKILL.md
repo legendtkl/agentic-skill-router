@@ -9,12 +9,12 @@ When the user wants to slim Claude Code skills, follow this exact sequence.
 
 ## 1. Locate the bundled CLI
 
-The CLI is at `${CLAUDE_PLUGIN_ROOT}/lib/skill-router.mjs`. If `CLAUDE_PLUGIN_ROOT` is unset, compute it as the directory two levels above this `SKILL.md`. Always invoke via `node <abs-path>` — never rely on PATH.
+The CLI is at `${CLAUDE_PLUGIN_ROOT}/bin/skill-router`. If `CLAUDE_PLUGIN_ROOT` is unset, compute it as the directory two levels above this `SKILL.md`. Always invoke via the absolute `skill-router` path — never rely on PATH.
 
 ## 2. Listing and suggesting
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/lib/skill-router.mjs" skills suggest --json
+"${CLAUDE_PLUGIN_ROOT}/bin/skill-router" skills suggest --json
 ```
 
 The output is a JSON array of suggestions, each with `id`, `name`, `source`, `reason` (`never-used` | `stale`), `confidence` (`high` | `medium` | `low`), `details`.
@@ -36,13 +36,13 @@ If the user wants to adjust the staleness threshold, mention they can pass `--un
 Either pass specific ids:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/lib/skill-router.mjs" skills disable user:lark-mail plugin:foo@bar:thing --yes
+"${CLAUDE_PLUGIN_ROOT}/bin/skill-router" skills disable user:lark-mail plugin:foo@bar:thing --yes
 ```
 
 Or apply all current suggestions in one shot:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/lib/skill-router.mjs" skills disable --all-suggested --yes
+"${CLAUDE_PLUGIN_ROOT}/bin/skill-router" skills disable --all-suggested --yes
 ```
 
 After disable succeeds, tell the user: **"Disabled N skills. Restart Claude Code for the change to take effect — the disabled skill descriptions will no longer appear in your system prompt."**

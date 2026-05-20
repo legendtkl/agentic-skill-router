@@ -2,15 +2,14 @@
 /**
  * Install skill-router as a local Codex plugin plus slash command.
  *
- * - builds the bundle if not present
+ * - builds the bundle before copying
  * - copies plugins/codex -> ~/.codex/plugins/cache/local/skill-router/<version>/
  * - enables [plugins."skill-router@local"] in ~/.codex/config.toml
  * - copies prompts/skill-router-skills.md -> ~/.codex/prompts/
  *
  * Idempotent: re-running upgrades the install in place.
  */
-import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { chmod, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,15 +45,10 @@ async function main() {
   log("Next: restart Codex, then run:");
   log("  /skill-router:skills");
   log("Manual CLI:");
-  log(`  node ${installPath}/lib/skill-router.mjs --host=codex skills suggest`);
+  log(`  ${installPath}/bin/skill-router --host=codex skills suggest`);
 }
 
 async function ensureBuild() {
-  const bundle = join(pluginSrc, "lib/skill-router.mjs");
-  if (existsSync(bundle)) {
-    log("  bundle exists, skipping build");
-    return;
-  }
   log("  building bundle (npm run build)...");
   const r = spawnSync("npm", ["run", "build"], {
     cwd: repoRoot,
@@ -68,6 +62,7 @@ async function copyPlugin() {
   await rm(installPath, { recursive: true, force: true });
   await mkdir(dirname(installPath), { recursive: true });
   await cp(pluginSrc, installPath, { recursive: true });
+  await chmod(join(installPath, "bin/skill-router"), 0o755);
   log(`  copied -> ${installPath}`);
 }
 

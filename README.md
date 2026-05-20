@@ -39,22 +39,23 @@ The same bundle can be used directly.
 Claude Code:
 
 ```bash
-node plugins/claude-code/lib/skill-router.mjs skills list
-node plugins/claude-code/lib/skill-router.mjs skills suggest
-node plugins/claude-code/lib/skill-router.mjs skills disable user:lark-mail --yes
-node plugins/claude-code/lib/skill-router.mjs skills enable user:lark-mail
-node plugins/claude-code/lib/skill-router.mjs skills status
+plugins/claude-code/bin/skill-router skills list
+plugins/claude-code/bin/skill-router skills suggest
+plugins/claude-code/bin/skill-router skills disable user:lark-mail --yes
+plugins/claude-code/bin/skill-router skills enable user:lark-mail
+plugins/claude-code/bin/skill-router skills status
 ```
 
 Codex:
 
 ```bash
-node plugins/codex/lib/skill-router.mjs --host=codex skills list
-node plugins/codex/lib/skill-router.mjs --host=codex skills suggest --json
-node plugins/codex/lib/skill-router.mjs --host=codex skills route --query "draft a Lark mail reply" --json
-node plugins/codex/lib/skill-router.mjs --host=codex skills disable user:codex:lark-mail --yes
-node plugins/codex/lib/skill-router.mjs --host=codex skills enable user:codex:lark-mail
-node plugins/codex/lib/skill-router.mjs --host=codex skills status
+plugins/codex/bin/skill-router --host=codex skills list
+plugins/codex/bin/skill-router --host=codex skills suggest --json
+plugins/codex/bin/skill-router --host=codex skills route --query "draft a Lark mail reply" --json
+plugins/codex/bin/skill-router --host=codex skills dci search --query "find a disabled skill for this request" --json
+plugins/codex/bin/skill-router --host=codex skills disable user:codex:lark-mail --yes
+plugins/codex/bin/skill-router --host=codex skills enable user:codex:lark-mail
+plugins/codex/bin/skill-router --host=codex skills status
 ```
 
 `--unused-for=<duration>` accepts `30`, `30d`, `2w`, `3m`, and `1y`.
@@ -94,6 +95,13 @@ Disabled-skill routing:
 - A confident route returns `action: "read-skill-file"` and `selected.skillMdPath`.
 - The returned path may end in `SKILL.md.skill-router-disabled`; it is still safe to read as instructions.
 - Routed use is recorded in state so frequently proxied disabled skills can be identified later.
+- If fast routing is not confident, Codex can use DCI-style corpus tools:
+  - `skills dci search --query "<request>" --json`
+  - `skills dci grep --pattern "<phrase>" --json` for literal phrase search; add `--regex` only when intentionally using a regular expression
+  - `skills dci inspect <id> --json`
+  - `skills dci read <id> --json`
+  - `skills dci select <id> --query "<request>" --confidence=high --reason "<evidence>" --json`
+- DCI tools search/read disabled skill instruction bodies with bounded snippets instead of loading every `SKILL.md` into context.
 
 ## Development
 

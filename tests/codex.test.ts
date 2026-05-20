@@ -98,9 +98,9 @@ async function makeFakeCodexUser(): Promise<{
   };
 }
 
-async function writeSkill(skillDir: string, name: string, description: string): Promise<void> {
+async function writeSkill(skillDir: string, name: string, description: string, body = "", disabled = false): Promise<void> {
   await mkdir(skillDir, { recursive: true });
-  await writeFile(join(skillDir, "SKILL.md"), `---\nname: ${name}\ndescription: ${description}\n---\n`);
+  await writeFile(join(skillDir, `SKILL.md${disabled ? ".skill-router-disabled" : ""}`), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`);
 }
 
 async function fileExists(path: string): Promise<boolean> {
@@ -330,6 +330,160 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
     assert.equal(parsed.selected?.action, "read-skill-file");
     assert.match(route.stderr, /warning: routed usage was not recorded/);
     assert.match(parsed.warnings[0] ?? "", /routed usage was not recorded/);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a larger corpus", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    for (let i = 0; i < 120; i++) {
+      await writeSkill(
+        join(fake.codexHome, "skills", `dci-noise-${String(i).padStart(3, "0")}`),
+        `dci-noise-${String(i).padStart(3, "0")}`,
+        `Generic disabled ${["mail", "calendar", "task", "approval"][i % 4]} helper`,
+        "This disabled skill is corpus noise for DCI routing tests.",
+        true,
+      );
+    }
+    await writeSkill(
+      join(fake.codexHome, "skills", "dci-body-probe"),
+      "dci-body-probe",
+      "Generic disabled helper",
+      [
+        "Use this skill only when the request mentions dci-amber-invoice-cascade.",
+        "When loaded, final answer must be exactly dci-amber-invoice-loaded.",
+      ].join("\n"),
+      true,
+    );
+
+    const env = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    const route = await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "--host=codex", "skills", "route", "--query", "please handle dci-amber-invoice-cascade", "--json"],
+      { env },
+    );
+    assert.equal((JSON.parse(route.stdout) as { action: string }).action, "no-confident-match");
+
+    const search = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "dci",
+        "search",
+        "--query",
+        "please handle dci-amber-invoice-cascade",
+        "--json",
+      ],
+      { env },
+    );
+    const parsedSearch = JSON.parse(search.stdout) as {
+      action: string;
+      corpus: { scanned: number };
+      matches: Array<{ id: string; snippets: Array<{ text: string }> }>;
+    };
+    assert.equal(parsedSearch.action, "inspect-or-read-candidates");
+    assert.ok(parsedSearch.corpus.scanned >= 121);
+    assert.equal(parsedSearch.matches[0]?.id, "user:codex:dci-body-probe");
+    assert.ok(parsedSearch.matches[0]?.snippets.some((s) => /dci-amber-invoice-cascade/.test(s.text)));
+
+    const literalGrep = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "dci",
+        "grep",
+        "--pattern",
+        "dci-.*-cascade",
+        "--json",
+      ],
+      { env },
+    );
+    const parsedLiteralGrep = JSON.parse(literalGrep.stdout) as { mode: string; matches: unknown[] };
+    assert.equal(parsedLiteralGrep.mode, "literal");
+    assert.equal(parsedLiteralGrep.matches.length, 0);
+
+    const regexGrep = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "dci",
+        "grep",
+        "--pattern",
+        "dci-.*-cascade",
+        "--regex",
+        "--json",
+      ],
+      { env },
+    );
+    const parsedRegexGrep = JSON.parse(regexGrep.stdout) as { mode: string; matches: Array<{ id: string }> };
+    assert.equal(parsedRegexGrep.mode, "regex");
+    assert.equal(parsedRegexGrep.matches[0]?.id, "user:codex:dci-body-probe");
+
+    const read = await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "--host=codex", "skills", "dci", "read", "user:codex:dci-body-probe", "--json"],
+      { env },
+    );
+    const parsedRead = JSON.parse(read.stdout) as { action: string; content: string };
+    assert.equal(parsedRead.action, "read-skill-file");
+    assert.match(parsedRead.content, /dci-amber-invoice-loaded/);
+
+    const select = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "dci",
+        "select",
+        "user:codex:dci-body-probe",
+        "--query",
+        "please handle dci-amber-invoice-cascade",
+        "--confidence=high",
+        "--reason",
+        "DCI search and read matched the unique probe instruction",
+        "--json",
+      ],
+      { env },
+    );
+    const parsedSelect = JSON.parse(select.stdout) as {
+      action: string;
+      recorded: boolean;
+      id: string;
+      skillMdPath: string;
+    };
+    assert.equal(parsedSelect.action, "read-skill-file");
+    assert.equal(parsedSelect.recorded, true);
+    assert.equal(parsedSelect.id, "user:codex:dci-body-probe");
+    assert.match(parsedSelect.skillMdPath, /SKILL\.md\.skill-router-disabled$/);
+
+    const rawState = await readFile(join(fake.stateDir, "state-codex.json"), "utf8");
+    const state = JSON.parse(rawState) as { routedSkills: Array<{ id: string; routeCount: number; lastQuery: string }> };
+    assert.equal(state.routedSkills[0]!.id, "user:codex:dci-body-probe");
+    assert.equal(state.routedSkills[0]!.routeCount, 1);
   } finally {
     await fake.cleanup();
   }

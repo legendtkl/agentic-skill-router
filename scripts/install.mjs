@@ -2,7 +2,7 @@
 /**
  * Install skill-router as a local Claude Code plugin.
  *
- * - builds the bundle if not present
+ * - builds the bundle before copying
  * - copies plugins/claude-code → ~/.claude/plugins/cache/local/skill-router/<version>/
  * - registers the install in ~/.claude/plugins/installed_plugins.json
  * - enables it in ~/.claude/settings.json (enabledPlugins)
@@ -12,8 +12,7 @@
  *
  * Idempotent: re-running upgrades the install in place.
  */
-import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { chmod, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,15 +46,10 @@ async function main() {
   log("");
   log("Next: restart Claude Code, then in a new session ask the model to slim your skills.");
   log("Manual CLI:");
-  log(`  node ${installPath}/lib/skill-router.mjs skills suggest`);
+  log(`  ${installPath}/bin/skill-router skills suggest`);
 }
 
 async function ensureBuild() {
-  const bundle = join(pluginSrc, "lib/skill-router.mjs");
-  if (existsSync(bundle)) {
-    log("  bundle exists, skipping build");
-    return;
-  }
   log("  building bundle (npm run build)...");
   const r = spawnSync("npm", ["run", "build"], {
     cwd: repoRoot, stdio: "inherit",
@@ -69,6 +63,7 @@ async function copyPlugin() {
   await rm(installPath, { recursive: true, force: true });
   await mkdir(dirname(installPath), { recursive: true });
   await cp(pluginSrc, installPath, { recursive: true });
+  await chmod(join(installPath, "bin/skill-router"), 0o755);
   log(`  copied → ${installPath}`);
 }
 

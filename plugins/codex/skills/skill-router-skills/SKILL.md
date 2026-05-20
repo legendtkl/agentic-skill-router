@@ -15,35 +15,60 @@ Use this skill in two cases:
 Prefer `${SKILL_ROUTER_CLI}` if set. Otherwise locate the newest installed bundle:
 
 ```bash
-find "${CODEX_HOME:-$HOME/.codex}/plugins/cache/local/skill-router" -path '*/lib/skill-router.mjs' -type f 2>/dev/null | sort | tail -1
+find "${CODEX_HOME:-$HOME/.codex}/plugins/cache/local/skill-router" -path '*/bin/skill-router' -type f 2>/dev/null | sort | tail -1
 ```
 
 If that finds nothing, check the current repository path:
 
 ```bash
-test -f plugins/codex/lib/skill-router.mjs && printf '%s\n' "$PWD/plugins/codex/lib/skill-router.mjs"
+test -x plugins/codex/bin/skill-router && printf '%s\n' "$PWD/plugins/codex/bin/skill-router"
 ```
 
-Always invoke via `node <abs-path-to-skill-router.mjs>` and always pass `--host=codex`.
+Always invoke via `"<abs-path-to-skill-router>"` and always pass `--host=codex`.
 
 ## 2. Route a request to disabled skills
 
 When selected as a disabled-skill fallback, do not solve the task directly first. Run:
 
 ```bash
-node "<abs-path-to-skill-router.mjs>" --host=codex skills route --query "<current user request>" --json
+"<abs-path-to-skill-router>" --host=codex skills route --query "<current user request>" --json
 ```
 
 If the result has `action: "read-skill-file"` and a non-null `selected`, read the returned `selected.skillMdPath` even when it ends in `SKILL.md.skill-router-disabled`. Then follow that disabled skill's instructions as if it were enabled.
 
-If the route result has `action: "no-confident-match"`, continue normally without forcing a disabled skill.
+If the route result has `action: "no-confident-match"`, use the DCI corpus tools before giving up:
 
-The route command records routed usage automatically. Use `--no-record` only for audits or dry runs.
+```bash
+"<abs-path-to-skill-router>" --host=codex skills dci search --query "<current user request>" --json
+```
+
+Inspect or read only plausible disabled candidates:
+
+```bash
+"<abs-path-to-skill-router>" --host=codex skills dci inspect "<skill-id>" --json
+"<abs-path-to-skill-router>" --host=codex skills dci read "<skill-id>" --json
+```
+
+You may also run a narrow literal direct-corpus search when a distinctive phrase or API name is visible:
+
+```bash
+"<abs-path-to-skill-router>" --host=codex skills dci grep --pattern "<distinctive phrase>" --json
+```
+
+If the DCI evidence clearly identifies one disabled skill, record the selection and then read the returned path:
+
+```bash
+"<abs-path-to-skill-router>" --host=codex skills dci select "<skill-id>" --query "<current user request>" --confidence=high --reason "<brief evidence>" --json
+```
+
+If DCI search/grep/read still leaves multiple plausible skills or no evidence, continue normally without forcing a disabled skill.
+
+The route and DCI select commands record routed usage automatically. Use `--no-record` only for audits or dry runs.
 
 ## 3. Listing and suggesting
 
 ```bash
-node "<abs-path-to-skill-router.mjs>" --host=codex skills suggest --json
+"<abs-path-to-skill-router>" --host=codex skills suggest --json
 ```
 
 The output is a JSON array of suggestions, each with `id`, `name`, `source`, `reason` (`never-used` | `stale`), `confidence` (`high` | `medium` | `low`), `details`.
@@ -65,13 +90,13 @@ If the user wants to adjust the staleness threshold, mention `--unused-for=60d` 
 Either pass specific ids:
 
 ```bash
-node "<abs-path-to-skill-router.mjs>" --host=codex skills disable user:codex:lark-mail plugin:gmail@openai-curated:gmail --yes
+"<abs-path-to-skill-router>" --host=codex skills disable user:codex:lark-mail plugin:gmail@openai-curated:gmail --yes
 ```
 
 Or apply all current suggestions in one shot:
 
 ```bash
-node "<abs-path-to-skill-router.mjs>" --host=codex skills disable --all-suggested --yes
+"<abs-path-to-skill-router>" --host=codex skills disable --all-suggested --yes
 ```
 
 After disable succeeds, tell the user: "Disabled N skills. Restart Codex or start a new Codex session for the change to take effect."
@@ -79,6 +104,11 @@ After disable succeeds, tell the user: "Disabled N skills. Restart Codex or star
 ## 6. Other operations
 
 - `skills route --query "<text>" --json` — choose a disabled skill for the current request and return the file to read.
+- `skills dci search --query "<text>" --json` — search disabled skill instruction bodies and return bounded snippets.
+- `skills dci grep --pattern "<text>" --json` — literal grep over disabled skill instruction bodies. Use `--regex` only when a regular expression is intentionally required.
+- `skills dci inspect <id> --json` — show metadata and path for one disabled skill.
+- `skills dci read <id> --json` — read a disabled skill body with truncation.
+- `skills dci select <id> --query "<text>" --confidence=high|medium --reason "<why>" --json` — record a DCI-backed route.
 - `skills enable <id...>` — undo a disable.
 - `skills status [--json]` — list currently-disabled skills and detect/auto-reapply any that an upstream plugin or skill update may have restored.
 - `skills list --json` — full inventory with `lastUsed` and `callCount`.
