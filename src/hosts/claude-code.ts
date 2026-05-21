@@ -1,12 +1,9 @@
-import { rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Host } from "./base.ts";
 import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageStat } from "../types.ts";
-import { BuiltinSkillCannotDisableError, SkillOutOfRootError } from "../types.ts";
 import {
-  DISABLED_SUFFIX,
   readClaudeSettings,
   readInstalledPlugins,
   readSkillFrontmatterDetailed,
@@ -164,23 +161,4 @@ export class ClaudeCodeHost implements Host {
     return roots;
   }
 
-  async disable(skill: Skill, _reason: string): Promise<void> {
-    // Check outOfRoot before canDisable so that the more specific
-    // "resolves outside the skills root" error wins for symlink escapes,
-    // even though out-of-root skills now also report canDisable=false.
-    if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
-    if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
-    if (skill.isDisabled) return; // idempotent
-    const target = skill.skillMdPath + DISABLED_SUFFIX;
-    await rename(skill.skillMdPath, target);
-  }
-
-  async enable(skill: Skill): Promise<void> {
-    if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
-    if (!skill.canDisable) return; // builtins are never disabled
-    if (!skill.isDisabled) return; // idempotent
-    if (!skill.skillMdPath.endsWith(DISABLED_SUFFIX)) return;
-    const target = skill.skillMdPath.slice(0, -DISABLED_SUFFIX.length);
-    await rename(skill.skillMdPath, target);
-  }
 }

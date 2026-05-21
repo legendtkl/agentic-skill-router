@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { CodexHost } from "../src/hosts/codex.ts";
 import { skillInstanceKey } from "../src/state.ts";
+import { disableSkill, enableSkill } from "../src/apply.ts";
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -254,14 +255,15 @@ test("CodexHost usage stats read recursive Codex sessions", async () => {
   }
 });
 
-test("CodexHost disable + enable round-trip on a codex user skill", async () => {
+test("apply.ts disable + enable round-trip on a codex user skill", async () => {
   const fake = await makeFakeCodexUser();
+  const statePath = join(fake.stateDir, "state.json");
   try {
     const host = new CodexHost({ codexHome: fake.codexHome, agentsHome: fake.agentsHome });
     const brand = (await host.listSkills()).find((s) => s.id === "user:codex:brand");
     assert.ok(brand);
 
-    await host.disable(brand!, "test");
+    await disableSkill(brand!, "test", { statePath, host: host.name });
     assert.equal(await fileExists(brand!.skillMdPath), false);
     assert.equal(await fileExists(brand!.skillMdPath + ".skill-router-disabled"), true);
 
@@ -269,7 +271,7 @@ test("CodexHost disable + enable round-trip on a codex user skill", async () => 
     assert.ok(disabledBrand);
     assert.equal(disabledBrand!.isDisabled, true);
 
-    await host.enable(disabledBrand!);
+    await enableSkill(disabledBrand!, { statePath, host: host.name });
     assert.equal(await fileExists(brand!.skillMdPath), true);
   } finally {
     await fake.cleanup();
@@ -327,7 +329,11 @@ test("CodexHost flags out-of-root symlink skills as canDisable=false across user
       // The whole point of this fix: bulk policy/suggest paths must not
       // pick these up. canDisable=false is how they get skipped.
       assert.equal(s!.canDisable, false, `${id} must report canDisable=false`);
-      await assert.rejects(() => host.disable(s!, "test"), /resolves outside the skills root/i);
+      const statePath = join(fake.stateDir, `state-${id.replace(/[^a-zA-Z0-9]/g, "_")}.json`);
+      await assert.rejects(
+        () => disableSkill(s!, "test", { statePath, host: host.name }),
+        /resolves outside the skills root/i,
+      );
     }
   } finally {
     await rm(outside, { recursive: true, force: true });
@@ -1244,6 +1250,30 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
     const state = JSON.parse(rawState) as { routedSkills: Array<{ id: string; routeCount: number; lastQuery: string }> };
     assert.equal(state.routedSkills[0]!.id, "user:codex:dci-body-probe");
     assert.equal(state.routedSkills[0]!.routeCount, 1);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CodexHost does not expose disable/enable", async () => {
+  // Mirror of the ClaudeCodeHost guard: keep disable/enable funneled through
+  // apply.ts so the state machine (journal, lock, conflict/reapply) cannot be
+  // bypassed by renaming SKILL.md directly through a host method.
+  const fake = await makeFakeCodexUser();
+  try {
+    const host = new CodexHost({ codexHome: fake.codexHome, agentsHome: fake.agentsHome });
+    assert.equal("disable" in host, false, "CodexHost must not expose `disable`");
+    assert.equal("enable" in host, false, "CodexHost must not expose `enable`");
+    assert.equal(
+      typeof (host as unknown as { disable?: unknown }).disable,
+      "undefined",
+      "CodexHost.disable must not be a function",
+    );
+    assert.equal(
+      typeof (host as unknown as { enable?: unknown }).enable,
+      "undefined",
+      "CodexHost.enable must not be a function",
+    );
   } finally {
     await fake.cleanup();
   }

@@ -753,11 +753,12 @@ test("two skills sharing an id at different paths are tracked as separate instan
 });
 
 test("disableSkill checks outOfRoot before canDisable so symlink-escape reports the specific error", async () => {
-  // Regression guard: host-level listSkills() now marks out-of-root symlink
+  // Regression guard: Host.listSkills() now marks out-of-root symlink
   // skills with canDisable=false, so if disableSkill checked canDisable first
   // it would surface a misleading "builtin" error and hide the real
-  // remediation path. The outOfRoot guard must fire first to match the
-  // host-level disable() ordering.
+  // remediation path. The outOfRoot guard must fire first because apply.ts
+  // is now the only place these safety checks live (hosts no longer expose
+  // disable/enable — see #32).
   const { skill, statePath, cleanup } = await setup();
   try {
     const outOfRootAndNotDisableable: Skill = {
