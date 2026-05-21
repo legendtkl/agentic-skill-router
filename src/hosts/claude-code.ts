@@ -86,7 +86,7 @@ export class ClaudeCodeHost implements Host {
           name: fm.name || skillName,
           description: fm.description,
           metadata: fm,
-          source: "user",
+          source: "project",
           pluginKey: null,
           skillMdPath,
           isDisabled,

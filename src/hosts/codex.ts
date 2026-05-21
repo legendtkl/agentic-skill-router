@@ -85,7 +85,7 @@ export class CodexHost implements Host {
       out.push(...await this.listRootSkills({
         root: projectRoot.root,
         idPrefix: `project:codex:${projectRoot.relativeDir}`,
-        source: "user",
+        source: "project",
         canDisable: true,
       }));
     }
@@ -153,7 +153,7 @@ export class CodexHost implements Host {
   private async listRootSkills(opts: {
     root: string;
     idPrefix: string;
-    source: "user" | "builtin";
+    source: "user" | "project" | "builtin";
     canDisable: boolean;
   }): Promise<Skill[]> {
     return walkSkillsDir(opts.root, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {

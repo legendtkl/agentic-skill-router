@@ -113,7 +113,7 @@ function isConfidence(x: unknown): x is Confidence {
 }
 
 function isSkillSource(x: unknown): x is SkillSource {
-  return x === "user" || x === "plugin" || x === "builtin";
+  return x === "user" || x === "project" || x === "plugin" || x === "builtin";
 }
 
 export async function loadState(path: string = STATE_PATH, host: HostName = "claude-code"): Promise<State> {
