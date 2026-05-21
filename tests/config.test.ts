@@ -207,6 +207,35 @@ test("setConfigValue rejects invalid value without touching disk", async () => {
   }
 });
 
+test("setConfigValue serializes concurrent writes so neither key is dropped", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "skill-router-set-concurrent-"));
+  const path = join(dir, "config.json");
+  try {
+    // Start from a known baseline so we can assert both writers preserve it.
+    await writeFile(path, JSON.stringify({ futureKey: "keep" }) + "\n");
+    await Promise.all([
+      setConfigValue("routeMode", "metadata", path),
+      setConfigValue("unusedForDays", "42", path),
+    ]);
+    const cfg = await loadConfig(path);
+    assert.equal(cfg.routeMode, "metadata");
+    assert.equal(cfg.unusedForDays, 42);
+    const raw = JSON.parse(
+      await (await import("node:fs/promises")).readFile(path, "utf8"),
+    ) as Record<string, unknown>;
+    // Unknown sibling key survives both writers.
+    assert.equal(raw.futureKey, "keep");
+    // Lock sibling file is cleaned up on success.
+    const lockExists = await (await import("node:fs/promises"))
+      .stat(`${path}.lock`)
+      .then(() => true)
+      .catch(() => false);
+    assert.equal(lockExists, false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("saveRawConfigObject creates parent directory and writes JSON", async () => {
   const dir = await mkdtemp(join(tmpdir(), "skill-router-save-"));
   const path = join(dir, "nested", "config.json");

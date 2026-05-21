@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { Config, RouteMode } from "./types.ts";
@@ -190,17 +190,73 @@ export function parseConfigValue(key: ConfigKey, value: string): unknown {
  * Update one key in the on-disk config atomically. Reads the current raw
  * JSON object, applies the validated value, and writes the result back via
  * {@link saveRawConfigObject}. Unknown sibling keys are preserved.
+ *
+ * The read-modify-write block is serialized by {@link withLockedConfigUpdate}
+ * so two concurrent `skills config set` invocations on the same machine do
+ * not drop each other's keys.
  */
 export async function setConfigValue(
   key: ConfigKey,
   value: string,
   path: string = configPath(),
 ): Promise<{ key: ConfigKey; value: unknown }> {
+  // Validate before taking the lock so bad input fails fast and doesn't
+  // briefly block another writer.
   const parsed = parseConfigValue(key, value);
-  const current = await loadRawConfigObject(path);
-  current[key] = parsed;
-  await saveRawConfigObject(current, path);
-  return { key, value: parsed };
+  return withLockedConfigUpdate(path, async () => {
+    const current = await loadRawConfigObject(path);
+    current[key] = parsed;
+    await saveRawConfigObject(current, path);
+    return { key, value: parsed };
+  });
+}
+
+const CONFIG_LOCK_TIMEOUT_MS = 5_000;
+const CONFIG_LOCK_RETRY_MS = 25;
+
+/**
+ * Serialize a read-modify-write on the config file via a sibling `.lock`
+ * file. Acquires by opening with `O_CREAT | O_EXCL | O_WRONLY` (only the
+ * first writer wins), retries with a small backoff while another holder is
+ * in flight, and deletes the lock file on completion. Times out so a
+ * crashed previous run on the same path eventually surfaces as an error
+ * rather than hanging the CLI forever.
+ *
+ * This is a same-machine guard; it is not a multi-host concurrency primitive.
+ */
+export async function withLockedConfigUpdate<T>(
+  path: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await mkdir(dirname(path), { recursive: true });
+  const lockPath = `${path}.lock`;
+  const started = Date.now();
+  while (true) {
+    try {
+      const handle = await open(lockPath, "wx", 0o600);
+      await handle.close();
+      break;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      if (Date.now() - started > CONFIG_LOCK_TIMEOUT_MS) {
+        throw new Error(`timed out waiting for config lock: ${lockPath}`);
+      }
+      await sleep(CONFIG_LOCK_RETRY_MS);
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    try {
+      await unlink(lockPath);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function isConfigKey(value: string): value is ConfigKey {
