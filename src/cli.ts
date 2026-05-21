@@ -168,7 +168,11 @@ async function cmdSuggest(argv: string[], hostName: HostName): Promise<number> {
   const days = resolveUnusedForDays({ cliFlag: values["unused-for"] as string | undefined, config });
   const skills = await host.listSkills();
   const usage = await host.usageStats();
-  const suggestions = suggest(skills, usage, { unusedForDays: days });
+  const suggestions = suggest(skills, usage, {
+    unusedForDays: days,
+    keepNames: config.keepNames,
+    keepIds: config.keepIds,
+  });
 
   if (values.json) {
     process.stdout.write(JSON.stringify(suggestions.map((s) => projectSuggestion(s)), null, 2) + "\n");
@@ -685,7 +689,11 @@ async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
     const config = await loadConfig();
     unusedDays = resolveUnusedForDays({ cliFlag: values["unused-for"] as string | undefined, config });
     const usage = await host.usageStats();
-    suggested = suggest(skills, usage, { unusedForDays: unusedDays });
+    suggested = suggest(skills, usage, {
+      unusedForDays: unusedDays,
+      keepNames: config.keepNames,
+      keepIds: config.keepIds,
+    });
     targets = suggested.map((s) => s.skill);
     reason = (values.reason as string | undefined) ?? `auto:unused-${unusedDays}d`;
   } else {

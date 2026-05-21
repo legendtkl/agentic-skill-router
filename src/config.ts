@@ -32,7 +32,20 @@ export async function loadConfig(path: string = CONFIG_PATH): Promise<Config> {
   }
   const routeMode = parseRouteMode(obj.routeMode);
   if (routeMode) cfg.routeMode = routeMode;
+  const keepNames = parseStringArray(obj["keepNames"]);
+  if (keepNames) cfg.keepNames = keepNames;
+  const keepIds = parseStringArray(obj["keepIds"]);
+  if (keepIds) cfg.keepIds = keepIds;
   return cfg;
+}
+
+function parseStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item === "string" && item !== "") out.push(item);
+  }
+  return out;
 }
 
 export function parseRouteMode(value: unknown): RouteMode | null {

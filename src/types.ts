@@ -115,6 +115,20 @@ export interface State {
 export interface Config {
   unusedForDays: number;
   routeMode: RouteMode;
+  /**
+   * Extra skill names to protect from the "suggest disable" policy.
+   * Matches against `skill.name` for any source. Use this when you want to
+   * keep a skill by display name regardless of where it came from.
+   */
+  keepNames?: string[];
+  /**
+   * Extra skill ids to protect from the "suggest disable" policy.
+   * Matches against the canonical `skill.id` (e.g. `user:foo`, or
+   * `plugin:<plugin>@<marketplace>:<name>`). Prefer this over `keepNames`
+   * when you want to disambiguate between same-named skills from different
+   * sources.
+   */
+  keepIds?: string[];
 }
 
 export class BuiltinSkillCannotDisableError extends Error {
