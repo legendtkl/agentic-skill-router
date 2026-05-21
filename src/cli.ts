@@ -98,7 +98,7 @@ function displayHost(hostName: HostName): string {
 }
 
 function usage(code = 0): number {
-  console.log(`skill-router — manage installed Claude Code and Codex skills
+  console.log(`skill-router — manage installed Agent Skills across supported hosts
 
 USAGE
   skill-router [--host=claude-code|codex] skills list [--json]
