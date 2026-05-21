@@ -187,6 +187,15 @@ examples:
 ---
 ```
 
+## Troubleshooting
+
+See [`docs/troubleshooting.md`](docs/troubleshooting.md) for recovery
+procedures covering every anomaly section that `skill-router skills status`
+can print: split-brain conflicts, orphan disable markers, orphaned state
+records, malformed state files, plugin-upgrade reapply, and the safe order
+for uninstalling after disabling skills. Default to `skill-router skills
+enable <id>` rather than `rm` whenever a recovery path is available.
+
 ## Development
 
 Requires Node.js >= 20 (matches CI).

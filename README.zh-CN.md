@@ -160,6 +160,13 @@ examples:
 ---
 ```
 
+## 故障排查
+
+参见 [`docs/troubleshooting.md`](docs/troubleshooting.md)（暂为英文，中文版后续补齐），
+覆盖 `skill-router skills status` 可能打印的每一类异常段落的恢复流程：split-brain 冲突、
+孤立的禁用标记文件、孤立的 state 记录、损坏的 state 文件、插件升级后的 reapply 行为、
+以及禁用 skill 后再卸载的安全顺序。能用 `skill-router skills enable <id>` 解决就不要直接 `rm`。
+
 ## 开发
 
 需要 Node.js >= 20（与 CI 保持一致）。
