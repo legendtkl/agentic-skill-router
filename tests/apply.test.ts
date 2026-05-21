@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { disableSkill, enableSkill, enableSkillFromState, findOrphanMarkers, reapplyMissing } from "../src/apply.ts";
-import { addPendingOp, loadState, saveState } from "../src/state.ts";
+import { addPendingOp, loadState, recordRoutedSkill, saveState, skillInstanceKey, withStateLock } from "../src/state.ts";
 import type { PendingOp, Skill, State } from "../src/types.ts";
 
 async function setup(): Promise<{
@@ -282,12 +282,14 @@ test("status recovers a disable where rename completed but state save crashed", 
     await rename(skill.skillMdPath, disabledPath);
 
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
       disabledPath,
       startedAt: "2026-05-22T00:00:00.000Z",
       record: {
+        instanceKey: skillInstanceKey(skill.id, disabledPath),
         id: skill.id,
         pluginKey: skill.pluginKey,
         skillMdPath: disabledPath,
@@ -323,6 +325,7 @@ test("status rolls back a disable where rename never happened", async () => {
     // Intent written, but the rename never completed: live file still present,
     // no disabled marker, no disable record.
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, skill.skillMdPath + ".skill-router-disabled"),
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -353,6 +356,7 @@ test("status rolls back a disable pending op when both files are absent", async 
   try {
     await rm(skill.skillMdPath);
     const record = {
+      instanceKey: skillInstanceKey(skill.id, skill.skillMdPath + ".skill-router-disabled"),
       id: skill.id,
       pluginKey: skill.pluginKey,
       skillMdPath: skill.skillMdPath + ".skill-router-disabled",
@@ -362,6 +366,7 @@ test("status rolls back a disable pending op when both files are absent", async 
       reason: "manual",
     } as const;
     const pending: PendingOp = {
+      instanceKey: record.instanceKey,
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -408,6 +413,7 @@ test("status does NOT re-disable an enabled skill when the post-rename state sav
     const stateAfterCrash = await loadState(statePath);
     assert.equal(stateAfterCrash.disabledSkills.length, 1);
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       op: "enable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -439,6 +445,7 @@ test("status leaves an enable split-brain pending op alone for manual repair", a
 
     const stateAfterCrash = await loadState(statePath);
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       op: "enable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -471,6 +478,7 @@ test("status rolls back an enable where rename never happened (disable record st
     // still present, live file still absent, disable record still present.
     const stateAfterCrash = await loadState(statePath);
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       op: "enable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -498,12 +506,14 @@ test("status leaves a split-brain pending op alone for manual repair", async () 
     const disabledPath = skill.skillMdPath + ".skill-router-disabled";
     await writeFile(disabledPath, "stale\n");
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
       disabledPath,
       startedAt: "2026-05-22T00:00:00.000Z",
       record: {
+        instanceKey: skillInstanceKey(skill.id, disabledPath),
         id: skill.id,
         pluginKey: skill.pluginKey,
         skillMdPath: disabledPath,
@@ -576,6 +586,7 @@ test("status preserves a pre-existing disable record when disable rollback fires
       "prior disable record should still be in state",
     );
     const pending: PendingOp = {
+      instanceKey: stateBeforeAttempt.disabledSkills[0]!.instanceKey,
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -654,6 +665,93 @@ test("disableSkill refuses skills flagged outOfRoot and leaves SKILL.md alone", 
   }
 });
 
+async function setupTwoInstances(): Promise<{
+  workdir: string;
+  statePath: string;
+  skillA: Skill;
+  skillB: Skill;
+  cleanup: () => Promise<void>;
+}> {
+  const workdir = await mkdtemp(join(tmpdir(), "skill-router-apply-multi-"));
+  const skillADir = join(workdir, "skills-a/foo");
+  const skillBDir = join(workdir, "skills-b/foo");
+  await mkdir(skillADir, { recursive: true });
+  await mkdir(skillBDir, { recursive: true });
+  const aPath = join(skillADir, "SKILL.md");
+  const bPath = join(skillBDir, "SKILL.md");
+  await writeFile(aPath, "---\nname: foo\ndescription: a\n---\n");
+  await writeFile(bPath, "---\nname: foo\ndescription: b\n---\n");
+  const baseSkill = {
+    id: "user:foo",
+    name: "foo",
+    description: "x",
+    source: "user" as const,
+    pluginKey: null,
+    isDisabled: false,
+    isPluginDisabled: false,
+    canDisable: true,
+    conflict: false,
+  };
+  return {
+    workdir,
+    statePath: join(workdir, "state.json"),
+    skillA: { ...baseSkill, skillMdPath: aPath, description: "a" },
+    skillB: { ...baseSkill, skillMdPath: bPath, description: "b" },
+    cleanup: () => rm(workdir, { recursive: true, force: true }),
+  };
+}
+
+test("two skills sharing an id at different paths are tracked as separate instances", async () => {
+  const { skillA, skillB, statePath, cleanup } = await setupTwoInstances();
+  try {
+    // Disable only instance A.
+    await disableSkill(skillA, "manual", { statePath });
+
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 1);
+    assert.equal(state.disabledSkills[0]!.id, "user:foo");
+    assert.equal(state.disabledSkills[0]!.skillMdPath, skillA.skillMdPath + ".skill-router-disabled");
+    assert.equal(
+      state.disabledSkills[0]!.instanceKey,
+      skillInstanceKey(skillA.id, skillA.skillMdPath),
+    );
+
+    // Route usage to instance B; the records must coexist.
+    await withStateLock(statePath, async () => {
+      const s = await loadState(statePath);
+      await saveState(recordRoutedSkill(s, {
+        id: skillB.id,
+        pluginKey: null,
+        skillMdPath: skillB.skillMdPath,
+        name: skillB.name,
+        query: "use B",
+        confidence: "high",
+        routedAt: "2026-05-21T00:00:00.000Z",
+      }), statePath);
+    });
+
+    const after = await loadState(statePath);
+    assert.equal(after.disabledSkills.length, 1, "disabled A is still present");
+    assert.equal(after.routedSkills?.length, 1, "routed entry for B is recorded");
+    assert.equal(after.routedSkills?.[0]?.skillMdPath, skillB.skillMdPath);
+    assert.notEqual(
+      after.disabledSkills[0]!.instanceKey,
+      after.routedSkills?.[0]?.instanceKey,
+    );
+
+    // Enabling instance A by its own Skill restores A only and leaves B alone.
+    const disabledA = { ...skillA, isDisabled: true, skillMdPath: skillA.skillMdPath + ".skill-router-disabled" };
+    await enableSkill(disabledA, { statePath });
+
+    const final = await loadState(statePath);
+    assert.equal(final.disabledSkills.length, 0);
+    assert.equal(final.routedSkills?.length, 1, "B routed record survives enabling A");
+    assert.equal(final.routedSkills?.[0]?.skillMdPath, skillB.skillMdPath);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("disableSkill checks outOfRoot before canDisable so symlink-escape reports the specific error", async () => {
   // Regression guard: host-level listSkills() now marks out-of-root symlink
   // skills with canDisable=false, so if disableSkill checked canDisable first
@@ -678,6 +776,37 @@ test("disableSkill checks outOfRoot before canDisable so symlink-escape reports 
   }
 });
 
+test("enableSkillFromState refuses to silently pick one of multiple same-id instances", async () => {
+  const { skillA, skillB, statePath, cleanup } = await setupTwoInstances();
+  try {
+    await disableSkill(skillA, "manual", { statePath });
+    await disableSkill(skillB, "manual", { statePath });
+
+    // The ambiguity error must recommend the actual CLI form
+    // (`skills enable <instanceKey>`, positional) — not a non-existent
+    // `--instance-key=<key>` flag. The examples should be copy-pasteable.
+    await assert.rejects(
+      () => enableSkillFromState("user:foo", { statePath }),
+      (err: Error) => {
+        const msg = err.message;
+        assert.match(msg, /ambiguous skill id/i);
+        assert.match(msg, /skill-router skills enable /);
+        assert.doesNotMatch(msg, /--instance-key/);
+        const keyA = skillInstanceKey(skillA.id, skillA.skillMdPath);
+        const keyB = skillInstanceKey(skillB.id, skillB.skillMdPath);
+        assert.match(msg, new RegExp(`skill-router skills enable ${keyA}\\b`));
+        assert.match(msg, new RegExp(`skill-router skills enable ${keyB}\\b`));
+        return true;
+      },
+    );
+    // Both records still on disk.
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 2);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("enableSkill refuses skills flagged outOfRoot", async () => {
   const { skill, statePath, cleanup } = await setup();
   try {
@@ -685,6 +814,132 @@ test("enableSkill refuses skills flagged outOfRoot", async () => {
     await assert.rejects(
       () => enableSkill(outOfRoot, { statePath }),
       /resolves outside the skills root/i,
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test("enableSkillFromState resolves an explicit instanceKey unambiguously", async () => {
+  const { skillA, skillB, statePath, cleanup } = await setupTwoInstances();
+  try {
+    await disableSkill(skillA, "manual", { statePath });
+    await disableSkill(skillB, "manual", { statePath });
+    const keyA = skillInstanceKey(skillA.id, skillA.skillMdPath);
+
+    const result = await enableSkillFromState(keyA, { statePath });
+    assert.equal(result.alreadyEnabled, false);
+    assert.equal(await fileExists(skillA.skillMdPath), true);
+    assert.equal(await fileExists(skillB.skillMdPath + ".skill-router-disabled"), true);
+
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 1);
+    assert.equal(state.disabledSkills[0]!.skillMdPath, skillB.skillMdPath + ".skill-router-disabled");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("pending enable op for one same-id instance survives an enable on the other", async () => {
+  // Regression guard: pending journal entries used to be keyed by bare `id`,
+  // so two same-id instances would overwrite each other's in-flight intents.
+  // Concretely: A crash leaves a pending enable for instance A behind (rename
+  // never completed, so A still looks disabled on disk). The user then enables
+  // instance B successfully. With the old `id`-keyed journal, B's enable would
+  // remove A's pending entry, and a later `status` would have no record of
+  // A's intent. With instanceKey-keyed journals the two entries coexist, and
+  // `status` reconciles each one correctly.
+  const { skillA, skillB, statePath, cleanup } = await setupTwoInstances();
+  try {
+    await disableSkill(skillA, "manual", { statePath });
+    await disableSkill(skillB, "manual", { statePath });
+    const disabledA = skillA.skillMdPath + ".skill-router-disabled";
+    const disabledB = skillB.skillMdPath + ".skill-router-disabled";
+    const keyA = skillInstanceKey(skillA.id, skillA.skillMdPath);
+    const keyB = skillInstanceKey(skillB.id, skillB.skillMdPath);
+
+    // Manually inject a pending enable for A that did not complete its rename
+    // (live absent, disabled present). This is the exact crash shape that
+    // exposes the keying bug if the journal collapses by `id`.
+    const stateAfterDisables = await loadState(statePath);
+    const pendingForA: PendingOp = {
+      instanceKey: keyA,
+      op: "enable",
+      id: skillA.id,
+      livePath: skillA.skillMdPath,
+      disabledPath: disabledA,
+      startedAt: "2026-05-22T00:00:00.000Z",
+    };
+    await saveState(addPendingOp(stateAfterDisables, pendingForA), statePath);
+
+    // Now enable instance B. This drives the same journal API; if pending ops
+    // were keyed by `id`, B's enable would clobber A's pending entry.
+    const result = await enableSkillFromState(keyB, { statePath });
+    assert.equal(result.id, skillB.id);
+    assert.equal(result.instanceKey, keyB);
+    assert.equal(await fileExists(skillB.skillMdPath), true, "B is enabled on disk");
+    assert.equal(await fileExists(disabledB), false);
+    assert.equal(await fileExists(disabledA), true, "A's disabled marker is untouched");
+    assert.equal(await fileExists(skillA.skillMdPath), false);
+
+    // A's pending enable journal entry MUST still be present after B's enable.
+    const afterB = await loadState(statePath);
+    const pendingEntries = afterB.pendingOps ?? [];
+    assert.equal(
+      pendingEntries.length,
+      1,
+      "A's pending entry must not be removed when B is enabled",
+    );
+    assert.equal(pendingEntries[0]!.instanceKey, keyA);
+    assert.equal(pendingEntries[0]!.op, "enable");
+    // A's disable record must also still be present (B's commit only cleared
+    // its own record, identified by instanceKey).
+    const disabledRecords = afterB.disabledSkills;
+    assert.equal(disabledRecords.length, 1);
+    assert.equal(disabledRecords[0]!.instanceKey, keyA);
+
+    // Running status (reapplyMissing) now reconciles A: rename never happened,
+    // so the pending op rolls back and A's disable record stays valid.
+    const recon = await reapplyMissing({ statePath, skills: [skillA, skillB] });
+    assert.deepEqual(recon.recoveredRollbacks, [skillA.id]);
+    assert.deepEqual(recon.recoveredCommits, []);
+    const final = await loadState(statePath);
+    assert.equal(final.pendingOps?.length ?? 0, 0);
+    assert.equal(final.disabledSkills.length, 1, "A's disable record survives rollback");
+    assert.equal(final.disabledSkills[0]!.instanceKey, keyA);
+    assert.equal(await fileExists(disabledA), true);
+    assert.equal(await fileExists(skillB.skillMdPath), true);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("loadState synthesizes instanceKey for legacy pending ops missing the field", async () => {
+  // Migration safety: state files written before instanceKey was added to
+  // PendingOp should still reconcile cleanly. We hand-write a legacy entry
+  // (no instanceKey key) and verify the validator synthesizes one from
+  // (id, disabledPath) so subsequent journal operations key by it.
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    const legacy = {
+      schema: 1,
+      host: "claude-code",
+      disabledSkills: [],
+      pendingOps: [{
+        op: "disable",
+        id: skill.id,
+        livePath: skill.skillMdPath,
+        disabledPath,
+        startedAt: "2026-05-22T00:00:00.000Z",
+      }],
+    };
+    await writeFile(statePath, JSON.stringify(legacy));
+    const loaded = await loadState(statePath);
+    assert.equal(loaded.pendingOps?.length, 1);
+    assert.equal(
+      loaded.pendingOps?.[0]?.instanceKey,
+      skillInstanceKey(skill.id, disabledPath),
     );
   } finally {
     await cleanup();

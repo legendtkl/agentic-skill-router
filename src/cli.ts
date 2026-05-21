@@ -23,7 +23,7 @@ import {
 } from "./dci.ts";
 import { disableSkill, enableSkill, enableSkillFromState, findOrphanMarkers, reapplyMissing } from "./apply.ts";
 import { loadConfig, parseRouteMode, resolveUnusedForDays } from "./config.ts";
-import { loadState, recordRoutedSkill, saveState, statePathForHost, withStateLock } from "./state.ts";
+import { loadState, recordRoutedSkill, saveState, skillInstanceKey, statePathForHost, withStateLock } from "./state.ts";
 import type { Confidence, HostName, RouteMode, Skill, Suggestion, UsageStat } from "./types.ts";
 
 export async function run(argv: string[]): Promise<number> {
@@ -735,11 +735,15 @@ async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
     return 1;
   }
 
-  const results: Array<{ id: string; alreadyDisabled: boolean }> = [];
+  const results: Array<{ id: string; instanceKey: string; alreadyDisabled: boolean }> = [];
   for (const t of targets) {
     try {
       const r = await disableSkill(t, reason, { statePath, host: host.name });
-      results.push({ id: t.id, alreadyDisabled: r.alreadyDisabled });
+      results.push({
+        id: t.id,
+        instanceKey: skillInstanceKey(t.id, t.skillMdPath),
+        alreadyDisabled: r.alreadyDisabled,
+      });
     } catch (err: unknown) {
       console.error(`failed to disable ${t.id}: ${(err as Error).message}`);
       return 1;
@@ -769,24 +773,93 @@ async function cmdEnable(argv: string[], hostName: HostName): Promise<number> {
   }
   const host = createHost(hostName);
   const skills = await host.listSkills();
-  const byId = new Map(skills.map((s) => [s.id, s]));
   const statePath = statePathForHost(host.name);
+  const inventoryByInstanceKey = new Map<string, Skill>();
+  for (const s of skills) {
+    inventoryByInstanceKey.set(skillInstanceKey(s.id, s.skillMdPath), s);
+  }
 
-  const results: Array<{ id: string; alreadyEnabled: boolean }> = [];
-  for (const id of positionals) {
-    const s = byId.get(id);
+  const results: Array<{ id: string; instanceKey: string; alreadyEnabled: boolean }> = [];
+  for (const target of positionals) {
     try {
-      const r = s
-        ? await enableSkill(s, { statePath, host: host.name })
-        : await enableSkillFromState(id, { statePath, host: host.name });
-      results.push({ id, alreadyEnabled: r.alreadyEnabled });
+      // Resolution must consider BOTH inventory and the live state: a stale
+      // state record sharing the same id as a live inventory entry still
+      // makes a bare-id call ambiguous (the user may have meant the orphan).
+      // We re-read state per iteration so prior enables in the same command
+      // line don't trip stale-ambiguity errors.
+      const state = await loadState(statePath, host.name);
+      const candidatesByInstanceKey = new Map<string, { id: string; description: string }>();
+      const instanceKeysById = new Map<string, Set<string>>();
+      const addCandidate = (instanceKey: string, id: string, description: string): void => {
+        if (!candidatesByInstanceKey.has(instanceKey)) {
+          candidatesByInstanceKey.set(instanceKey, { id, description });
+        }
+        let bucket = instanceKeysById.get(id);
+        if (!bucket) {
+          bucket = new Set();
+          instanceKeysById.set(id, bucket);
+        }
+        bucket.add(instanceKey);
+      };
+      for (const [key, s] of inventoryByInstanceKey) addCandidate(key, s.id, s.skillMdPath);
+      for (const rec of state.disabledSkills) addCandidate(rec.instanceKey, rec.id, rec.skillMdPath);
+
+      // 1) Exact instanceKey match -> unambiguous by definition.
+      let resolvedKey: string | undefined;
+      if (candidatesByInstanceKey.has(target)) {
+        resolvedKey = target;
+      } else {
+        // 2) Bare id: collect every candidate (inventory + state) with this
+        //    id. Exactly one -> use it. Multiple -> ambiguous; do not silently
+        //    pick. Zero -> fall through to the state resolver which produces
+        //    the canonical "unknown skill id" error.
+        const keys = instanceKeysById.get(target);
+        if (keys && keys.size > 1) {
+          // `skills enable` takes the instanceKey as a positional argument; the
+          // suggestion lines must be a ready-to-paste invocation so the user
+          // doesn't have to guess CLI syntax (there is no --instance-key flag).
+          const lines = [...keys]
+            .map((k) => {
+              const c = candidatesByInstanceKey.get(k)!;
+              return `  skill-router skills enable ${k}  # ${c.description}`;
+            })
+            .join("\n");
+          console.error(
+            `ambiguous skill id "${target}" matches ${keys.size} instances; ` +
+            `re-run with one of:\n${lines}`,
+          );
+          return 2;
+        }
+        if (keys && keys.size === 1) resolvedKey = [...keys][0];
+      }
+
+      if (resolvedKey && inventoryByInstanceKey.has(resolvedKey)) {
+        // Inventory path: we have a live Skill to operate on.
+        const s = inventoryByInstanceKey.get(resolvedKey)!;
+        const r = await enableSkill(s, { statePath, host: host.name });
+        results.push({
+          id: s.id,
+          instanceKey: skillInstanceKey(s.id, s.skillMdPath),
+          alreadyEnabled: r.alreadyEnabled,
+        });
+        continue;
+      }
+
+      // 3) State-only path: either we resolved to a state-only instanceKey
+      //    (orphan record), or we have no inventory/state match at all and
+      //    want the state resolver to produce a clear "unknown skill id"
+      //    error. Pass the resolvedKey when known so enableSkillFromState
+      //    operates on the canonical identity rather than the raw target.
+      const lookup = resolvedKey ?? target;
+      const r = await enableSkillFromState(lookup, { statePath, host: host.name });
+      results.push({ id: r.id, instanceKey: r.instanceKey, alreadyEnabled: r.alreadyEnabled });
     } catch (err) {
       const message = (err as Error).message;
-      if (/unknown skill id/.test(message)) {
+      if (/unknown skill id/.test(message) || /ambiguous skill id/.test(message)) {
         console.error(message);
         return 2;
       }
-      console.error(`failed to enable ${id}: ${message}`);
+      console.error(`failed to enable ${target}: ${message}`);
       return 1;
     }
   }

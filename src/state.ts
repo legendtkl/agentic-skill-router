@@ -1,7 +1,8 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { DISABLED_SUFFIX } from "./scan.ts";
 import type { Confidence, DisableRecord, HostName, PendingOp, RoutedSkillRecord, SkillSource, State } from "./types.ts";
 
 export const STATE_DIR = process.env["SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".skill-router");
@@ -41,6 +42,29 @@ function isPlainObject(x: unknown): x is Record<string, unknown> {
   return x !== null && typeof x === "object" && !Array.isArray(x);
 }
 
+/**
+ * Strip the disabled marker suffix so the same on-disk skill yields the same
+ * key whether the file currently lives at `SKILL.md` or
+ * `SKILL.md.skill-router-disabled`. We deliberately do not call `realpath`:
+ * the underlying file may be temporarily absent (mid-disable, mid-enable, or
+ * after an upstream uninstall) and we still need a stable identifier.
+ */
+function canonicalizeSkillPath(skillMdPath: string): string {
+  return skillMdPath.endsWith(DISABLED_SUFFIX)
+    ? skillMdPath.slice(0, -DISABLED_SUFFIX.length)
+    : skillMdPath;
+}
+
+/**
+ * Stable, content-addressed identity for a `(id, skillMdPath)` pair. Used to
+ * distinguish two skills that share a logical `id` but live at different
+ * paths so we never collapse their disable/routed records.
+ */
+export function skillInstanceKey(id: string, skillMdPath: string): string {
+  const canonical = canonicalizeSkillPath(skillMdPath);
+  return createHash("sha256").update(`${id}\0${canonical}`).digest("hex").slice(0, 16);
+}
+
 function validateRecord(x: unknown): DisableRecord | null {
   if (!isPlainObject(x)) return null;
   if (typeof x["id"] !== "string" || x["id"] === "") return null;
@@ -50,7 +74,13 @@ function validateRecord(x: unknown): DisableRecord | null {
   if (x["pluginKey"] !== null && typeof x["pluginKey"] !== "string") return null;
   if (x["skillName"] !== undefined && typeof x["skillName"] !== "string") return null;
   if (x["source"] !== undefined && !isSkillSource(x["source"])) return null;
+  if (x["instanceKey"] !== undefined && typeof x["instanceKey"] !== "string") return null;
+  // Migration safety: always canonicalize identity from `(id, skillMdPath)`.
+  // This heals legacy/malformed keys on load and persists the corrected key on
+  // the next save.
+  const instanceKey = skillInstanceKey(x["id"], x["skillMdPath"]);
   return {
+    instanceKey,
     id: x["id"],
     skillMdPath: x["skillMdPath"],
     ...(typeof x["skillName"] === "string" ? { skillName: x["skillName"] } : {}),
@@ -69,11 +99,19 @@ function validatePendingOp(x: unknown): PendingOp | null {
   if (typeof x["livePath"] !== "string" || x["livePath"] === "") return null;
   if (typeof x["disabledPath"] !== "string" || x["disabledPath"] === "") return null;
   if (typeof x["startedAt"] !== "string") return null;
+  if (x["instanceKey"] !== undefined && typeof x["instanceKey"] !== "string") return null;
   const record = x["record"] === undefined ? undefined : validateRecord(x["record"]);
   if (x["record"] !== undefined && !record) return null;
   const priorRecord = x["priorRecord"] === undefined ? undefined : validateRecord(x["priorRecord"]);
   if (x["priorRecord"] !== undefined && !priorRecord) return null;
+  // Migration: legacy journal entries written before pending ops carried an
+  // instanceKey synthesize one from (id, disabledPath). The disabledPath is the
+  // canonical resting location for the SKILL.md the op targets, so this matches
+  // the instanceKey newly-written ops use, even for crashes that predated the
+  // field's addition.
+  const instanceKey = skillInstanceKey(x["id"], x["disabledPath"]);
   return {
+    instanceKey,
     op,
     id: x["id"],
     livePath: x["livePath"],
@@ -95,7 +133,10 @@ function validateRoutedRecord(x: unknown): RoutedSkillRecord | null {
   if (typeof x["lastRoutedAt"] !== "string") return null;
   if (typeof x["lastQuery"] !== "string") return null;
   if (!isConfidence(x["lastConfidence"])) return null;
+  if (x["instanceKey"] !== undefined && typeof x["instanceKey"] !== "string") return null;
+  const instanceKey = skillInstanceKey(x["id"], x["skillMdPath"]);
   return {
+    instanceKey,
     id: x["id"],
     pluginKey: x["pluginKey"] as string | null,
     skillMdPath: x["skillMdPath"],
@@ -415,30 +456,39 @@ function sleep(ms: number): Promise<void> {
 }
 
 export function addDisableRecord(state: State, record: DisableRecord): State {
-  const filtered = state.disabledSkills.filter((r) => r.id !== record.id);
+  // Identity is `instanceKey`: two skills with the same logical `id` but
+  // different on-disk locations must coexist as separate records.
+  const filtered = state.disabledSkills.filter((r) => r.instanceKey !== record.instanceKey);
   return { ...state, disabledSkills: [...filtered, record] };
 }
 
-export function removeDisableRecord(state: State, id: string): State {
-  return { ...state, disabledSkills: state.disabledSkills.filter((r) => r.id !== id) };
+export function removeDisableRecord(state: State, instanceKey: string): State {
+  return {
+    ...state,
+    disabledSkills: state.disabledSkills.filter((r) => r.instanceKey !== instanceKey),
+  };
 }
 
-export function findDisableRecord(state: State, id: string): DisableRecord | undefined {
-  return state.disabledSkills.find((r) => r.id === id);
+export function findDisableRecord(state: State, instanceKey: string): DisableRecord | undefined {
+  return state.disabledSkills.find((r) => r.instanceKey === instanceKey);
 }
 
 export function addPendingOp(state: State, op: PendingOp): State {
-  const filtered = (state.pendingOps ?? []).filter((p) => p.id !== op.id);
+  // Identity is `instanceKey`: two same-id instances at different paths must
+  // hold separate in-flight intents, otherwise a crash-then-retry on instance B
+  // could overwrite instance A's pending entry and let a later `status` undo
+  // A's intent.
+  const filtered = (state.pendingOps ?? []).filter((p) => p.instanceKey !== op.instanceKey);
   return { ...state, pendingOps: [...filtered, op] };
 }
 
-export function removePendingOp(state: State, id: string): State {
-  const remaining = (state.pendingOps ?? []).filter((p) => p.id !== id);
+export function removePendingOp(state: State, instanceKey: string): State {
+  const remaining = (state.pendingOps ?? []).filter((p) => p.instanceKey !== instanceKey);
   return { ...state, pendingOps: remaining };
 }
 
-export function findPendingOp(state: State, id: string): PendingOp | undefined {
-  return state.pendingOps?.find((p) => p.id === id);
+export function findPendingOp(state: State, instanceKey: string): PendingOp | undefined {
+  return state.pendingOps?.find((p) => p.instanceKey === instanceKey);
 }
 
 export function recordRoutedSkill(
@@ -453,8 +503,10 @@ export function recordRoutedSkill(
     routedAt: string;
   },
 ): State {
-  const existing = state.routedSkills?.find((r) => r.id === record.id);
+  const instanceKey = skillInstanceKey(record.id, record.skillMdPath);
+  const existing = state.routedSkills?.find((r) => r.instanceKey === instanceKey);
   const routed: RoutedSkillRecord = {
+    instanceKey,
     id: record.id,
     pluginKey: record.pluginKey,
     skillMdPath: record.skillMdPath,
@@ -465,7 +517,7 @@ export function recordRoutedSkill(
     lastQuery: record.query,
     lastConfidence: record.confidence,
   };
-  const rest = (state.routedSkills ?? []).filter((r) => r.id !== record.id);
+  const rest = (state.routedSkills ?? []).filter((r) => r.instanceKey !== instanceKey);
   rest.push(routed);
   rest.sort((a, b) => b.lastRoutedAt.localeCompare(a.lastRoutedAt));
   return { ...state, routedSkills: rest };

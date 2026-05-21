@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { CodexHost } from "../src/hosts/codex.ts";
+import { skillInstanceKey } from "../src/state.ts";
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -377,6 +378,214 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
 
     await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local"], { env });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI enable refuses to silently pick when two disabled instances share an id", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    // Disable the live codex-home instance first via the CLI so we exercise
+    // the real disable path and state writer.
+    const env = {
+      ...process.env,
+      SKILL_ROUTER_HOST: "codex",
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+    await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"],
+      { env },
+    );
+
+    // Forge a SECOND disabled record sharing the same id at a different path
+    // (the path-shifting upgrade scenario). The state-only resolver should
+    // refuse to pick when bare id is passed.
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const raw = JSON.parse(await readFile(statePath, "utf8")) as {
+      schema: number;
+      host: string;
+      disabledSkills: Array<{
+        instanceKey: string;
+        id: string;
+        pluginKey: string | null;
+        skillMdPath: string;
+        disabledAt: string;
+        reason: string;
+      }>;
+    };
+    assert.equal(raw.disabledSkills.length, 1);
+    const original = raw.disabledSkills[0]!;
+    const ghostPath = join(fake.codexHome, "skills", "unused-local-stale", "SKILL.md.skill-router-disabled");
+    raw.disabledSkills.push({
+      ...original,
+      instanceKey: skillInstanceKey("user:codex:unused-local", ghostPath),
+      skillMdPath: ghostPath,
+      disabledAt: original.disabledAt,
+    });
+    await writeFile(statePath, JSON.stringify(raw, null, 2) + "\n");
+
+    let err: unknown;
+    try {
+      await execFileAsync(
+        process.execPath,
+        ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local"],
+        { env },
+      );
+    } catch (e) {
+      err = e;
+    }
+    assert.ok(err, "expected ambiguous enable to fail");
+    const e = err as { code?: number; stderr?: string };
+    assert.equal(e.code, 2);
+    const stderr = e.stderr ?? "";
+    assert.match(stderr, /ambiguous skill id/i);
+    // The remediation hint MUST be the actual supported CLI syntax — a
+    // positional instanceKey, NOT a non-existent `--instance-key` flag.
+    assert.match(stderr, /skill-router skills enable /);
+    assert.doesNotMatch(stderr, /--instance-key/);
+
+    // Both records survive: nothing was renamed silently.
+    const after = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{ id: string }>;
+    };
+    assert.equal(after.disabledSkills.length, 2);
+    assert.equal(
+      await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled")),
+      true,
+    );
+    assert.equal(
+      await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")),
+      false,
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI enable by instanceKey resolves the correct disabled instance", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env = {
+      ...process.env,
+      SKILL_ROUTER_HOST: "codex",
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+    await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"],
+      { env },
+    );
+
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const raw = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{
+        instanceKey: string;
+        id: string;
+        pluginKey: string | null;
+        skillMdPath: string;
+        disabledAt: string;
+        reason: string;
+      }>;
+    };
+    const realKey = raw.disabledSkills[0]!.instanceKey;
+    const ghostPath = join(fake.codexHome, "skills", "unused-local-stale", "SKILL.md.skill-router-disabled");
+    // loadState re-derives instanceKey from `(id, skillMdPath)`, so the
+    // canonical ghost key is computed from the ghost path.
+    const ghostKey = skillInstanceKey("user:codex:unused-local", ghostPath);
+    raw.disabledSkills.push({
+      ...raw.disabledSkills[0]!,
+      instanceKey: ghostKey,
+      skillMdPath: ghostPath,
+    });
+    await writeFile(statePath, JSON.stringify(raw, null, 2) + "\n");
+
+    // Enable via the real instanceKey -> the live skill comes back, and the
+    // ghost record survives untouched.
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "enable", realKey, "--json"],
+      { env },
+    );
+    const result = JSON.parse(stdout) as Array<{ id: string; instanceKey: string; alreadyEnabled: boolean }>;
+    assert.equal(result.length, 1);
+    assert.equal(result[0]!.id, "user:codex:unused-local");
+    assert.equal(result[0]!.instanceKey, realKey);
+    assert.equal(result[0]!.alreadyEnabled, false);
+
+    assert.equal(
+      await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")),
+      true,
+    );
+    const after = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{ instanceKey: string }>;
+    };
+    assert.equal(after.disabledSkills.length, 1);
+    assert.equal(after.disabledSkills[0]!.instanceKey, ghostKey);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI enable JSON reports resolved id and instanceKey on state-only recovery", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env = {
+      ...process.env,
+      SKILL_ROUTER_HOST: "codex",
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+    await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"],
+      { env },
+    );
+
+    // Simulate "plugin uninstalled, state record left behind": delete both
+    // the disabled marker and the skill directory entirely so inventory has
+    // no match and cmdEnable must take the state-only recovery path.
+    await rm(join(fake.codexHome, "skills", "unused-local"), { recursive: true, force: true });
+
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const raw = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{ instanceKey: string; id: string }>;
+    };
+    const expectedInstanceKey = raw.disabledSkills[0]!.instanceKey;
+
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local", "--json"],
+      { env },
+    );
+    const result = JSON.parse(stdout) as Array<{ id: string; instanceKey: string; alreadyEnabled: boolean }>;
+    assert.equal(result.length, 1);
+    assert.equal(result[0]!.id, "user:codex:unused-local");
+    // The critical contract: instanceKey is the resolved record's key, NOT
+    // the raw `target` echoed back. With the old code this would have been
+    // the literal string "user:codex:unused-local".
+    assert.equal(result[0]!.instanceKey, expectedInstanceKey);
+    assert.notEqual(result[0]!.instanceKey, "user:codex:unused-local");
+
+    const after = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<unknown>;
+    };
+    assert.equal(after.disabledSkills.length, 0);
   } finally {
     await fake.cleanup();
   }
