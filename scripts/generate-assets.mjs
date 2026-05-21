@@ -2,6 +2,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { attachManagedMarker } from "./prompt-marker.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -9,10 +10,10 @@ const check = process.argv.includes("--check");
 
 await writeGeneratedFile(
   resolve(root, "plugins/codex/prompts/skill-router-skills.md"),
-  renderSlashPrompt({
+  attachManagedMarker(renderSlashPrompt({
     description: "Use the skill-router-skills skill with optional arguments.",
     argumentHint: "[route <query>|list|suggest|status|enable <id...>|disable <id...> --yes]",
-  }),
+  })),
 );
 
 async function writeGeneratedFile(path, content) {

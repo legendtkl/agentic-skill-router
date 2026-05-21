@@ -11,6 +11,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { isManagedUnchanged } from "./prompt-marker.mjs";
 
 const PLUGIN_NAME = "skill-router";
 const MARKETPLACE = "local";
@@ -74,6 +75,26 @@ async function disablePlugin() {
 }
 
 async function removeSlashCommand() {
+  let existing;
+  try {
+    existing = await readFile(promptPath, "utf8");
+  } catch (err) {
+    if (err && /** @type {NodeJS.ErrnoException} */(err).code === "ENOENT") {
+      log(`  /skill-router:skills prompt already absent`);
+      return;
+    }
+    throw err;
+  }
+
+  if (!isManagedUnchanged(existing)) {
+    process.stderr.write(
+      `! ${promptPath} has local edits; keeping your version.\n` +
+      `  Remove the file manually if you no longer need the /skill-router:skills slash command.\n`,
+    );
+    log(`  skipped /skill-router:skills prompt (user-modified)`);
+    return;
+  }
+
   await rm(promptPath, { force: true });
   log(`  removed /skill-router:skills prompt`);
 }
