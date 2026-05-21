@@ -226,9 +226,10 @@ test("CodexHost deduplicates cached plugin versions by plugin key", async () => 
       SKILL_ROUTER_CWD: root,
       CODEX_ADMIN_SKILLS_ROOT: join(root, "etc", "codex", "skills"),
       SKILL_ROUTER_STATE_DIR: stateDir,
+      SKILL_ROUTER_HOST: "codex",
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
-    const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "list", "--json"], { env });
+    const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "list", "--json"], { env });
     const listed = JSON.parse(list.stdout) as Array<{ id: string; description: string }>;
     const listedGmailSkills = listed.filter((s) => s.id === "plugin:gmail@openai-curated:gmail");
     assert.equal(listedGmailSkills.length, 1);
@@ -322,6 +323,41 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
   }
 });
 
+test("CLI rejects removed --host flag anywhere in the command", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    delete env.SKILL_ROUTER_HOST;
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    await assert.rejects(
+      execFileAsync(
+        process.execPath,
+        ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--host=codex"],
+        { env },
+      ),
+      (err: unknown) => {
+        const e = err as { code?: number; stderr?: string };
+        assert.equal(e.code, 2);
+        assert.match(e.stderr ?? "", /--host has been removed/);
+        assert.doesNotMatch(e.stderr ?? "", /SKILL_ROUTER_HOST=codex/);
+        return true;
+      },
+    );
+    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
+    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled")), false);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("CLI disable of specific ids requires --yes and does not rename", async () => {
   const fake = await makeFakeCodexUser();
   try {
@@ -332,6 +368,7 @@ test("CLI disable of specific ids requires --yes and does not rename", async () 
       SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
       SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      SKILL_ROUTER_HOST: "codex",
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
     const livePath = join(fake.codexHome, "skills", "unused-local", "SKILL.md");
@@ -339,7 +376,7 @@ test("CLI disable of specific ids requires --yes and does not rename", async () 
 
     let err: unknown;
     try {
-      await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local"], { env });
+      await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local"], { env });
     } catch (caught) {
       err = caught;
     }
@@ -364,13 +401,14 @@ test("CLI refuses to disable Codex admin skills", async () => {
       SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
       SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      SKILL_ROUTER_HOST: "codex",
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
     await assert.rejects(
       () => execFileAsync(
         process.execPath,
-        ["--import", "tsx", cli, "--host=codex", "skills", "disable", "builtin:codex-admin:admin-policy", "--yes"],
+        ["--import", "tsx", cli, "skills", "disable", "builtin:codex-admin:admin-policy", "--yes"],
         { env },
       ),
       (err: unknown) => {
@@ -411,10 +449,11 @@ test("CLI status scans Codex project and admin roots for orphan disabled markers
       SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
       SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      SKILL_ROUTER_HOST: "codex",
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "status", "--json"], { env });
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], { env });
     const parsedStatus = JSON.parse(status.stdout) as { orphanMarkers: string[] };
     assert.ok(
       parsedStatus.orphanMarkers.some((p) => p.endsWith("project/.agents/skills/orphan-project/SKILL.md.skill-router-disabled")),

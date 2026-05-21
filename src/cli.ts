@@ -1,4 +1,5 @@
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { ClaudeCodeHost } from "./hosts/claude-code.ts";
@@ -26,9 +27,15 @@ import { loadState, recordRoutedSkill, saveState, statePathForHost, withStateLoc
 import type { Confidence, HostName, RouteMode, Skill, Suggestion, UsageStat } from "./types.ts";
 
 export async function run(argv: string[]): Promise<number> {
-  const { hostName, args } = parseGlobalArgs(argv);
-  const [command, subcommand, ...rest] = args;
-  if (command === "__bad_host__") return usage(2);
+  const deprecatedHostFlag = findDeprecatedHostFlag(argv);
+  if (deprecatedHostFlag) {
+    console.error(`${deprecatedHostFlag} has been removed; use the installed host-specific plugin CLI instead.`);
+    return usage(2);
+  }
+  const [command, subcommand, ...rest] = argv;
+  if (command === undefined || command === "-h" || command === "--help") return usage();
+  const hostName = resolveHostName();
+  if (!hostName) return usage(2);
   if (command === "skills") {
     switch (subcommand) {
       case "list": return cmdList(rest, hostName);
@@ -48,36 +55,35 @@ export async function run(argv: string[]): Promise<number> {
         return usage(2);
     }
   }
-  return usage();
+  console.error(`unknown command: ${command}`);
+  return usage(2);
 }
 
-function parseGlobalArgs(argv: string[]): { hostName: HostName; args: string[] } {
-  let hostName = parseHostName(process.env["SKILL_ROUTER_HOST"]) ?? "claude-code";
-  const args: string[] = [];
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
-    if (arg === "--host") {
-      const next = argv[++i];
-      const parsed = parseHostName(next);
-      if (!parsed) {
-        console.error(`unknown host: ${next ?? ""}`);
-        return { hostName, args: ["__bad_host__"] };
-      }
-      hostName = parsed;
-      continue;
-    }
-    if (arg.startsWith("--host=")) {
-      const parsed = parseHostName(arg.slice("--host=".length));
-      if (!parsed) {
-        console.error(`unknown host: ${arg.slice("--host=".length)}`);
-        return { hostName, args: ["__bad_host__"] };
-      }
-      hostName = parsed;
-      continue;
-    }
-    args.push(arg);
+function findDeprecatedHostFlag(argv: string[]): string | null {
+  for (const arg of argv) {
+    if (arg === "--host") return "--host";
+    if (arg.startsWith("--host=")) return "--host";
   }
-  return { hostName, args };
+  return null;
+}
+
+function resolveHostName(): HostName | null {
+  const installedHost = detectInstalledHost();
+  if (installedHost) return installedHost;
+
+  const raw = process.env["SKILL_ROUTER_HOST"];
+  if (raw === undefined || raw === "") return "claude-code";
+  const hostName = parseHostName(raw);
+  if (!hostName) console.error(`unknown SKILL_ROUTER_HOST: ${raw}`);
+  return hostName;
+}
+
+function detectInstalledHost(): HostName | null {
+  const modulePath = fileURLToPath(import.meta.url);
+  const pluginRoot = dirname(dirname(modulePath));
+  if (existsSync(join(pluginRoot, ".codex-plugin", "plugin.json"))) return "codex";
+  if (existsSync(join(pluginRoot, ".claude-plugin", "plugin.json"))) return "claude-code";
+  return null;
 }
 
 function parseHostName(value: string | undefined): HostName | null {
@@ -101,24 +107,25 @@ function usage(code = 0): number {
   console.log(`skill-router — manage installed Agent Skills across supported hosts
 
 USAGE
-  skill-router [--host=claude-code|codex] skills list [--json]
-  skill-router [--host=claude-code|codex] skills suggest [--unused-for=<dur>] [--json]
-  skill-router [--host=claude-code|codex] skills route --query=<text> [--mode=auto|metadata|body|lexical|dci] [--json] [--top-k=N] [--no-record]
-  skill-router [--host=claude-code|codex] skills dci search --query=<text> [--query=<text>...] [--json] [--top-k=N]
-  skill-router [--host=claude-code|codex] skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
-  skill-router [--host=claude-code|codex] skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]
-  skill-router [--host=claude-code|codex] skills dci open <id-or-ref> [--line=N] [--window=N] [--json]
-  skill-router [--host=claude-code|codex] skills dci inspect <id-or-ref> [--json]
-  skill-router [--host=claude-code|codex] skills dci read <id-or-ref> [--json] [--max-chars=N]
-  skill-router [--host=claude-code|codex] skills dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
-  skill-router [--host=claude-code|codex] skills dci budget [--json]
-  skill-router [--host=claude-code|codex] skills body <search|grep|find|open|inspect|read|select|budget> ...  (alias for dci)
-  skill-router [--host=claude-code|codex] skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>]
-  skill-router [--host=claude-code|codex] skills enable <id...>
-  skill-router [--host=claude-code|codex] skills status [--json]
+  skill-router skills list [--json]
+  skill-router skills suggest [--unused-for=<dur>] [--json]
+  skill-router skills route --query=<text> [--mode=auto|metadata|body|lexical|dci] [--json] [--top-k=N] [--no-record]
+  skill-router skills dci search --query=<text> [--query=<text>...] [--json] [--top-k=N]
+  skill-router skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
+  skill-router skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]
+  skill-router skills dci open <id-or-ref> [--line=N] [--window=N] [--json]
+  skill-router skills dci inspect <id-or-ref> [--json]
+  skill-router skills dci read <id-or-ref> [--json] [--max-chars=N]
+  skill-router skills dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
+  skill-router skills dci budget [--json]
+  skill-router skills body <search|grep|find|open|inspect|read|select|budget> ...  (alias for dci)
+  skill-router skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>]
+  skill-router skills enable <id...>
+  skill-router skills status [--json]
 
 DURATION  bare integer = days. Suffixed: 30d / 2w / 3m / 1y
 CONFIG    ~/.skill-router/config.json   { "unusedForDays": 30, "routeMode": "auto" }
+HOST      installed plugin CLIs auto-detect their host; repo checkouts default to claude-code
 STATE     ~/.skill-router/state-<host>.json
 `);
   return code;

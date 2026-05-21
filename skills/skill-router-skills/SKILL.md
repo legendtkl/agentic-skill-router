@@ -22,16 +22,20 @@ next to this skill installation:
   append `bin/skill-router`.
 - Repository checkout: use `bin/skill-router`.
 
-Always invoke the CLI by absolute path. Pass `--host=<claude-code|codex>` when
-the target host is not already provided by `${SKILL_ROUTER_HOST}`. The default
-host is `claude-code`.
+Always invoke the CLI by absolute path. Installed plugin CLIs auto-detect their
+host from the plugin bundle. Repository checkout CLIs default to Claude Code.
+Define a helper for the resolved CLI path:
+
+```bash
+skill_router() { "<abs-path-to-skill-router>" "$@"; }
+```
 
 ## Manage skills
 
 For cleanup requests, run:
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills suggest --json
+skill_router skills suggest --json
 ```
 
 Show suggestions as a compact table with id, reason, confidence, and details.
@@ -40,8 +44,8 @@ specific ids or all current suggestions. The CLI requires `--yes` for every
 disable form; without it no skill files are renamed.
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills disable <id...> --yes
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills disable --all-suggested --yes
+skill_router skills disable <id...> --yes
+skill_router skills disable --all-suggested --yes
 ```
 
 Use `skills list --json` for a full inventory, `skills status --json` for
@@ -66,7 +70,7 @@ CLI, DSL, URL, or platform workflow.
 Run the route command before solving from general knowledge:
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills route --query "<current user request>" --json
+skill_router skills route --query "<current user request>" --json
 ```
 
 If the result has `action: "read-skill-file"` and a non-null `selected`, read
@@ -74,8 +78,8 @@ If the result has `action: "read-skill-file"` and a non-null `selected`, read
 then follow that disabled skill's instructions as if it were enabled.
 
 If route mode needs to be evaluated or debugged, use
-`--mode=metadata|body|lexical|dci|auto`. `dci` is a legacy alias for bounded
-body search and verification; it is not an autonomous research agent.
+`--mode=metadata|body|lexical|dci|auto`. `dci` is the compatibility command
+group for bounded body search and verification.
 
 If `auto` returns `action: "no-confident-match"`, use the bounded body tools in
 `references/disabled-routing.md`. Stop the router path if the evidence still

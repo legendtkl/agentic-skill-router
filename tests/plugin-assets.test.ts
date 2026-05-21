@@ -95,7 +95,7 @@ test("package bin wrapper resolves npm-style symlinks", async () => {
   }
 });
 
-test("built bin runs when bundle lives under a realpath-normalized temp directory", async () => {
+test("built bin auto-detects installed Codex plugin host from its bundle", async () => {
   await execFileAsync("npm", ["run", "build"], { cwd: REPO_ROOT, env: npmTestEnv(), maxBuffer: 1024 * 1024 });
 
   const root = await mkdtemp(join(tmpdir(), "skill-router-realpath-bin-"));
@@ -103,14 +103,20 @@ test("built bin runs when bundle lives under a realpath-normalized temp director
     const packageRoot = join(root, "pkg");
     const packageBin = join(packageRoot, "bin");
     const packageLib = join(packageRoot, "lib");
-    const codexHome = join(root, "codex-home");
-    const agentsHome = join(root, "agents-home");
+    const codexHome = join(root, ".codex");
+    const agentsHome = join(root, ".agents");
     const stateDir = join(root, "state");
     await mkdir(packageBin, { recursive: true });
     await mkdir(packageLib, { recursive: true });
-    await mkdir(codexHome, { recursive: true });
+    await mkdir(join(packageRoot, ".codex-plugin"), { recursive: true });
+    await mkdir(join(codexHome, "skills", "marker-priority"), { recursive: true });
     await mkdir(agentsHome, { recursive: true });
     await mkdir(stateDir, { recursive: true });
+    await writeFile(join(packageRoot, ".codex-plugin", "plugin.json"), "{}\n");
+    await writeFile(
+      join(codexHome, "skills", "marker-priority", "SKILL.md"),
+      "---\nname: marker-priority\ndescription: Codex marker priority probe\n---\n",
+    );
 
     await copyFile(
       join(REPO_ROOT, "bin", "skill-router"),
@@ -128,14 +134,16 @@ test("built bin runs when bundle lives under a realpath-normalized temp director
       {
         env: {
           ...process.env,
-          SKILL_ROUTER_HOST: "codex",
-          CODEX_HOME: codexHome,
-          AGENTS_HOME: agentsHome,
+          HOME: root,
+          CODEX_HOME: undefined,
+          AGENTS_HOME: undefined,
+          SKILL_ROUTER_HOST: "claude-code",
           SKILL_ROUTER_STATE_DIR: stateDir,
         },
       },
     );
-    assert.deepEqual(JSON.parse(stdout), []);
+    const listed = JSON.parse(stdout) as Array<{ id: string }>;
+    assert.deepEqual(listed.map((item) => item.id), ["user:codex:marker-priority"]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

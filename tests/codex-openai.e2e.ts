@@ -23,7 +23,7 @@ const GIT_TIMEOUT_MS = 60_000;
 const CODEX_AGENT_TIMEOUT_MS = 180_000;
 
 const CODEX_OPENAI_E2E_INSTALL_COMMANDS = [
-  "CODEX_HOME=<fresh-codex-home> npm run install:codex-plugin",
+  "HOME=<fresh-root> npm run install:codex-plugin",
   "git init <workdir>/openai-skills",
   `git -C <workdir>/openai-skills remote add origin ${OPENAI_SKILLS_REPO}`,
   `git -C <workdir>/openai-skills fetch --depth=1 origin ${OPENAI_SKILLS_REF}`,
@@ -172,10 +172,14 @@ test(
   "[skill-router-cli] Codex OpenAI skills e2e installs curated skills, disables a subset, and routes 20 queries",
   async () => {
     assert.ok(CODEX_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.includes(OPENAI_SKILLS_REPO)));
+    assert.ok(CODEX_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.startsWith("HOME=")));
     assert.equal(ROUTE_CASES.length, 20);
 
     const fresh = await makeFreshCodexEnvironment();
     try {
+      assert.equal(fresh.env.CODEX_HOME, undefined);
+      assert.equal(fresh.env.AGENTS_HOME, undefined);
+      assert.equal(fresh.env.SKILL_ROUTER_HOST, undefined);
       await installSkillRouterForCodex(fresh.env);
       const installedOpenAiSkillCount = await installOpenAiCuratedSkillsFromGithub(
         fresh.workdir,
@@ -360,15 +364,16 @@ async function makeFreshCodexEnvironment(): Promise<FreshCodexEnvironment> {
   await mkdir(join(projectCwd, ".git"), { recursive: true });
   await mkdir(stateDir, { recursive: true });
 
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: root,
-    SKILL_ROUTER_HOST: "codex",
-    CODEX_HOME: codexHome,
-    AGENTS_HOME: agentsHome,
     SKILL_ROUTER_STATE_DIR: stateDir,
     SKILL_ROUTER_CWD: projectCwd,
   };
+  delete env.CODEX_HOME;
+  delete env.AGENTS_HOME;
+  delete env.CLAUDE_HOME;
+  delete env.SKILL_ROUTER_HOST;
 
   return {
     root,
@@ -450,12 +455,12 @@ async function writeCodexAgentProbe(projectCwd: string): Promise<string> {
   const probePath = join(projectCwd, "codex-skill-router-agent-probe.mjs");
   const source = `import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 const expectedWorkflowSentinel = process.argv[2];
 if (!expectedWorkflowSentinel) throw new Error("workflow sentinel argument is required");
-const codexHome = process.env.CODEX_HOME;
-if (!codexHome) throw new Error("CODEX_HOME is required");
+const codexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
 
 const pluginRoot = join(codexHome, "plugins", "cache", "local", "skill-router");
 const versions = readdirSync(pluginRoot)
