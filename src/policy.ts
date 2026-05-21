@@ -2,22 +2,31 @@ import { lookupUsage, lookupUsageStrict } from "./usage.ts";
 import type { Skill, Suggestion, UsageStat } from "./types.ts";
 
 /**
- * Skills that should never be suggested for disabling, regardless of usage.
- * Either the user can't disable them (builtins), or they're meta-tools the
- * user is unlikely to want gone (like skill-router itself).
+ * The skill-router plugin's own routing skill. We never want to suggest the
+ * tool that powers this command for disabling — match it by the stable
+ * (pluginKey, name) tuple rather than by bare name so a user-authored skill
+ * with the same display name is NOT auto-kept.
  */
-export const ALWAYS_KEEP: ReadonlySet<string> = new Set([
-  "init",
-  "review",
-  "security-review",
-  "update-config",
-  "skill-router-skills",
-]);
+const SKILL_ROUTER_PLUGIN_KEY_PREFIX = "skill-router@";
+const SKILL_ROUTER_WORKFLOW_NAME = "skill-router-skills";
+
+function isSkillRouterOwnSkill(skill: Skill): boolean {
+  return (
+    skill.source === "plugin" &&
+    skill.pluginKey !== null &&
+    skill.pluginKey.startsWith(SKILL_ROUTER_PLUGIN_KEY_PREFIX) &&
+    skill.name === SKILL_ROUTER_WORKFLOW_NAME
+  );
+}
 
 export interface PolicyOptions {
   unusedForDays: number;
   /** Override the "now" reference for deterministic tests. */
   now?: Date;
+  /** Extra skill names to protect from disable suggestions. */
+  keepNames?: readonly string[] | undefined;
+  /** Extra skill ids to protect from disable suggestions. */
+  keepIds?: readonly string[] | undefined;
 }
 
 export function suggest(
@@ -27,6 +36,8 @@ export function suggest(
 ): Suggestion[] {
   const now = opts.now ?? new Date();
   const cutoff = new Date(now.getTime() - opts.unusedForDays * 24 * 60 * 60 * 1000);
+  const keepNames = new Set(opts.keepNames ?? []);
+  const keepIds = new Set(opts.keepIds ?? []);
   const out: Suggestion[] = [];
 
   for (const skill of skills) {
@@ -34,7 +45,12 @@ export function suggest(
     if (skill.isDisabled) continue;           // already disabled
     if (skill.isPluginDisabled) continue;     // whole plugin off, no point per-skill
     if (skill.conflict) continue;             // split-brain — resolve first
-    if (ALWAYS_KEEP.has(skill.name)) continue;
+    // Protect skill-router's own routing skill (only the plugin instance, not
+    // user-authored skills that happen to share the name).
+    if (isSkillRouterOwnSkill(skill)) continue;
+    // Config-driven allowlists.
+    if (keepIds.has(skill.id)) continue;
+    if (keepNames.has(skill.name)) continue;
 
     // Strict lookup: don't fall through to a sibling's bare-name usage when
     // multiple skills share the same name (would mask a true never-used).

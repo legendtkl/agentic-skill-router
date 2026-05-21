@@ -68,6 +68,40 @@ test("loadConfig honours routeMode", async () => {
   }
 });
 
+test("loadConfig honours keepNames and keepIds", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "skill-router-config-"));
+  const path = join(dir, "config.json");
+  try {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(
+      path,
+      JSON.stringify({ keepNames: ["foo", "bar"], keepIds: ["user:baz"] }),
+    );
+    const cfg = await loadConfig(path);
+    assert.deepEqual(cfg.keepNames, ["foo", "bar"]);
+    assert.deepEqual(cfg.keepIds, ["user:baz"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("loadConfig ignores non-string entries in keepNames / keepIds", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "skill-router-config-"));
+  const path = join(dir, "config.json");
+  try {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(
+      path,
+      JSON.stringify({ keepNames: ["foo", 123, "", null], keepIds: "not-an-array" }),
+    );
+    const cfg = await loadConfig(path);
+    assert.deepEqual(cfg.keepNames, ["foo"]);
+    assert.equal(cfg.keepIds, undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("parseRouteMode accepts only supported modes", () => {
   assert.equal(parseRouteMode("lexical"), "lexical");
   assert.equal(parseRouteMode("metadata"), "metadata");

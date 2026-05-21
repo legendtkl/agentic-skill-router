@@ -51,16 +51,76 @@ test("stale skill (older than threshold) returns medium-confidence suggestion", 
   assert.match(out[0]!.details, /\d+ days ago/);
 });
 
-test("ALWAYS_KEEP allowlist excludes init / review / etc", () => {
+test("user skill named like a Claude builtin (e.g. 'review') is still suggestable", () => {
+  // Critical regression guard: previously, a user-authored skill that happened
+  // to share a name with a Claude Code builtin (init/review/security-review/
+  // update-config) was silently auto-kept. Now only `source === 'builtin'`
+  // skills get that protection, so a user can disable their own stale
+  // `review` skill normally.
   const skills = [
     mkSkill({ name: "init" }),
     mkSkill({ name: "review" }),
     mkSkill({ name: "security-review" }),
     mkSkill({ name: "update-config" }),
-    mkSkill({ name: "skill-router-skills" }),
   ];
   const out = suggest(skills, new Map(), { unusedForDays: 30, now: NOW });
+  assert.equal(out.length, 4);
+  for (const s of out) assert.equal(s.reason, "never-used");
+});
+
+test("builtin skill named 'review' is kept (canDisable=false short-circuits)", () => {
+  const s = mkSkill({ name: "review", source: "builtin", canDisable: false });
+  const out = suggest([s], new Map(), { unusedForDays: 30, now: NOW });
   assert.equal(out.length, 0);
+});
+
+test("skill-router's own plugin skill is kept", () => {
+  const s = mkSkill({
+    name: "skill-router-skills",
+    id: "plugin:skill-router@local:skill-router-skills",
+    source: "plugin",
+    pluginKey: "skill-router@local",
+  });
+  const out = suggest([s], new Map(), { unusedForDays: 30, now: NOW });
+  assert.equal(out.length, 0);
+});
+
+test("user skill named 'skill-router-skills' is NOT auto-kept (only plugin instance is)", () => {
+  // Same-name false-positive guard: only the plugin-owned skill-router-skills
+  // gets protected; a user-authored one with the same name remains suggestable.
+  const s = mkSkill({ name: "skill-router-skills" });
+  const out = suggest([s], new Map(), { unusedForDays: 30, now: NOW });
+  assert.equal(out.length, 1);
+  assert.equal(out[0]!.reason, "never-used");
+});
+
+test("config keepNames protects matching skills", () => {
+  const skills = [
+    mkSkill({ name: "review" }),
+    mkSkill({ name: "foo" }),
+  ];
+  const out = suggest(skills, new Map(), {
+    unusedForDays: 30,
+    now: NOW,
+    keepNames: ["review"],
+  });
+  assert.equal(out.length, 1);
+  assert.equal(out[0]!.skill.name, "foo");
+});
+
+test("config keepIds protects matching skills", () => {
+  const skills = [
+    mkSkill({ name: "review", id: "user:review" }),
+    mkSkill({ name: "review", id: "plugin:p@m:review", source: "plugin", pluginKey: "p@m" }),
+  ];
+  const out = suggest(skills, new Map(), {
+    unusedForDays: 30,
+    now: NOW,
+    keepIds: ["plugin:p@m:review"],
+  });
+  // Only the user one should be suggested; plugin one is kept by id match.
+  assert.equal(out.length, 1);
+  assert.equal(out[0]!.skill.id, "user:review");
 });
 
 test("builtins (canDisable=false) are excluded", () => {
