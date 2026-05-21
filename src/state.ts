@@ -18,6 +18,8 @@ interface ParsedLockMetadata {
 
 interface StateLockInfo {
   isDirectory: boolean;
+  dev: number;
+  ino: number;
   mtimeMs: number;
   metadata: ParsedLockMetadata | null;
 }
@@ -204,6 +206,10 @@ export async function withStateLock<T>(
 }
 
 async function tryAcquireStateLock(lockPath: string, statePath: string): Promise<string | null> {
+  return tryAcquireLockDirectory(lockPath, stateHostFromPath(statePath));
+}
+
+async function tryAcquireLockDirectory(lockPath: string, host: string): Promise<string | null> {
   const token = randomUUID();
   try {
     await mkdir(lockPath, { mode: 0o700 });
@@ -218,7 +224,7 @@ async function tryAcquireStateLock(lockPath: string, statePath: string): Promise
       JSON.stringify({
         pid: process.pid,
         createdAt: new Date().toISOString(),
-        host: stateHostFromPath(statePath),
+        host,
         token,
       }, null, 2) + "\n",
       { mode: 0o600 },
@@ -234,11 +240,47 @@ async function recoverStaleStateLock(lockPath: string, staleMs: number): Promise
   const info = await readStateLockInfo(lockPath);
   if (!info || !isRecoverableStaleLock(info, staleMs)) return;
 
-  // Re-check immediately before removal so a concurrently-recovered fresh lock
-  // is not deleted based on an older observation.
+  const recoveryLockPath = `${lockPath}.recovering`;
+  const recoveryToken = await tryAcquireRecoveryLock(recoveryLockPath, staleMs);
+  if (!recoveryToken) return;
+  try {
+    const latest = await readStateLockInfo(lockPath);
+    if (!latest || !isSameLockDirectory(info, latest) || !isRecoverableStaleLock(latest, staleMs)) return;
+
+    await renameAndRemoveLockDirectory(lockPath);
+  } finally {
+    await releaseStateLock(recoveryLockPath, recoveryToken);
+  }
+}
+
+async function tryAcquireRecoveryLock(lockPath: string, staleMs: number): Promise<string | null> {
+  let token = await tryAcquireLockDirectory(lockPath, "state-lock-recovery");
+  if (token) return token;
+
+  await recoverStaleRecoveryLock(lockPath, staleMs);
+  token = await tryAcquireLockDirectory(lockPath, "state-lock-recovery");
+  return token;
+}
+
+async function recoverStaleRecoveryLock(lockPath: string, staleMs: number): Promise<void> {
+  const info = await readStateLockInfo(lockPath);
+  if (!info || !isRecoverableStaleLock(info, staleMs)) return;
+
   const latest = await readStateLockInfo(lockPath);
-  if (!latest || !isRecoverableStaleLock(latest, staleMs)) return;
-  await rm(lockPath, { recursive: true, force: true });
+  if (!latest || !isSameLockDirectory(info, latest) || !isRecoverableStaleLock(latest, staleMs)) return;
+
+  await renameAndRemoveLockDirectory(lockPath);
+}
+
+async function renameAndRemoveLockDirectory(lockPath: string): Promise<void> {
+  const reapPath = `${lockPath}.reaped.${process.pid}.${Date.now()}.${randomUUID()}`;
+  try {
+    await rename(lockPath, reapPath);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw err;
+  }
+  await rm(reapPath, { recursive: true, force: true });
 }
 
 async function releaseStateLock(lockPath: string, token: string | null): Promise<void> {
@@ -258,6 +300,8 @@ async function readStateLockInfo(lockPath: string): Promise<StateLockInfo | null
   }
   return {
     isDirectory: s.isDirectory(),
+    dev: s.dev,
+    ino: s.ino,
     mtimeMs: s.mtimeMs,
     metadata: s.isDirectory() ? await readStateLockMetadata(lockPath) : null,
   };
@@ -297,6 +341,20 @@ function isRecoverableStaleLock(info: StateLockInfo, staleMs: number): boolean {
 
   const createdAtMs = info.metadata?.createdAtMs ?? info.mtimeMs;
   return Date.now() - createdAtMs > staleMs;
+}
+
+function isSameLockDirectory(a: StateLockInfo, b: StateLockInfo): boolean {
+  if (!a.isDirectory || !b.isDirectory) return false;
+
+  const aToken = a.metadata?.token ?? null;
+  const bToken = b.metadata?.token ?? null;
+  if (aToken !== null || bToken !== null) return aToken !== null && aToken === bToken;
+
+  return hasReliableInode(a) && hasReliableInode(b) && a.dev === b.dev && a.ino === b.ino;
+}
+
+function hasReliableInode(info: StateLockInfo): boolean {
+  return Number.isFinite(info.dev) && Number.isFinite(info.ino) && info.ino !== 0;
 }
 
 function pidIsRunning(pid: number): boolean {

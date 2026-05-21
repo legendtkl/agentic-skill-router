@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   loadState,
   saveState,
@@ -175,6 +175,68 @@ test("withStateLock recovers lock metadata from a dead owner process", async () 
 
     assert.equal(ran, true);
     await assert.rejects(() => stat(lockPath), /ENOENT/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("withStateLock recovers an orphaned stale-recovery lock", async () => {
+  const { path, cleanup } = await tempPath();
+  try {
+    const lockPath = `${path}.lock`;
+    const recoveryLockPath = `${lockPath}.recovering`;
+    await mkdir(lockPath);
+    await writeFile(join(lockPath, "owner.json"), JSON.stringify({
+      pid: 99_999_999,
+      createdAt: new Date().toISOString(),
+      host: "codex",
+      token: "dead-owner",
+    }) + "\n");
+    await mkdir(recoveryLockPath);
+    await writeFile(join(recoveryLockPath, "owner.json"), JSON.stringify({
+      pid: 99_999_999,
+      createdAt: new Date().toISOString(),
+      host: "state-lock-recovery",
+      token: "dead-recovery",
+    }) + "\n");
+
+    let ran = false;
+    await withStateLock(path, async () => {
+      ran = true;
+    }, { timeoutMs: 500, staleMs: 60_000 });
+
+    assert.equal(ran, true);
+    await assert.rejects(() => stat(lockPath), /ENOENT/);
+    await assert.rejects(() => stat(recoveryLockPath), /ENOENT/);
+    const files = await readdir(dirname(path));
+    assert.equal(files.some((file) => file.includes(".reaped.")), false);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("withStateLock preserves stale locks while another recovery owner is live", async () => {
+  const { path, cleanup } = await tempPath();
+  try {
+    const lockPath = `${path}.lock`;
+    const recoveryLockPath = `${lockPath}.recovering`;
+    await mkdir(lockPath);
+    const old = new Date(Date.now() - 60_000);
+    await utimes(lockPath, old, old);
+    await mkdir(recoveryLockPath);
+    await writeFile(join(recoveryLockPath, "owner.json"), JSON.stringify({
+      pid: process.pid,
+      createdAt: new Date().toISOString(),
+      host: "state-lock-recovery",
+      token: "live-recovery",
+    }) + "\n");
+
+    await assert.rejects(
+      () => withStateLock(path, async () => {}, { timeoutMs: 100, staleMs: 1 }),
+      /timed out waiting for state lock/,
+    );
+    await stat(lockPath);
+    await stat(recoveryLockPath);
   } finally {
     await cleanup();
   }
