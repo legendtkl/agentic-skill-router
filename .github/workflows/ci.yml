@@ -4,6 +4,15 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    # Nightly at 07:13 UTC for the networked e2e layer.
+    - cron: "13 7 * * *"
+  workflow_dispatch:
+    inputs:
+      run_agent_e2e:
+        description: "Run the agent e2e layer (needs local codex/claude binaries + auth; usually a no-op on hosted runners)"
+        required: false
+        default: "false"
 
 jobs:
   test:
@@ -20,3 +29,38 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run check:pack
+      - name: e2e (offline)
+        run: npm run test:e2e:offline
+
+  e2e-network:
+    # Nightly schedule + manual dispatch only. Allowed to fetch external git repos.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: e2e (network)
+        run: npm run test:e2e:network
+
+  e2e-agent:
+    # Manual dispatch only. Needs a local codex/claude binary and auth on the
+    # runner; hosted GitHub-managed runners typically do not satisfy this and
+    # the underlying test will skip itself. The job exists so that
+    # self-hosted runners with the right binaries can opt in.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_agent_e2e == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: e2e (agent)
+        run: npm run test:e2e:agent

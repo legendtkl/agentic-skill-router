@@ -256,8 +256,18 @@ npm run check:pack
 `bin/skill-router --help` exits cleanly and `npm pack --dry-run` includes the
 required `bin/`, `lib/`, `skills/`, plugin manifests, and Codex prompt entries.
 
-Networked end-to-end suites (`npm run test:e2e`, `npm run test:e2e:codex`,
-`npm run test:e2e:claude`) are not part of CI; run them locally when relevant.
+The e2e suite is layered by external dependency so CI default does not
+need network or local agent auth:
+
+| Layer | Script | Needs | Default CI |
+| --- | --- | --- | --- |
+| Offline | `npm run test:e2e:offline` | nothing beyond `node` / `npm` and the bundled CLI (no network, no auth) | every PR and push to `main` |
+| Network | `npm run test:e2e:network` (alias: `npm run test:e2e`) | network to clone the pinned `openai/skills` GitHub ref | nightly schedule + manual `workflow_dispatch` |
+| Agent | `npm run test:e2e:agent` (or single-host `npm run test:e2e:codex` / `npm run test:e2e:claude`) | local `codex` / `claude` CLI plus their auth files | manual `workflow_dispatch` only (self-skips when binaries are missing) |
+
+Run higher layers locally when changes touch host install, plugin loading,
+slash prompts, or the agent-facing workflow. The agent layer self-skips
+when the matching binary or auth file is not available.
 
 To compare routing thresholds before and after a change, run the evaluation
 harness:

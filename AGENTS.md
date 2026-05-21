@@ -28,9 +28,12 @@ Subagent management is intentionally out of scope in this repository.
 | Run CLI from source | `npm run cli -- skills list` |
 | Type check | `npm run typecheck` |
 | Test | `npm test` |
-| E2E | `npm run test:e2e` |
-| Codex CLI e2e | `npm run test:e2e:codex` |
-| Claude CLI e2e | `npm run test:e2e:claude` |
+| E2E (offline, no network) | `npm run test:e2e:offline` |
+| E2E (network, fetches openai/skills) | `npm run test:e2e:network` |
+| E2E (agent, needs local codex/claude CLI) | `npm run test:e2e:agent` |
+| E2E (alias of `test:e2e:network`, kept for back-compat) | `npm run test:e2e` |
+| Codex CLI e2e (single host) | `npm run test:e2e:codex` |
+| Claude CLI e2e (single host) | `npm run test:e2e:claude` |
 | Build bundles | `npm run build` |
 | Pack smoke check | `npm run check:pack` |
 | Install Claude plugin | `npm run install:plugin` |
@@ -44,6 +47,19 @@ env -u HTTP_PROXY -u HTTPS_PROXY npm test
 
 ## Verification
 
+The e2e suite is layered into three tiers by external dependency. Pick the
+narrowest tier that still covers what your change touched.
+
+| Layer | Script | External deps | Default CI |
+| --- | --- | --- | --- |
+| Offline | `npm run test:e2e:offline` | none (temp HOME, local plugin install) | PR + push to main |
+| Network | `npm run test:e2e:network` | clones pinned `openai/skills` from GitHub | nightly schedule + `workflow_dispatch` |
+| Agent | `npm run test:e2e:agent` | local `codex` / `claude` CLI + auth, GitHub access | manual `workflow_dispatch` only |
+
+`npm run test:e2e` is kept as a back-compat alias for the network layer.
+`npm run test:e2e:codex` and `npm run test:e2e:claude` are single-host slices
+of the agent layer.
+
 Before finishing executable changes, run:
 
 ```bash
@@ -52,17 +68,26 @@ npm test
 npm run build
 ```
 
+If a change touches host discovery, plugin install, route selection,
+disabled-skill behavior, the CLI surface, or any code path the offline e2e
+exercises, also run:
+
+```bash
+npm run test:e2e:offline
+```
+
 For executable changes that touch host discovery, plugin install, route
 selection, or disabled-skill behavior, also run the networked OpenAI skills
 e2e for the installed `skill-router` CLI path inside an isolated temporary
 home:
 
 ```bash
-npm run test:e2e
+npm run test:e2e:network
 ```
 
 That command covers both the Codex and Claude Code host install paths and
-does not require a local Codex or Claude CLI.
+does not require a local Codex or Claude CLI, but does fetch the pinned
+`openai/skills` GitHub ref.
 
 If a change touches Codex CLI startup, slash prompts, plugin loading, or the
 agent-facing `skill-router-skills` workflow, also run the real Codex CLI e2e
@@ -91,8 +116,26 @@ changed.
 
 Documentation-only changes may skip the test suite.
 
-## OpenAI Skills E2E
+## E2E Layers
 
+The e2e suite is split into three layers so CI can run a narrow default on
+every PR without touching the network or requiring local agent binaries.
+
+### Layer 1 — Offline (`npm run test:e2e:offline`)
+
+- File: `tests/cli-offline.e2e.ts`.
+- Creates a fresh temporary `HOME`, installs the local Codex plugin into it,
+  drops a single fixture skill into the Codex skills dir, disables it via
+  the installed `skill-router` binary, and asserts that
+  `skills route --query ... --json` selects the fixture back.
+- Must never touch the network and must not require any auth or external
+  binary beyond `node`, `npm`, and the bundled CLI.
+- Runs on every PR and every push to `main` in CI.
+
+### Layer 2 — Network (`npm run test:e2e:network`, alias: `npm run test:e2e`)
+
+- Files: the `[skill-router-cli]` subtest of `tests/codex-openai.e2e.ts` and
+  `tests/claude-openai.e2e.ts`.
 - Keep `tests/codex-openai.e2e.ts` as the real Codex install and routing
   guard for changes that touch Codex host discovery, Codex plugin install,
   disable/enable state, route selection, or disabled-skill DCI behavior.
@@ -100,16 +143,29 @@ Documentation-only changes may skip the test suite.
   Code host. It mirrors the Codex case but installs the Claude Code plugin
   under a fresh `HOME` and routes against `user:<skill>` ids instead of
   `user:codex:<skill>`.
-- Keep `npm run test:e2e` as the default e2e command for installed
-  `skill-router` behavior in a fresh temporary `HOME`. It must not require a
-  local Codex CLI, Claude CLI, Codex auth, `CODEX_HOME`, `AGENTS_HOME`,
-  `CLAUDE_HOME`, or `SKILL_ROUTER_HOST`; the installed plugin CLI must
-  auto-detect its host from the plugin bundle. It runs the
-  `[skill-router-cli]` test in both the Codex and Claude Code e2e files.
+- Allowed to fetch external git repositories (currently the pinned
+  `openai/skills` ref). Must not require a local Codex CLI, Claude CLI,
+  Codex auth, `CODEX_HOME`, `AGENTS_HOME`, `CLAUDE_HOME`, or
+  `SKILL_ROUTER_HOST`; the installed plugin CLI must auto-detect its host
+  from the plugin bundle.
+- Runs on the nightly schedule and via manual `workflow_dispatch` in CI.
+
+### Layer 3 — Agent (`npm run test:e2e:agent`)
+
+- Files: the `[codex-cli]` and `[claude-cli]` subtests of the same two
+  OpenAI e2e files. `npm run test:e2e:codex` and `npm run test:e2e:claude`
+  remain available as single-host slices.
 - Keep `npm run test:e2e:codex` as the explicit real `codex exec` e2e for
   machines that have a local Codex CLI and auth.
 - Keep `npm run test:e2e:claude` as the explicit real `claude` CLI e2e for
   machines that have a local `claude` binary.
+- These tests self-skip when the local agent binary or auth is missing, so
+  they are safe to run on any developer machine.
+- CI runs this layer only via manual `workflow_dispatch` (and typically only
+  meaningfully on self-hosted runners that provide the binaries).
+
+### Shared invariants for the OpenAI e2e files (layers 2 and 3)
+
 - Each case must create a fresh temporary home, install the local
   skill-router plugin for the corresponding host under that home, install all
   curated skills from the pinned official `openai/skills` repository, disable
@@ -135,8 +191,10 @@ Documentation-only changes may skip the test suite.
 - The GitHub install commands are intentionally fixed in both tests. If the
   official skill corpus changes, update the pinned repository ref, install
   command list, expected skill ids, route queries, and this guide together.
-- The default e2e is networked and opt-in. Run `npm run test:e2e` when changing
-  the paths above; regular `npm test` must not run networked e2e files.
+- The network layer is opt-in for local development but runs nightly in CI.
+  Run `npm run test:e2e:network` when changing the paths above; regular
+  `npm test` must not run networked e2e files, and the offline layer
+  (`tests/cli-offline.e2e.ts`) must never reach the network.
 
 ## Coding Notes
 

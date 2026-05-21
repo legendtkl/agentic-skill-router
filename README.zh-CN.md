@@ -223,8 +223,16 @@ npm run check:pack
 `npm pack --dry-run` 文件列表，确认 `bin/`、`lib/`、`skills/`、两个插件
 manifest 以及 Codex 的 prompt 文件都被包含。
 
-需要联网的端到端套件（`npm run test:e2e`、`npm run test:e2e:codex`、
-`npm run test:e2e:claude`）不会在 CI 中运行；需要时在本地手动执行。
+端到端测试按外部依赖分为三层，便于 CI 默认只跑不依赖网络/agent 的部分：
+
+| 层级 | 脚本 | 依赖 | CI 默认 |
+| --- | --- | --- | --- |
+| Offline | `npm run test:e2e:offline` | 仅需要 `node` / `npm` 和打包后的 CLI，不联网、不需要任何鉴权 | 每个 PR 与推 `main` |
+| Network | `npm run test:e2e:network`（别名：`npm run test:e2e`） | 需要联网拉取固定 ref 的 `openai/skills` 仓库 | Nightly 定时任务 + 手动 `workflow_dispatch` |
+| Agent | `npm run test:e2e:agent`（或单 host 的 `npm run test:e2e:codex` / `npm run test:e2e:claude`） | 需要本地存在 `codex` / `claude` CLI 及其鉴权文件 | 仅手动 `workflow_dispatch`（缺少二进制时测试会自动跳过） |
+
+涉及 host 安装、插件加载、slash prompt 或面向 agent 的工作流时，请在本地
+跑相应的更高层。Agent 层在缺少二进制或鉴权文件时会自动跳过。
 
 目录结构：
 
