@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -131,6 +131,72 @@ test("withStateLock serializes concurrent read-modify-write mutations", async ()
 
     const state = await loadState(path, "codex");
     assert.equal(state.routedSkills?.[0]?.routeCount, 2);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("withStateLock recovers expired legacy lock directories", async () => {
+  const { path, cleanup } = await tempPath();
+  try {
+    const lockPath = `${path}.lock`;
+    await mkdir(lockPath);
+    const old = new Date(Date.now() - 60_000);
+    await utimes(lockPath, old, old);
+
+    let ran = false;
+    await withStateLock(path, async () => {
+      ran = true;
+    }, { timeoutMs: 500, staleMs: 1 });
+
+    assert.equal(ran, true);
+    await assert.rejects(() => stat(lockPath), /ENOENT/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("withStateLock recovers lock metadata from a dead owner process", async () => {
+  const { path, cleanup } = await tempPath();
+  try {
+    const lockPath = `${path}.lock`;
+    await mkdir(lockPath);
+    await writeFile(join(lockPath, "owner.json"), JSON.stringify({
+      pid: 99_999_999,
+      createdAt: new Date().toISOString(),
+      host: "codex",
+      token: "dead-owner",
+    }) + "\n");
+
+    let ran = false;
+    await withStateLock(path, async () => {
+      ran = true;
+    }, { timeoutMs: 500, staleMs: 60_000 });
+
+    assert.equal(ran, true);
+    await assert.rejects(() => stat(lockPath), /ENOENT/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("withStateLock preserves live-owner locks and keeps timeout behavior", async () => {
+  const { path, cleanup } = await tempPath();
+  try {
+    const lockPath = `${path}.lock`;
+    await mkdir(lockPath);
+    await writeFile(join(lockPath, "owner.json"), JSON.stringify({
+      pid: process.pid,
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      host: "codex",
+      token: "live-owner",
+    }) + "\n");
+
+    await assert.rejects(
+      () => withStateLock(path, async () => {}, { timeoutMs: 100, staleMs: 1 }),
+      /timed out waiting for state lock/,
+    );
+    await stat(lockPath);
   } finally {
     await cleanup();
   }
