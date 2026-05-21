@@ -124,6 +124,27 @@ test("CodexHost enumerates codex, agents, system, and plugin skills", async () =
   }
 });
 
+test("CodexHost uses the newest cached version for each plugin key", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const newerPluginRoot = join(fake.codexHome, "plugins", "cache", "openai-curated", "gmail", "0.2.0");
+    await mkdir(join(newerPluginRoot, ".codex-plugin"), { recursive: true });
+    await writeFile(
+      join(newerPluginRoot, ".codex-plugin", "plugin.json"),
+      JSON.stringify({ name: "gmail", version: "0.2.0", skills: "./skills/" }),
+    );
+    await writeSkill(join(newerPluginRoot, "skills", "gmail"), "gmail", "New Gmail mailbox workflows");
+
+    const host = new CodexHost({ codexHome: fake.codexHome, agentsHome: fake.agentsHome });
+    const gmailSkills = (await host.listSkills()).filter((s) => s.id === "plugin:gmail@openai-curated:gmail");
+
+    assert.equal(gmailSkills.length, 1);
+    assert.equal(gmailSkills[0]?.description, "New Gmail mailbox workflows");
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("CodexHost usage stats read recursive Codex sessions", async () => {
   const fake = await makeFakeCodexUser();
   try {

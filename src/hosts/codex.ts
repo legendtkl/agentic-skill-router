@@ -6,6 +6,7 @@ import type { Skill, UsageStat } from "../types.ts";
 import { BuiltinSkillCannotDisableError } from "../types.ts";
 import {
   DISABLED_SUFFIX,
+  compareVersions,
   readCodexPluginSettings,
   readSkillFrontmatter,
   walkSkillsDir,
@@ -22,10 +23,12 @@ interface CodexPluginInstall {
   pluginKey: string;
   installPath: string;
   skillsRoot: string;
+  version: string;
 }
 
 interface CodexPluginManifest {
   name?: unknown;
+  version?: unknown;
   skills?: unknown;
 }
 
@@ -149,7 +152,7 @@ export class CodexHost implements Host {
       throw err;
     }
 
-    const out: CodexPluginInstall[] = [];
+    const byPluginKey = new Map<string, CodexPluginInstall>();
     for (const marketplace of marketplaces) {
       if (!marketplace.isDirectory() || marketplace.name.startsWith(".")) continue;
       const marketplacePath = join(cacheRoot, marketplace.name);
@@ -180,15 +183,22 @@ export class CodexHost implements Host {
           const skillsRel = typeof manifest.skills === "string" && manifest.skills !== ""
             ? manifest.skills
             : "./skills";
-          out.push({
+          const candidate = {
             pluginKey: `${pluginName}@${marketplace.name}`,
             installPath,
             skillsRoot: resolve(dirname(manifestPath), "..", skillsRel),
-          });
+            version: typeof manifest.version === "string" && manifest.version !== ""
+              ? manifest.version
+              : versionDir.name,
+          };
+          const existing = byPluginKey.get(candidate.pluginKey);
+          if (!existing || compareVersions(candidate.version, existing.version) > 0) {
+            byPluginKey.set(candidate.pluginKey, candidate);
+          }
         }
       }
     }
-    return out;
+    return [...byPluginKey.values()];
   }
 }
 
