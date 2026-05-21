@@ -5,45 +5,96 @@ import { createInterface } from "node:readline";
 import type { Skill, UsageStat } from "./types.ts";
 
 /**
- * Look up a skill's usage. Transcript records key skills by the name the
- * model invoked them with: bare ("lark-mail") or plugin-namespaced
- * ("codex:rescue", where `codex` is the plugin shortname before `@`).
+ * Returns true when another plugin skill in `inventory` shares the same
+ * `pluginShort` (= part of `pluginKey` before `@`) AND the same skill name as
+ * `skill`. In that case the short-namespaced transcript form
+ * ("<pluginShort>:<name>") cannot be uniquely attributed and lookups should
+ * refuse to fall through to it.
  *
- * Plugin-namespaced match always takes precedence over bare match. The bare
- * match is only used when no namespaced record exists AND the skill name
- * isn't claimed by another skill in the inventory (to avoid attributing the
- * same `<command-name>foo</command-name>` to two skills both named "foo").
+ * Returns false for non-plugin skills or for skills whose pluginShort+name
+ * pair is unique in the inventory.
  */
-export function lookupUsage(skill: Skill, usage: Map<string, UsageStat>): UsageStat | undefined {
+export function isPluginShortAmbiguous(skill: Skill, inventory: Skill[]): boolean {
+  if (!skill.pluginKey) return false;
+  const pluginShort = skill.pluginKey.split("@")[0];
+  if (!pluginShort) return false;
+  let count = 0;
+  for (const s of inventory) {
+    if (!s.pluginKey) continue;
+    if (s.name !== skill.name) continue;
+    if (s.pluginKey.split("@")[0] !== pluginShort) continue;
+    count += 1;
+    if (count > 1) return true;
+  }
+  return false;
+}
+
+/**
+ * Look up a skill's usage. Transcripts record key skills by the name the
+ * model invoked them with. Resolution order:
+ *
+ *   1. Full plugin-key form: "plugin:<pluginKey>:<name>" (matches `skill.id`).
+ *      Transcripts that carry the fully-qualified plugin key win over every
+ *      other form because it is unambiguous.
+ *   2. Short plugin-namespaced form: "<pluginShort>:<name>" — only used when
+ *      `pluginShort` (the part of `pluginKey` before `@`) is unique within
+ *      the inventory for this skill name. If two inventory entries share the
+ *      same `pluginShort` but live under different marketplaces (e.g.
+ *      "codex@market-a" and "codex@market-b"), the short form is ambiguous
+ *      and we refuse to attribute it.
+ *   3. Bare name fallback ("foo"). Skipped when `inventory` is provided and
+ *      multiple skills claim the same name — see {@link lookupUsageStrict}.
+ */
+export function lookupUsage(
+  skill: Skill,
+  usage: Map<string, UsageStat>,
+  inventory?: Skill[],
+): UsageStat | undefined {
+  // (1) full plugin key form takes precedence — always unambiguous.
+  if (skill.pluginKey) {
+    const full = usage.get(skill.id);
+    if (full) return full;
+  }
+  // (2) plugin short form — only when not ambiguous.
   if (skill.pluginKey) {
     const pluginShort = skill.pluginKey.split("@")[0];
     if (pluginShort) {
-      const ns = usage.get(`${pluginShort}:${skill.name}`);
-      if (ns) return ns;
+      const ambiguous = inventory ? isPluginShortAmbiguous(skill, inventory) : false;
+      if (!ambiguous) {
+        const ns = usage.get(`${pluginShort}:${skill.name}`);
+        if (ns) return ns;
+      }
     }
   }
+  // (3) bare name fallback (caller may filter via lookupUsageStrict).
   return usage.get(skill.name);
 }
 
 /**
  * Variant of `lookupUsage` that only returns a hit when attribution is
  * unambiguous. Pass the full inventory so we can detect collisions on bare
- * names. Used by policy.ts to avoid hiding a never-used skill behind a
- * sibling's usage.
+ * names AND on the plugin-short namespace. Used by policy.ts to avoid hiding
+ * a never-used skill behind a sibling's usage.
  */
 export function lookupUsageStrict(
   skill: Skill,
   usage: Map<string, UsageStat>,
   inventory: Skill[],
 ): UsageStat | undefined {
+  // (1) full plugin key form is always safe.
+  if (skill.pluginKey) {
+    const full = usage.get(skill.id);
+    if (full) return full;
+  }
+  // (2) plugin short form — only when not ambiguous in inventory.
   if (skill.pluginKey) {
     const pluginShort = skill.pluginKey.split("@")[0];
-    if (pluginShort) {
+    if (pluginShort && !isPluginShortAmbiguous(skill, inventory)) {
       const ns = usage.get(`${pluginShort}:${skill.name}`);
       if (ns) return ns;
     }
   }
-  // Only fall back to bare name when this skill is the unique claimant.
+  // (3) bare name — only when this skill is the unique claimant of the name.
   const sameName = inventory.filter((s) => s.name === skill.name);
   if (sameName.length > 1) return undefined;
   return usage.get(skill.name);

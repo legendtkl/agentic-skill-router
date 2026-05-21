@@ -50,6 +50,16 @@ export interface Suggestion {
   reason: SuggestionReason;
   confidence: Confidence;
   details: string;
+  /**
+   * True when the skill is a plugin whose `pluginShort` (part of pluginKey
+   * before "@") collides with another installed plugin skill of the same
+   * name (e.g. "plugin:codex@market-a:rescue" vs
+   * "plugin:codex@market-b:rescue"). Transcript usage recorded as the short
+   * form "codex:rescue" cannot be uniquely attributed in this case, so
+   * usage-based reasoning falls back to "treat as never-used unless a
+   * full-key record exists". Surfaced so CLI consumers can warn the user.
+   */
+  attributionAmbiguous?: boolean;
 }
 
 export interface DisableRecord {

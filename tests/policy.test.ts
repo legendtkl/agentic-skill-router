@@ -177,6 +177,57 @@ test("plugin-namespaced usage attributes correctly to that plugin's skill", () =
   assert.ok(!ids.includes("plugin:codex@openai-codex:rescue"));
 });
 
+test("plugin-short conflict surfaces attributionAmbiguous flag", () => {
+  // Two plugins sharing pluginShort "codex" but different marketplaces.
+  // Transcript only carries the short form, so attribution is impossible.
+  const a = mkSkill({
+    name: "rescue", id: "plugin:codex@market-a:rescue",
+    source: "plugin", pluginKey: "codex@market-a",
+  });
+  const b = mkSkill({
+    name: "rescue", id: "plugin:codex@market-b:rescue",
+    source: "plugin", pluginKey: "codex@market-b",
+  });
+  const usage = new Map<string, UsageStat>([
+    // The model invoked "codex:rescue" — we can't tell which plugin.
+    ["codex:rescue", { skillId: "codex:rescue", lastUsed: new Date("2026-04-25"), callCount: 4, firstSeen: null }],
+  ]);
+  const out = suggest([a, b], usage, { unusedForDays: 30, now: NOW });
+  // Both should be flagged as ambiguous-attribution rather than confidently
+  // never-used. They must NOT be hidden by the shared usage (i.e., we should
+  // see both in the output, not zero entries).
+  assert.equal(out.length, 2);
+  for (const s of out) {
+    assert.equal(s.attributionAmbiguous, true);
+    assert.equal(s.confidence, "low");
+    assert.match(s.details, /ambiguous/i);
+  }
+});
+
+test("plugin-short conflict resolved by full-key transcript record", () => {
+  const a = mkSkill({
+    name: "rescue", id: "plugin:codex@market-a:rescue",
+    source: "plugin", pluginKey: "codex@market-a",
+  });
+  const b = mkSkill({
+    name: "rescue", id: "plugin:codex@market-b:rescue",
+    source: "plugin", pluginKey: "codex@market-b",
+  });
+  // Transcript carried the full plugin key — only `a` gets credit.
+  const usage = new Map<string, UsageStat>([
+    [a.id, { skillId: a.id, lastUsed: new Date("2026-04-25"), callCount: 2, firstSeen: null }],
+  ]);
+  const out = suggest([a, b], usage, { unusedForDays: 30, now: NOW });
+  // `a` is fresh (last used within 30 days), so it should not be suggested.
+  // `b` has no attributable usage but is still ambiguous on short form, so it
+  // is reported as never-used with the ambiguous flag.
+  const ids = out.map((s) => s.skill.id);
+  assert.ok(!ids.includes(a.id), "a should not be suggested (recently used)");
+  assert.ok(ids.includes(b.id), "b should be suggested");
+  const bs = out.find((s) => s.skill.id === b.id)!;
+  assert.equal(bs.attributionAmbiguous, true);
+});
+
 test("output sorted by confidence desc, then oldest-first", () => {
   const skills = [
     mkSkill({ name: "stale-newer" }),

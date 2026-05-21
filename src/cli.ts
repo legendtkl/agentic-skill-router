@@ -5,7 +5,7 @@ import { ParseArgsError, parseStrict, reportParseArgsError } from "./args.ts";
 import { ClaudeCodeHost } from "./hosts/claude-code.ts";
 import { CodexHost } from "./hosts/codex.ts";
 import type { Host } from "./hosts/base.ts";
-import { lookupUsage } from "./usage.ts";
+import { isPluginShortAmbiguous, lookupUsage } from "./usage.ts";
 import { suggest } from "./policy.ts";
 import { routeDisabledSkillsAuto } from "./auto-route.ts";
 import { routeDisabledSkillsMetadata } from "./metadata-route.ts";
@@ -148,7 +148,7 @@ async function cmdList(argv: string[], hostName: HostName): Promise<number> {
   const usage = await host.usageStats();
 
   if (values.json) {
-    process.stdout.write(JSON.stringify(skills.map((s) => projectSkill(s, usage)), null, 2) + "\n");
+    process.stdout.write(JSON.stringify(skills.map((s) => projectSkill(s, usage, skills)), null, 2) + "\n");
     return 0;
   }
   printSkillTable(skills, usage);
@@ -694,7 +694,13 @@ async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
       keepNames: config.keepNames,
       keepIds: config.keepIds,
     });
-    targets = suggested.map((s) => s.skill);
+    // Don't auto-disable skills whose usage attribution is ambiguous (e.g.
+    // two plugins sharing the same pluginShort name): we can't safely tell
+    // whether the user has been using them via the transcript short form.
+    // They still appear in `suggest --json` output flagged so the user can
+    // investigate; explicit `disable <id>` still works.
+    const safe = suggested.filter((s) => !s.attributionAmbiguous);
+    targets = safe.map((s) => s.skill);
     reason = (values.reason as string | undefined) ?? `auto:unused-${unusedDays}d`;
   } else {
     if (positionals.length === 0) {
@@ -717,6 +723,12 @@ async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
     console.error(`would disable ${targets.length} skill(s); pass --yes to apply`);
     if (suggested && unusedDays !== undefined) {
       printSuggestions(suggested, unusedDays);
+      const skipped = suggested.filter((s) => s.attributionAmbiguous);
+      if (skipped.length > 0) {
+        console.error(
+          `\nnote: ${skipped.length} skill(s) skipped from --all-suggested because their usage attribution is ambiguous (multiple plugins share the same pluginShort name). Disable explicitly with \`skill-router skills disable <id>\` if intended.`,
+        );
+      }
     } else {
       for (const t of targets) console.error(`  ${t.id}`);
     }
@@ -855,8 +867,9 @@ async function cmdStatus(argv: string[], hostName: HostName): Promise<number> {
 
 // ────────────────── output helpers ──────────────────
 
-function projectSkill(s: Skill, usage: Map<string, UsageStat>) {
-  const u = lookupUsage(s, usage);
+function projectSkill(s: Skill, usage: Map<string, UsageStat>, inventory?: Skill[]) {
+  const u = lookupUsage(s, usage, inventory);
+  const ambiguous = inventory ? isPluginShortAmbiguous(s, inventory) : false;
   return {
     id: s.id,
     name: s.name,
@@ -869,6 +882,7 @@ function projectSkill(s: Skill, usage: Map<string, UsageStat>) {
     description: s.description,
     lastUsed: u?.lastUsed?.toISOString() ?? null,
     callCount: u?.callCount ?? 0,
+    ...(ambiguous ? { attributionAmbiguous: true } : {}),
   };
 }
 
@@ -880,6 +894,7 @@ function projectSuggestion(s: Suggestion) {
     reason: s.reason,
     confidence: s.confidence,
     details: s.details,
+    ...(s.attributionAmbiguous ? { attributionAmbiguous: true } : {}),
   };
 }
 
@@ -976,7 +991,7 @@ function printDciInspect(result: { id: string; name: string; description: string
 
 function printSkillTable(skills: Skill[], usage: Map<string, UsageStat>): void {
   const rows = skills.map((s) => {
-    const u = lookupUsage(s, usage);
+    const u = lookupUsage(s, usage, skills);
     return {
       id: s.id,
       source: s.source,
@@ -1013,7 +1028,8 @@ function printSuggestions(suggestions: Suggestion[], days: number): void {
   console.log(`${suggestions.length} suggestion(s) (threshold: ${days} days unused):\n`);
   for (const s of suggestions) {
     const tag = `[${s.confidence}]`;
-    console.log(`  ${tag.padEnd(8)} ${s.skill.id}`);
+    const ambiguity = s.attributionAmbiguous ? "  (attribution ambiguous)" : "";
+    console.log(`  ${tag.padEnd(8)} ${s.skill.id}${ambiguity}`);
     console.log(`           ${s.reason}: ${s.details}`);
   }
   console.log(`\nrun:  skill-router skills disable --all-suggested --unused-for=${days} --yes`);
