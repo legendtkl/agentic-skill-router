@@ -67,8 +67,74 @@ export async function readInstalledPlugins(path: string): Promise<InstalledPlugi
   return out;
 }
 
-/** Naive dotted-numeric comparison; falls back to lexical for non-numeric. */
-export function compareVersions(a: string, b: string): number {
+// MAJOR.MINOR.PATCH with optional -PRERELEASE and +BUILD per semver 2.0.
+// PRERELEASE and BUILD identifiers are dot-separated, alphanumeric or hyphen,
+// and numeric identifiers cannot have leading zeros.
+const SEMVER_RE =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+
+interface ParsedSemver {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: string[]; // empty means stable release
+}
+
+function parseSemver(v: string): ParsedSemver | null {
+  const m = SEMVER_RE.exec(v);
+  if (!m) return null;
+  return {
+    major: Number.parseInt(m[1]!, 10),
+    minor: Number.parseInt(m[2]!, 10),
+    patch: Number.parseInt(m[3]!, 10),
+    prerelease: m[4] ? m[4].split(".") : [],
+    // BUILD metadata (m[5]) intentionally discarded; ignored for ordering.
+  };
+}
+
+function isNumericIdentifier(id: string): boolean {
+  // Numeric identifiers are non-empty digit strings with no leading zeros
+  // (or just "0"). The regex above already enforces this for parsed input.
+  return /^(0|[1-9]\d*)$/.test(id);
+}
+
+function comparePrereleaseIds(a: string, b: string): number {
+  const aNum = isNumericIdentifier(a);
+  const bNum = isNumericIdentifier(b);
+  if (aNum && bNum) {
+    const an = Number.parseInt(a, 10);
+    const bn = Number.parseInt(b, 10);
+    if (an !== bn) return an < bn ? -1 : 1;
+    return 0;
+  }
+  // Per semver: numeric identifiers always have lower precedence than
+  // alphanumeric identifiers.
+  if (aNum && !bNum) return -1;
+  if (!aNum && bNum) return 1;
+  if (a !== b) return a < b ? -1 : 1;
+  return 0;
+}
+
+function comparePrerelease(a: string[], b: string[]): number {
+  // Per semver: a version without prerelease has higher precedence than one
+  // that has a prerelease. Callers handle the "both stable" case before
+  // entering identifier-by-identifier compare.
+  if (a.length === 0 && b.length === 0) return 0;
+  if (a.length === 0) return 1; // stable > prerelease
+  if (b.length === 0) return -1;
+  const len = Math.min(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const cmp = comparePrereleaseIds(a[i]!, b[i]!);
+    if (cmp !== 0) return cmp;
+  }
+  // All shared identifiers equal: a larger set of fields has higher precedence.
+  if (a.length !== b.length) return a.length < b.length ? -1 : 1;
+  return 0;
+}
+
+function legacyCompare(a: string, b: string): number {
+  // Original dotted-numeric + lexical compare. Kept as the fallback for
+  // non-semver inputs so unrelated callers see stable ordering.
   const ap = a.split(/[.\-+]/);
   const bp = b.split(/[.\-+]/);
   const len = Math.max(ap.length, bp.length);
@@ -83,6 +149,24 @@ export function compareVersions(a: string, b: string): number {
     }
   }
   return 0;
+}
+
+/**
+ * Compare two version strings using semver 2.0 ordering when both inputs are
+ * valid semver. BUILD metadata is ignored. For any input that is not valid
+ * semver, fall back to a dotted-numeric + lexical compare so unrelated
+ * callers see stable, deterministic ordering.
+ */
+export function compareVersions(a: string, b: string): number {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (pa && pb) {
+    if (pa.major !== pb.major) return pa.major < pb.major ? -1 : 1;
+    if (pa.minor !== pb.minor) return pa.minor < pb.minor ? -1 : 1;
+    if (pa.patch !== pb.patch) return pa.patch < pb.patch ? -1 : 1;
+    return comparePrerelease(pa.prerelease, pb.prerelease);
+  }
+  return legacyCompare(a, b);
 }
 
 interface ClaudeSettings {
