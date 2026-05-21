@@ -44,7 +44,12 @@ Installed Claude Code plugin:
 
 ```bash
 bin/skill-router skills list
-bin/skill-router skills suggest
+bin/skill-router skills suggest --json
+bin/skill-router skills route --query "draft a Lark mail reply" --json
+bin/skill-router skills route --mode=metadata --query "draft a Lark mail reply" --json
+bin/skill-router skills route --mode=body --query "draft a Lark mail reply" --json
+bin/skill-router skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
+bin/skill-router skills dci open dci-abc123def0 --line=20 --window=80 --json
 bin/skill-router skills disable user:lark-mail --yes
 bin/skill-router skills enable user:lark-mail
 bin/skill-router skills status
