@@ -151,7 +151,7 @@ export class ClaudeCodeHost implements Host {
   }
 
   async usageStats(): Promise<Map<string, UsageStat>> {
-    return collectUsageStats(this.projectsDir);
+    return collectUsageStats(this.projectsDir, { host: this.name });
   }
 
   async skillRoots(): Promise<string[]> {
