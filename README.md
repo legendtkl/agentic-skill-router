@@ -1,5 +1,7 @@
 # skill-router
 
+English | [简体中文](README.zh-CN.md)
+
 Skill management CLI and plugin assets for Claude Code and Codex. The current
 scope is the skill-only core migrated from `~/github/agent-cleaner`: enumerate
 installed skills, read usage from local transcripts, suggest stale or unused
