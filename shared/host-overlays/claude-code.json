@@ -1,0 +1,4 @@
+{
+  "host": "claude-code",
+  "skillDir": "plugins/claude-code/skills/skill-router-skills"
+}

@@ -2,6 +2,7 @@ import { readdir, readFile, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Host } from "./base.ts";
+import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageStat } from "../types.ts";
 import { BuiltinSkillCannotDisableError } from "../types.ts";
 import {
@@ -16,6 +17,10 @@ export interface CodexHostOptions {
   codexHome?: string;
   agentsHome?: string;
   sessionsDir?: string;
+  /** current project directory for .agents/skills discovery */
+  cwd?: string;
+  /** protected admin-level skills root, defaults to /etc/codex/skills */
+  adminSkillsRoot?: string;
 }
 
 interface CodexPluginInstall {
@@ -34,11 +39,15 @@ export class CodexHost implements Host {
   private readonly codexHome: string;
   private readonly agentsHome: string;
   private readonly sessionsDir: string;
+  private readonly cwd: string;
+  private readonly adminSkillsRoot: string;
 
   constructor(opts: CodexHostOptions = {}) {
     this.codexHome = opts.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
     this.agentsHome = opts.agentsHome ?? process.env["AGENTS_HOME"] ?? join(homedir(), ".agents");
     this.sessionsDir = opts.sessionsDir ?? join(this.codexHome, "sessions");
+    this.cwd = opts.cwd ?? process.env["SKILL_ROUTER_CWD"] ?? process.cwd();
+    this.adminSkillsRoot = opts.adminSkillsRoot ?? process.env["CODEX_ADMIN_SKILLS_ROOT"] ?? "/etc/codex/skills";
   }
 
   async listSkills(): Promise<Skill[]> {
@@ -62,6 +71,21 @@ export class CodexHost implements Host {
       source: "builtin",
       canDisable: false,
     }));
+    out.push(...await this.listRootSkills({
+      root: this.adminSkillsRoot,
+      idPrefix: "builtin:codex-admin",
+      source: "builtin",
+      canDisable: false,
+    }));
+
+    for (const projectRoot of await projectSkillRoots(this.cwd, ".agents/skills")) {
+      out.push(...await this.listRootSkills({
+        root: projectRoot.root,
+        idPrefix: `project:codex:${projectRoot.relativeDir}`,
+        source: "user",
+        canDisable: true,
+      }));
+    }
 
     const enabledPlugins = (await readCodexPluginSettings(join(this.codexHome, "config.toml"))).enabledPlugins ?? {};
     for (const plugin of await this.installedPlugins()) {
@@ -97,7 +121,9 @@ export class CodexHost implements Host {
       join(this.codexHome, "skills"),
       join(this.agentsHome, "skills"),
       join(this.codexHome, "skills", ".system"),
+      this.adminSkillsRoot,
     ];
+    for (const projectRoot of await projectSkillRoots(this.cwd, ".agents/skills")) roots.push(projectRoot.root);
     for (const plugin of await this.installedPlugins()) roots.push(plugin.skillsRoot);
     return roots;
   }

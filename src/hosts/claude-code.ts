@@ -2,6 +2,7 @@ import { rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Host } from "./base.ts";
+import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageStat } from "../types.ts";
 import { BuiltinSkillCannotDisableError } from "../types.ts";
 import {
@@ -35,16 +36,20 @@ export interface ClaudeCodeHostOptions {
   claudeHome?: string;
   /** transcripts root, defaults to <claudeHome>/projects */
   projectsDir?: string;
+  /** current project directory for .claude/skills discovery */
+  cwd?: string;
 }
 
 export class ClaudeCodeHost implements Host {
   readonly name = "claude-code" as const;
   private readonly claudeHome: string;
   private readonly projectsDir: string;
+  private readonly cwd: string;
 
   constructor(opts: ClaudeCodeHostOptions = {}) {
     this.claudeHome = opts.claudeHome ?? join(homedir(), ".claude");
     this.projectsDir = opts.projectsDir ?? join(this.claudeHome, "projects");
+    this.cwd = opts.cwd ?? process.env["SKILL_ROUTER_CWD"] ?? process.cwd();
   }
 
   async listSkills(): Promise<Skill[]> {
@@ -70,7 +75,29 @@ export class ClaudeCodeHost implements Host {
     });
     out.push(...userSkills);
 
-    // 2. Plugin-level skills
+    // 2. Project-level skills from CWD up to the repository root:
+    // <repo>/.claude/skills and nested <repo>/<subdir>/.claude/skills.
+    for (const projectRoot of await projectSkillRoots(this.cwd, ".claude/skills")) {
+      const projectSkills = await walkSkillsDir(projectRoot.root, async (skillName, skillMdPath, isDisabled, conflict) => {
+        const fm = await readSkillFrontmatter(skillMdPath);
+        return {
+          id: `project:claude:${projectRoot.relativeDir}:${skillName}`,
+          name: fm.name || skillName,
+          description: fm.description,
+          metadata: fm,
+          source: "user",
+          pluginKey: null,
+          skillMdPath,
+          isDisabled,
+          isPluginDisabled: false,
+          canDisable: true,
+          conflict,
+        };
+      });
+      out.push(...projectSkills);
+    }
+
+    // 3. Plugin-level skills
     const installedPluginsPath = join(this.claudeHome, "plugins", "installed_plugins.json");
     const installed = await readInstalledPlugins(installedPluginsPath);
     const settings = await readClaudeSettings(join(this.claudeHome, "settings.json"));
@@ -98,7 +125,7 @@ export class ClaudeCodeHost implements Host {
       out.push(...pluginSkills);
     }
 
-    // 3. Built-in skills (cannot be disabled)
+    // 4. Built-in skills (cannot be disabled)
     for (const b of BUILTIN_SKILLS) {
       out.push({
         id: `builtin:${b.name}`,
@@ -123,6 +150,9 @@ export class ClaudeCodeHost implements Host {
 
   async skillRoots(): Promise<string[]> {
     const roots = [join(this.claudeHome, "skills")];
+    for (const projectRoot of await projectSkillRoots(this.cwd, ".claude/skills")) {
+      roots.push(projectRoot.root);
+    }
     const installed = await readInstalledPlugins(join(this.claudeHome, "plugins", "installed_plugins.json"));
     for (const plugin of installed) roots.push(join(plugin.installPath, "skills"));
     return roots;

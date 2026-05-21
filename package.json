@@ -17,10 +17,12 @@
     "plugins/codex/bin/",
     "plugins/codex/lib/",
     "plugins/codex/prompts/",
-    "plugins/codex/skills/"
+    "plugins/codex/skills/",
+    "shared/"
   ],
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "generate:assets": "node scripts/generate-assets.mjs",
+    "build": "node scripts/generate-assets.mjs && node scripts/build.mjs",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "node --test --import tsx tests/*.test.ts",
