@@ -22,7 +22,17 @@ import {
   dciSelectSkills,
 } from "./dci.ts";
 import { disableSkill, enableSkill, enableSkillFromState, findOrphanMarkers, reapplyMissing } from "./apply.ts";
-import { loadConfig, parseRouteMode, resolveUnusedForDays } from "./config.ts";
+import {
+  CONFIG_KEYS,
+  ConfigValueError,
+  DEFAULT_CONFIG,
+  configPath,
+  isConfigKey,
+  loadConfig,
+  parseRouteMode,
+  resolveUnusedForDays,
+  setConfigValue,
+} from "./config.ts";
 import { loadState, recordRoutedSkill, saveState, skillInstanceKey, statePathForHost, withStateLock } from "./state.ts";
 import type { Confidence, HostName, RouteMode, Skill, Suggestion, UsageStat } from "./types.ts";
 
@@ -47,6 +57,7 @@ export async function run(argv: string[]): Promise<number> {
         case "disable": return await cmdDisable(rest, hostName);
         case "enable": return await cmdEnable(rest, hostName);
         case "status": return await cmdStatus(rest, hostName);
+        case "config": return await cmdConfig(rest);
         case undefined:
         case "-h":
         case "--help":
@@ -129,9 +140,14 @@ USAGE
   skill-router skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>]
   skill-router skills enable <id...>
   skill-router skills status [--json]
+  skill-router skills config get [--json]
+  skill-router skills config set <key> <value>
+  skill-router skills config path
 
 DURATION  bare integer = days. Suffixed: 30d / 2w / 3m / 1y
 CONFIG    ~/.skill-router/config.json   { "unusedForDays": 30, "routeMode": "auto" }
+          keys: unusedForDays (int), routeMode (auto|metadata|body|lexical|dci),
+                keepNames (JSON array), keepIds (JSON array)
 HOST      installed plugin CLIs auto-detect their host; repo checkouts default to claude-code
 STATE     ~/.skill-router/state-<host>.json
 `);
@@ -936,6 +952,98 @@ async function cmdStatus(argv: string[], hostName: HostName): Promise<number> {
     }
   }
   return reapplyResult.conflicted.length > 0 ? 1 : 0;
+}
+
+async function cmdConfig(argv: string[]): Promise<number> {
+  const [subcommand, ...rest] = argv;
+  switch (subcommand) {
+    case "get": return await cmdConfigGet(rest);
+    case "set": return await cmdConfigSet(rest);
+    case "path": return cmdConfigPath(rest);
+    case undefined:
+    case "-h":
+    case "--help":
+      return usage();
+    default:
+      console.error(`unknown config subcommand: ${subcommand}`);
+      return usage(2);
+  }
+}
+
+async function cmdConfigGet(argv: string[]): Promise<number> {
+  const { values } = parseStrict({
+    commandName: "skill-router skills config get",
+    config: { args: argv, options: { json: { type: "boolean" } } },
+  });
+  const path = configPath();
+  const config = await loadConfig(path);
+  if (values.json) {
+    process.stdout.write(JSON.stringify({ path, config }, null, 2) + "\n");
+    return 0;
+  }
+  console.log(`path: ${path}`);
+  console.log(`unusedForDays: ${config.unusedForDays}${defaultMarker("unusedForDays", config.unusedForDays)}`);
+  console.log(`routeMode:     ${config.routeMode}${defaultMarker("routeMode", config.routeMode)}`);
+  if (config.keepNames && config.keepNames.length > 0) {
+    console.log(`keepNames:     ${JSON.stringify(config.keepNames)}`);
+  } else {
+    console.log(`keepNames:     []  (default)`);
+  }
+  if (config.keepIds && config.keepIds.length > 0) {
+    console.log(`keepIds:       ${JSON.stringify(config.keepIds)}`);
+  } else {
+    console.log(`keepIds:       []  (default)`);
+  }
+  return 0;
+}
+
+async function cmdConfigSet(argv: string[]): Promise<number> {
+  const { positionals } = parseStrict({
+    commandName: "skill-router skills config set",
+    config: { args: argv, options: {}, allowPositionals: true },
+  });
+  if (positionals.length < 2) {
+    console.error("specify <key> <value>");
+    return 2;
+  }
+  if (positionals.length > 2) {
+    console.error(
+      `unexpected extra argument(s) for config set: ${positionals.slice(2).join(" ")}. ` +
+      `Quote multi-word values, e.g. \`config set keepNames '["foo","bar"]'\`.`,
+    );
+    return 2;
+  }
+  const key = positionals[0]!;
+  const value = positionals[1]!;
+  if (!isConfigKey(key)) {
+    console.error(`unknown config key: ${key}. Known keys: ${CONFIG_KEYS.join(", ")}`);
+    return 2;
+  }
+  try {
+    const written = await setConfigValue(key, value);
+    console.log(`set ${written.key} = ${JSON.stringify(written.value)} in ${configPath()}`);
+    return 0;
+  } catch (err) {
+    if (err instanceof ConfigValueError) {
+      console.error(`invalid value for ${key}: ${err.message}`);
+      return 1;
+    }
+    throw err;
+  }
+}
+
+function cmdConfigPath(argv: string[]): number {
+  parseStrict({
+    commandName: "skill-router skills config path",
+    config: { args: argv, options: {} },
+  });
+  console.log(configPath());
+  return 0;
+}
+
+function defaultMarker(key: "unusedForDays" | "routeMode", value: number | string): string {
+  const defaultValue = DEFAULT_CONFIG[key];
+  return value === defaultValue ? "  (default)" : "";
 }
 
 // ────────────────── output helpers ──────────────────
