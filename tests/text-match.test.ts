@@ -16,8 +16,22 @@ test("termsFor extracts Latin word tokens with case folding", () => {
   assert.ok(terms.has("daily"));
 });
 
-test("termsFor splits camelCase identifiers into their parts", () => {
+test("termsFor (lexical, default) does not split camelCase identifiers", () => {
+  // Lexical/DCI mode is the route.ts / dci.ts pre-refactor flavour — no
+  // camelCase split. This preserves the route's `queryTerms.size <= 1`
+  // weak-match guard for inputs like `OpenAI` and stops substring hits on
+  // `ai` from promoting unrelated skills.
   const terms = termsFor("createUser readUserList");
+  assert.ok(terms.has("createuser"), "compound token stays joined");
+  assert.ok(terms.has("readuserlist"), "compound token stays joined");
+  assert.ok(!terms.has("create"));
+  assert.ok(!terms.has("user"));
+  assert.ok(!terms.has("read"));
+  assert.ok(!terms.has("list"));
+});
+
+test("termsFor in metadata mode splits camelCase identifiers", () => {
+  const terms = termsFor("createUser readUserList", "metadata");
   assert.ok(terms.has("create"), "should expose 'create'");
   assert.ok(terms.has("user"), "should expose 'user'");
   assert.ok(terms.has("read"), "should expose 'read'");
@@ -38,13 +52,27 @@ test("termsFor splits snake_case and kebab-case identifiers", () => {
   assert.ok(kebab.has("profile"));
 });
 
-test("termsFor captures URLs as one token and exposes path parts", () => {
-  const terms = termsFor("see https://example.com/api/v1/users for details");
+test("termsFor in metadata mode captures URLs as one token and exposes path parts", () => {
+  // URL capture and `/` boundary splitting are metadata-mode only — the
+  // lexical/DCI tokenizer keeps the pre-refactor shape (no URL token, `/`
+  // is whitespace).
+  const terms = termsFor("see https://example.com/api/v1/users for details", "metadata");
   assert.ok(terms.has("https://example.com/api/v1/users"), "full URL stays as one token");
   // The URL is also split on `:+./-_` boundaries to surface every meaningful part.
   assert.ok(terms.has("https"));
   assert.ok(terms.has("example"));
   assert.ok(terms.has("com"));
+  assert.ok(terms.has("api"));
+  assert.ok(terms.has("v1"));
+  assert.ok(terms.has("users"));
+});
+
+test("termsFor (lexical, default) does not capture URLs as a single token", () => {
+  const terms = termsFor("see https://example.com/api/v1/users for details");
+  assert.ok(!terms.has("https://example.com/api/v1/users"));
+  // `/` is whitespace in lexical mode, so url path segments still surface
+  // individually after the regex matches each `[a-z0-9][a-z0-9_:+.-]*` run.
+  assert.ok(terms.has("example.com"));
   assert.ok(terms.has("api"));
   assert.ok(terms.has("v1"));
   assert.ok(terms.has("users"));
@@ -136,7 +164,7 @@ test("isShortLatinTerm flags <=3-char Latin/digit tokens", () => {
   assert.equal(isShortLatinTerm("AI"), false, "case must be normalised before checking");
 });
 
-test("isGenericTerm flags the canonical metadata-route stop list", () => {
+test("isGenericTerm (metadata, default) flags the canonical metadata-route stop list", () => {
   // Latin generic terms from metadata-route.
   assert.equal(isGenericTerm("api"), true);
   assert.equal(isGenericTerm("workflow"), true);
@@ -153,9 +181,9 @@ test("isGenericTerm flags the canonical metadata-route stop list", () => {
   assert.equal(isGenericTerm("bytedance"), false);
   assert.equal(isGenericTerm("飞书"), false);
   // Short Latin tokens such as `ai` / `es` carry distinct meaning when they
-  // are real aliases, so they stay non-generic. Length-based filtering
-  // happens at the call site via `isShortLatinTerm` when boundary matching
-  // is required.
+  // are real aliases in metadata routing, so they stay non-generic.
+  // Length-based filtering happens at the call site via `isShortLatinTerm`
+  // when boundary matching is required.
   assert.equal(isGenericTerm("ai"), false);
   assert.equal(isGenericTerm("es"), false);
   // Common English stop words like `the` / `and` / `for` are not in the
@@ -165,4 +193,26 @@ test("isGenericTerm flags the canonical metadata-route stop list", () => {
   assert.equal(isGenericTerm("the"), false);
   assert.equal(isGenericTerm("and"), false);
   assert.equal(isGenericTerm("for"), false);
+});
+
+test("isGenericTerm in dci mode broadens the stop set for snippet scoring", () => {
+  // DCI snippet scoring uses substring matching, so the broader stop set
+  // includes the metadata list PLUS common English stop words PLUS short
+  // Latin tokens (<=2 chars). This matches the pre-refactor
+  // `SNIPPET_GENERIC_TERMS` set local to dci.ts.
+  assert.equal(isGenericTerm("api", "dci"), true);
+  assert.equal(isGenericTerm("the", "dci"), true);
+  assert.equal(isGenericTerm("and", "dci"), true);
+  assert.equal(isGenericTerm("for", "dci"), true);
+  assert.equal(isGenericTerm("with", "dci"), true);
+  // Short Latin (<=2 chars) is generic in DCI mode so substring hits on
+  // `ai`/`es` do not push noisy snippets ahead of real evidence.
+  assert.equal(isGenericTerm("ai", "dci"), true);
+  assert.equal(isGenericTerm("es", "dci"), true);
+  assert.equal(isGenericTerm("v1", "dci"), true);
+  // 3-char Latin and longer distinctive tokens still count as distinctive.
+  assert.equal(isGenericTerm("tcc", "dci"), false);
+  assert.equal(isGenericTerm("elasticsearch", "dci"), false);
+  // CJK stop terms carry over from metadata mode.
+  assert.equal(isGenericTerm("工具", "dci"), true);
 });

@@ -779,7 +779,11 @@ function snippetsForTerms(lines: string[], terms: Set<string>, phrase: string, m
     const onMetadataLine = isMetadataLine(i, line, metadataRange);
     for (const term of terms) {
       if (!(lineTerms.has(term) || linePhrase.includes(term))) continue;
-      if (isGenericTerm(term)) score += 0.3;
+      // DCI snippet scoring uses the broader stop set (metadata list +
+      // common English + short Latin) so substring-matched fragments like
+      // `the`/`for`/`ai`/`es` do not push irrelevant lines ahead of real
+      // evidence lines. See `isGenericTerm`'s `'dci'` mode for the union.
+      if (isGenericTerm(term, "dci")) score += 0.3;
       else score += 2;
       if (onMetadataLine) score += 1;
     }

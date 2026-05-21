@@ -152,7 +152,7 @@ function field(fieldName: MetadataField["field"], text: string): MetadataField {
     field: fieldName,
     text,
     weight: FIELD_WEIGHTS[fieldName],
-    terms: termsFor(text),
+    terms: termsFor(text, "metadata"),
     compact: compact(text),
   };
 }
@@ -162,7 +162,7 @@ function manyFields(fieldName: MetadataField["field"], values: string[] | undefi
 }
 
 function analyzeQuery(raw: string): QueryPlan {
-  const terms = termsFor(raw);
+  const terms = termsFor(raw, "metadata");
   const boundaryTerms = boundaryTermsFor(raw);
   const distinctiveTerms = new Set<string>();
   const genericTerms = new Set<string>();

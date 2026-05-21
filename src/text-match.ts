@@ -5,39 +5,51 @@
  * Before this module existed, each router carried its own copy of `termsFor`,
  * `compact`, and CJK/Latin token helpers. The three copies drifted in subtle
  * ways (e.g. metadata-route split camelCase and detected URLs, while route
- * and DCI did not), which made routing behaviour inconsistent across modes.
+ * and DCI did not), which made routing behaviour inconsistent across modes
+ * and risked further divergence with every new fix.
  *
- * Canonical chosen from N implementations:
+ * This module collapses the shared primitives but keeps the original
+ * mode-specific tokenizer / classifier shapes by exposing a `mode` parameter
+ * on the entry points whose behaviour actually differs between routers:
  *
- * - `termsFor` uses the metadata-route flavour, which is the most permissive
- *   on recall: it splits camelCase boundaries, captures `https?://` URLs as
- *   a single token, and treats `/` as both a token char and a split
- *   delimiter in addition to `-_:+.`. The route and DCI corpora previously
- *   did neither of the URL/camelCase extensions, but their tests do not
- *   exercise those inputs so adopting the most-permissive shape preserves
- *   their behaviour while removing the divergence.
+ * - `termsFor(input, mode?)`:
+ *   - `'lexical'` (default) is the route/DCI flavour: no camelCase split,
+ *     no URL capture, and `/` is NOT a token character. Identical to the
+ *     pre-refactor route.ts / dci.ts tokenizer.
+ *   - `'metadata'` is the metadata-route flavour: splits camelCase
+ *     boundaries, captures `https?://` URLs as a single token, and treats
+ *     `/` as both a token char and a split delimiter alongside `-_:+.`.
+ *   The two flavours stay separate so a single-term query like `OpenAI`
+ *   does not silently become `open` + `ai` for lexical/DCI scoring (which
+ *   would bypass the route's `queryTerms.size <= 1` weak-match guard and
+ *   promote noisy substring hits on `ai`).
+ * - `boundaryTermsFor` is the metadata-route boundary helper, unchanged.
+ *   Used to validate that a short Latin alias appears on its own token
+ *   boundary in the query (e.g. `ai` vs `OpenAI`).
  * - `compact` is identical across all three previous implementations:
  *   NFKC-normalise, lowercase, drop everything that is not a Letter/Number.
- * - `boundaryTermsFor` mirrors `termsFor` but skips the camelCase
- *   pre-processing so callers can ask "did this exact whitespace/punctuation
- *   token appear in the input?" — used by metadata-route to keep short Latin
- *   aliases like `ai`/`es` from matching inside `OpenAI`/`daily`.
- * - `isGenericTerm` is the metadata-route stop list, unchanged. That list
- *   directly drives metadata-route scoring (generic terms contribute at 15%
- *   weight and do not count toward distinctive matches), so a union with
- *   DCI's snippet-only stop list would degrade metadata-route precision on
- *   real queries. The DCI snippet selector previously kept a slightly
- *   smaller English list plus a "short Latin (<= 2 chars) = generic" rule,
- *   but both differences were local conveniences for snippet line scoring,
- *   not tested behaviour; collapsing them into the metadata-route list
- *   keeps every router's tested outcomes intact.
+ * - `isGenericTerm(term, mode?)`:
+ *   - `'metadata'` (default) is the metadata-route scoring stop list,
+ *     unchanged. That list directly drives metadata-route scoring (generic
+ *     terms contribute at 15% weight and do not count toward distinctive
+ *     matches), so a union with DCI's snippet stop list would degrade
+ *     metadata-route precision on real queries.
+ *   - `'dci'` is the broader snippet-line stop set originally local to
+ *     dci.ts: the metadata list PLUS common English stop words
+ *     (`the`/`and`/`for`/`with`) PLUS short Latin tokens (<=2 chars) as
+ *     generic. DCI snippet scoring uses substring matching for query
+ *     terms, so without this broader set substring-matched stop fragments
+ *     would push irrelevant lines ahead of real evidence.
  * - `isShortLatinTerm` and `isCjk` are lifted verbatim from metadata-route.
  *
  * Each router keeps its own scoring logic and confidence thresholds; this
  * module only exposes the shared tokenizer + classifier primitives.
  */
 
-const GENERIC_TERMS: ReadonlySet<string> = new Set([
+export type TermsMode = "lexical" | "metadata";
+export type GenericTermMode = "metadata" | "dci";
+
+const METADATA_GENERIC_TERMS: ReadonlySet<string> = new Set([
   // Latin generic / stop terms — taken verbatim from metadata-route.ts so
   // the canonical scoring-side classifier is unchanged.
   "api",
@@ -75,28 +87,58 @@ const GENERIC_TERMS: ReadonlySet<string> = new Set([
   "配置",
 ]);
 
+// DCI snippet scoring needs a broader stop set than metadata-route, because
+// snippet matching is substring-based (`linePhrase.includes(term)`) and
+// substring hits on common fragments like `the`, `for`, or short Latin
+// aliases would otherwise contribute full distinctive weight. This is the
+// original `SNIPPET_GENERIC_TERMS` set from dci.ts, kept here so the DCI
+// snippet selector retains its pre-refactor ranking semantics.
+const DCI_SNIPPET_EXTRA_GENERIC_TERMS: ReadonlySet<string> = new Set([
+  "and",
+  "for",
+  "the",
+  "with",
+]);
+
 const CJK_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+$/u;
 
+const LEXICAL_TOKEN_RE = /[a-z0-9][a-z0-9_:+.-]*/g;
+const LEXICAL_SPLIT_RE = /[-_:+.]+/;
+const METADATA_TOKEN_RE = /https?:\/\/[^\s"'<>]+|[a-z0-9][a-z0-9_:+./-]*/g;
+const METADATA_SPLIT_RE = /[-_:+./]+/;
+const CJK_RUN_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu;
+
 /**
- * Token extraction shared by all routers. The expansive metadata-route
- * flavour: camelCase boundaries are split, `https?://` URLs are captured as
- * a single token, and `/` is treated as both a token char and a split
- * delimiter alongside `-_:+.`.
+ * Token extraction shared by the route, metadata-route, and DCI routers.
+ *
+ * `mode` controls the dialect:
+ * - `'lexical'` (default) matches the pre-refactor route.ts / dci.ts
+ *   tokenizer: no camelCase split, no `https?://` URL capture, and `/` is
+ *   treated as plain whitespace (not a token character).
+ * - `'metadata'` matches the pre-refactor metadata-route tokenizer:
+ *   splits camelCase boundaries, captures `https?://` URLs as a single
+ *   token, and treats `/` as both a token char and a split delimiter
+ *   alongside `-_:+.`.
  */
-export function termsFor(input: string): Set<string> {
-  const prepared = input.normalize("NFKC").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
-  return collectTerms(prepared);
+export function termsFor(input: string, mode: TermsMode = "lexical"): Set<string> {
+  if (mode === "metadata") {
+    const prepared = input.normalize("NFKC").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+    return collectTerms(prepared, METADATA_TOKEN_RE, METADATA_SPLIT_RE);
+  }
+  const prepared = input.normalize("NFKC").toLowerCase();
+  return collectTerms(prepared, LEXICAL_TOKEN_RE, LEXICAL_SPLIT_RE);
 }
 
 /**
- * Boundary-preserving variant of {@link termsFor}: same regex+split rules as
- * the canonical `termsFor`, but without the camelCase pre-processing. Used
- * by metadata-route to validate that a short Latin alias appears on its own
- * token boundary in the query (e.g. `ai` vs `OpenAI`).
+ * Boundary-preserving variant of {@link termsFor} in metadata mode: same
+ * regex+split rules as the canonical metadata-mode `termsFor`, but without
+ * the camelCase pre-processing. Used by metadata-route to validate that a
+ * short Latin alias appears on its own token boundary in the query (e.g.
+ * `ai` vs `OpenAI`).
  */
 export function boundaryTermsFor(input: string): Set<string> {
   const prepared = input.normalize("NFKC").toLowerCase();
-  return collectTerms(prepared);
+  return collectTerms(prepared, METADATA_TOKEN_RE, METADATA_SPLIT_RE);
 }
 
 /**
@@ -125,27 +167,42 @@ export function isShortLatinTerm(term: string): boolean {
 }
 
 /**
- * Generic / stop terms shared by all routers. The set is the metadata-route
- * canonical stop list; see the module-level comment for why DCI's local
- * snippet list collapses into this single classifier without changing
- * tested behaviour in either router.
+ * Generic / stop terms shared by all routers.
+ *
+ * `mode` controls the stop set:
+ * - `'metadata'` (default) is the metadata-route scoring stop list,
+ *   unchanged. That list directly drives metadata-route scoring (generic
+ *   terms contribute at 15% weight and do not count toward distinctive
+ *   matches).
+ * - `'dci'` is the broader snippet-line stop set originally local to
+ *   dci.ts: the metadata list PLUS common English stop words
+ *   (`the`/`and`/`for`/`with`) PLUS short Latin tokens (<=2 chars). DCI
+ *   snippet scoring uses substring matching for query terms, so without
+ *   this broader set, substring-matched stop fragments would contribute
+ *   full distinctive weight and push irrelevant lines ahead of real
+ *   evidence.
  */
-export function isGenericTerm(term: string): boolean {
-  return GENERIC_TERMS.has(term);
+export function isGenericTerm(term: string, mode: GenericTermMode = "metadata"): boolean {
+  if (METADATA_GENERIC_TERMS.has(term)) return true;
+  if (mode === "dci") {
+    if (DCI_SNIPPET_EXTRA_GENERIC_TERMS.has(term)) return true;
+    if (term.length <= 2 && /^[a-z0-9]+$/.test(term)) return true;
+  }
+  return false;
 }
 
-function collectTerms(prepared: string): Set<string> {
+function collectTerms(prepared: string, tokenRe: RegExp, splitRe: RegExp): Set<string> {
   const terms = new Set<string>();
 
-  for (const match of prepared.matchAll(/https?:\/\/[^\s"'<>]+|[a-z0-9][a-z0-9_:+./-]*/g)) {
+  for (const match of prepared.matchAll(tokenRe)) {
     const token = match[0];
     if (token.length >= 2) terms.add(token);
-    for (const part of token.split(/[-_:+./]+/)) {
+    for (const part of token.split(splitRe)) {
       if (part.length >= 2) terms.add(part);
     }
   }
 
-  for (const match of prepared.matchAll(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu)) {
+  for (const match of prepared.matchAll(CJK_RUN_RE)) {
     const chars = Array.from(match[0]);
     if (chars.length === 1) {
       terms.add(chars[0]!);
