@@ -64,10 +64,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - name: Verify agent CLIs are available
+      - name: Verify agent CLIs and auth credentials are available
+        shell: bash
         run: |
           set -e
-          command -v codex >/dev/null || { echo "codex binary missing on runner PATH"; exit 1; }
-          command -v claude >/dev/null || { echo "claude binary missing on runner PATH"; exit 1; }
+          missing=0
+          command -v codex >/dev/null || { echo "codex binary missing on runner PATH"; missing=1; }
+          command -v claude >/dev/null || { echo "claude binary missing on runner PATH"; missing=1; }
+          codex_auth="${CODEX_HOME:-$HOME/.codex}/auth.json"
+          claude_auth="${CLAUDE_HOME:-$HOME/.claude}/.credentials.json"
+          [ -f "$codex_auth" ] || { echo "codex auth missing: $codex_auth (tests would t.skip and produce a false green)"; missing=1; }
+          [ -f "$claude_auth" ] || { echo "claude auth missing: $claude_auth (tests would t.skip and produce a false green)"; missing=1; }
+          if [ "$missing" -ne 0 ]; then
+            echo "Agent e2e preflight failed: dispatch requires both CLIs and their auth files."
+            exit 1
+          fi
       - name: e2e (agent)
         run: npm run test:e2e:agent
