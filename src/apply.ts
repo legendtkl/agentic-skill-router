@@ -9,6 +9,7 @@ import {
   removeDisableRecord,
   removePendingOp,
   saveState,
+  skillInstanceKey,
   withStateLock,
 } from "./state.ts";
 import { BuiltinSkillCannotDisableError, SkillConflictError, SkillOutOfRootError } from "./types.ts";
@@ -53,6 +54,7 @@ export async function disableSkill(
 
     const startedAt = (deps.now?.() ?? new Date()).toISOString();
     const record: DisableRecord = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       id: skill.id,
       pluginKey: skill.pluginKey,
       skillMdPath: disabledPath,
@@ -68,7 +70,7 @@ export async function disableSkill(
     const initial = await loadState(deps.statePath, deps.host);
     // Snapshot any pre-existing disable record so a rollback can restore it
     // instead of silently forgetting the user's prior disabled intent.
-    const priorRecord = findDisableRecord(initial, skill.id);
+    const priorRecord = findDisableRecord(initial, record.instanceKey);
     const pending: PendingOp = {
       op: "disable",
       id: skill.id,
@@ -105,24 +107,44 @@ export async function enableSkill(
   if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
   return withStateLock(deps.statePath, async () => {
     const { livePath, disabledPath } = pathsForSkill(skill);
-    return enableSkillPaths(skill.id, livePath, disabledPath, deps);
+    const instanceKey = skillInstanceKey(skill.id, livePath);
+    return enableSkillPaths(instanceKey, livePath, disabledPath, deps);
   });
 }
 
 export async function enableSkillFromState(
-  id: string,
+  idOrInstanceKey: string,
   deps: ApplyDeps = {},
 ): Promise<{ state: State; alreadyEnabled: boolean; cleanedStateOnly: boolean }> {
   return withStateLock(deps.statePath, async () => {
     const state = await loadState(deps.statePath, deps.host);
-    const rec = state.disabledSkills.find((r) => r.id === id);
-    if (!rec) throw new Error(`unknown skill id: ${id}`);
+    const rec = resolveDisableRecord(state, idOrInstanceKey);
     const { livePath, disabledPath } = pathsForRecord(rec);
     const liveBefore = await fileExists(livePath);
     const disabledBefore = await fileExists(disabledPath);
-    const result = await enableSkillPaths(id, livePath, disabledPath, deps, state);
+    const result = await enableSkillPaths(rec.instanceKey, livePath, disabledPath, deps, state);
     return { ...result, cleanedStateOnly: !liveBefore && !disabledBefore };
   });
+}
+
+function resolveDisableRecord(state: State, idOrInstanceKey: string): DisableRecord {
+  // instanceKey is the canonical identity; fall back to id for backward
+  // compatibility, but refuse to silently pick when an id is ambiguous.
+  const byInstance = state.disabledSkills.find((r) => r.instanceKey === idOrInstanceKey);
+  if (byInstance) return byInstance;
+  const byId = state.disabledSkills.filter((r) => r.id === idOrInstanceKey);
+  if (byId.length === 0) throw new Error(`unknown skill id: ${idOrInstanceKey}`);
+  if (byId.length === 1) return byId[0]!;
+  // `skills enable` accepts the instanceKey as a positional argument (see
+  // cmdEnable). Print one ready-to-copy command per candidate so the user
+  // can resolve the ambiguity without guessing CLI syntax.
+  const examples = byId
+    .map((r) => `  skill-router skills enable ${r.instanceKey}  # ${r.skillMdPath}`)
+    .join("\n");
+  throw new Error(
+    `ambiguous skill id "${idOrInstanceKey}" matches ${byId.length} disabled instances; ` +
+    `re-run with one of:\n${examples}`,
+  );
 }
 
 /**
@@ -146,7 +168,20 @@ export interface ReapplyResult {
 export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResult> {
   return withStateLock(deps.statePath, async () => {
     const loaded = await loadState(deps.statePath, deps.host);
-    const byId = new Map((deps.skills ?? []).map((skill) => [skill.id, skill]));
+    // Primary match key: `(id, canonical path)` so two on-disk instances of
+    // the same logical id never collapse.
+    const byInstance = new Map<string, Skill>();
+    // Secondary fallback: bare id, used only when the inventory and the
+    // state both have exactly one record for that id. That covers the plugin
+    // upgrade case where the path changed but the id is unambiguous.
+    const idCounts = new Map<string, number>();
+    const byId = new Map<string, Skill>();
+    for (const skill of deps.skills ?? []) {
+      const key = skillInstanceKey(skill.id, skill.skillMdPath);
+      byInstance.set(key, skill);
+      byId.set(skill.id, skill);
+      idCounts.set(skill.id, (idCounts.get(skill.id) ?? 0) + 1);
+    }
     const reapplied: string[] = [];
     const orphaned: string[] = [];
     const conflicted: string[] = [];
@@ -166,26 +201,49 @@ export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResul
     }
     if (state !== loaded) await saveState(state, deps.statePath);
 
+    // stateIdCounts is computed after journal reconciliation so the secondary
+    // id fallback uses the cleaned-up disabled-skills list, not the raw load.
+    const stateIdCounts = new Map<string, number>();
+    for (const rec of state.disabledSkills) {
+      stateIdCounts.set(rec.id, (stateIdCounts.get(rec.id) ?? 0) + 1);
+    }
+
     let nextState = state;
 
     for (const rec of state.disabledSkills) {
-      const current = byId.get(rec.id);
+      let current = byInstance.get(rec.instanceKey);
+      if (!current && idCounts.get(rec.id) === 1 && stateIdCounts.get(rec.id) === 1) {
+        // Path-shifting upgrade for a uniquely-named skill: reconcile to the
+        // new path. Multi-instance ids never enter this branch.
+        current = byId.get(rec.id);
+      }
       const paths = current ? pathsForSkill(current) : pathsForRecord(rec);
 
       if (current) {
         const refreshed: DisableRecord = {
           ...rec,
+          // canonical instanceKey is stable across rename so re-derive from
+          // the live path; this also lets old records pick up the new key
+          // shape (if we ever change the hash) on next save.
+          instanceKey: skillInstanceKey(rec.id, paths.disabledPath),
           pluginKey: current.pluginKey,
           skillMdPath: paths.disabledPath,
           skillName: current.name,
           source: current.source,
         };
         if (
+          refreshed.instanceKey !== rec.instanceKey ||
           refreshed.pluginKey !== rec.pluginKey ||
           refreshed.skillMdPath !== rec.skillMdPath ||
           refreshed.skillName !== rec.skillName ||
           refreshed.source !== rec.source
         ) {
+          // If the instanceKey moved (path-shifting upgrade), drop the stale
+          // record first so we don't end up with two entries for the same
+          // logical skill.
+          if (refreshed.instanceKey !== rec.instanceKey) {
+            nextState = removeDisableRecord(nextState, rec.instanceKey);
+          }
           nextState = addDisableRecord(nextState, refreshed);
         }
       }
@@ -244,6 +302,10 @@ async function reconcilePendingOp(
 ): Promise<PendingResolution> {
   const liveExists = await fileExists(pending.livePath);
   const disabledExists = await fileExists(pending.disabledPath);
+  // Derive the instanceKey for record removal. Prefer the pending record's
+  // own instanceKey when present so journal-recovered ops match the exact
+  // record they wrote, then fall back to deriving it from (id, disabledPath).
+  const pendingInstanceKey = pending.record?.instanceKey ?? skillInstanceKey(pending.id, pending.disabledPath);
 
   if (pending.op === "disable") {
     if (disabledExists && !liveExists) {
@@ -256,13 +318,13 @@ async function reconcilePendingOp(
       // disable record existed before the pending op was written, restore it
       // so subsequent `status` runs can still reapply the user's intent.
       return {
-        state: removePendingOp(rollbackDisableRecord(state, pending), pending.id),
+        state: removePendingOp(rollbackDisableRecord(state, pending, pendingInstanceKey), pending.id),
         commit: "rolled-back",
       };
     }
     if (!liveExists && !disabledExists) {
       return {
-        state: removePendingOp(removeDisableRecord(state, pending.id), pending.id),
+        state: removePendingOp(removeDisableRecord(state, pendingInstanceKey), pending.id),
         commit: "rolled-back",
       };
     }
@@ -277,7 +339,7 @@ async function reconcilePendingOp(
     // we MUST NOT leave the disable record in place, otherwise reapply would
     // re-disable the skill on the next status.
     return {
-      state: removePendingOp(removeDisableRecord(state, pending.id), pending.id),
+      state: removePendingOp(removeDisableRecord(state, pendingInstanceKey), pending.id),
       commit: "committed",
     };
   }
@@ -287,7 +349,7 @@ async function reconcilePendingOp(
   }
   if (!liveExists && !disabledExists) {
     return {
-      state: removePendingOp(removeDisableRecord(state, pending.id), pending.id),
+      state: removePendingOp(removeDisableRecord(state, pendingInstanceKey), pending.id),
       commit: "committed",
     };
   }
@@ -333,11 +395,11 @@ export async function findOrphanMarkers(
  * user's previous disable intent survives. Otherwise drop the (uncommitted)
  * record we wrote during the failed attempt.
  */
-function rollbackDisableRecord(state: State, pending: PendingOp): State {
+function rollbackDisableRecord(state: State, pending: PendingOp, instanceKey: string): State {
   if (pending.priorRecord) {
     return addDisableRecord(state, pending.priorRecord);
   }
-  return removeDisableRecord(state, pending.id);
+  return removeDisableRecord(state, instanceKey);
 }
 
 async function fileExists(path: string): Promise<boolean> {
@@ -364,7 +426,7 @@ function pathsForRecord(record: DisableRecord): { livePath: string; disabledPath
 }
 
 async function enableSkillPaths(
-  id: string,
+  instanceKey: string,
   livePath: string,
   disabledPath: string,
   deps: ApplyDeps,
@@ -373,6 +435,13 @@ async function enableSkillPaths(
   const state = preloadedState ?? await loadState(deps.statePath, deps.host);
   const disabledExists = await fileExists(disabledPath);
   const liveExists = await fileExists(livePath);
+
+  // Resolve the human-friendly id (used for the pending journal and error
+  // messages) from the disable record matching this instanceKey. If no
+  // record exists yet (e.g. enable called on a never-disabled skill), fall
+  // back to the instanceKey itself so the journal still has a stable key.
+  const matchingRecord = state.disabledSkills.find((r) => r.instanceKey === instanceKey);
+  const id = matchingRecord?.id ?? instanceKey;
 
   if (liveExists && disabledExists) {
     throw new SkillConflictError(id, livePath);
@@ -402,9 +471,9 @@ async function enableSkillPaths(
     // SKILL.md gone entirely (e.g. plugin uninstalled). Just clean up state.
   }
 
-  // Phase 2: rename completed; remove the disable record and clear the
-  // journal entry together.
-  const committed = removePendingOp(removeDisableRecord(beforeRename, id), id);
+  // Phase 2: rename completed; remove the disable record (by instanceKey
+  // identity) and clear the journal entry together.
+  const committed = removePendingOp(removeDisableRecord(beforeRename, instanceKey), id);
   await saveState(committed, deps.statePath);
   return { state: committed, alreadyEnabled };
 }

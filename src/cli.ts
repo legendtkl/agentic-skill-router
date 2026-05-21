@@ -23,7 +23,7 @@ import {
 } from "./dci.ts";
 import { disableSkill, enableSkill, enableSkillFromState, findOrphanMarkers, reapplyMissing } from "./apply.ts";
 import { loadConfig, parseRouteMode, resolveUnusedForDays } from "./config.ts";
-import { loadState, recordRoutedSkill, saveState, statePathForHost, withStateLock } from "./state.ts";
+import { loadState, recordRoutedSkill, saveState, skillInstanceKey, statePathForHost, withStateLock } from "./state.ts";
 import type { Confidence, HostName, RouteMode, Skill, Suggestion, UsageStat } from "./types.ts";
 
 export async function run(argv: string[]): Promise<number> {
@@ -735,11 +735,15 @@ async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
     return 1;
   }
 
-  const results: Array<{ id: string; alreadyDisabled: boolean }> = [];
+  const results: Array<{ id: string; instanceKey: string; alreadyDisabled: boolean }> = [];
   for (const t of targets) {
     try {
       const r = await disableSkill(t, reason, { statePath, host: host.name });
-      results.push({ id: t.id, alreadyDisabled: r.alreadyDisabled });
+      results.push({
+        id: t.id,
+        instanceKey: skillInstanceKey(t.id, t.skillMdPath),
+        alreadyDisabled: r.alreadyDisabled,
+      });
     } catch (err: unknown) {
       console.error(`failed to disable ${t.id}: ${(err as Error).message}`);
       return 1;
@@ -772,21 +776,27 @@ async function cmdEnable(argv: string[], hostName: HostName): Promise<number> {
   const byId = new Map(skills.map((s) => [s.id, s]));
   const statePath = statePathForHost(host.name);
 
-  const results: Array<{ id: string; alreadyEnabled: boolean }> = [];
-  for (const id of positionals) {
-    const s = byId.get(id);
+  const results: Array<{ id: string; instanceKey: string; alreadyEnabled: boolean }> = [];
+  for (const target of positionals) {
+    const s = byId.get(target);
     try {
+      // Prefer an exact inventory match (covers the common "enable by id"
+      // case without ambiguity). Fall back to a state lookup that accepts
+      // either an `instanceKey` or a unique `id`.
       const r = s
         ? await enableSkill(s, { statePath, host: host.name })
-        : await enableSkillFromState(id, { statePath, host: host.name });
-      results.push({ id, alreadyEnabled: r.alreadyEnabled });
+        : await enableSkillFromState(target, { statePath, host: host.name });
+      const instanceKey = s
+        ? skillInstanceKey(s.id, s.skillMdPath)
+        : target;
+      results.push({ id: s?.id ?? target, instanceKey, alreadyEnabled: r.alreadyEnabled });
     } catch (err) {
       const message = (err as Error).message;
-      if (/unknown skill id/.test(message)) {
+      if (/unknown skill id/.test(message) || /ambiguous skill id/.test(message)) {
         console.error(message);
         return 2;
       }
-      console.error(`failed to enable ${id}: ${message}`);
+      console.error(`failed to enable ${target}: ${message}`);
       return 1;
     }
   }

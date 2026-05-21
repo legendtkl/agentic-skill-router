@@ -70,6 +70,13 @@ export interface Suggestion {
 }
 
 export interface DisableRecord {
+  /**
+   * Stable per-instance identity derived from `{id, skillMdPath}`. Two skills
+   * with the same logical `id` but different on-disk locations are tracked as
+   * separate instances under different `instanceKey` values. Legacy records
+   * loaded from disk are synthesized on the fly when missing.
+   */
+  instanceKey: string;
   id: string;
   pluginKey: string | null;
   skillMdPath: string;
@@ -104,6 +111,8 @@ export interface PendingOp {
 }
 
 export interface RoutedSkillRecord {
+  /** Stable per-instance identity, see {@link DisableRecord.instanceKey}. */
+  instanceKey: string;
   id: string;
   pluginKey: string | null;
   skillMdPath: string;

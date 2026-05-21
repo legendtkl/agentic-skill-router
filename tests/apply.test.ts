@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { disableSkill, enableSkill, enableSkillFromState, findOrphanMarkers, reapplyMissing } from "../src/apply.ts";
-import { addPendingOp, loadState, saveState } from "../src/state.ts";
+import { addPendingOp, loadState, recordRoutedSkill, saveState, skillInstanceKey, withStateLock } from "../src/state.ts";
 import type { PendingOp, Skill, State } from "../src/types.ts";
 
 async function setup(): Promise<{
@@ -654,6 +654,93 @@ test("disableSkill refuses skills flagged outOfRoot and leaves SKILL.md alone", 
   }
 });
 
+async function setupTwoInstances(): Promise<{
+  workdir: string;
+  statePath: string;
+  skillA: Skill;
+  skillB: Skill;
+  cleanup: () => Promise<void>;
+}> {
+  const workdir = await mkdtemp(join(tmpdir(), "skill-router-apply-multi-"));
+  const skillADir = join(workdir, "skills-a/foo");
+  const skillBDir = join(workdir, "skills-b/foo");
+  await mkdir(skillADir, { recursive: true });
+  await mkdir(skillBDir, { recursive: true });
+  const aPath = join(skillADir, "SKILL.md");
+  const bPath = join(skillBDir, "SKILL.md");
+  await writeFile(aPath, "---\nname: foo\ndescription: a\n---\n");
+  await writeFile(bPath, "---\nname: foo\ndescription: b\n---\n");
+  const baseSkill = {
+    id: "user:foo",
+    name: "foo",
+    description: "x",
+    source: "user" as const,
+    pluginKey: null,
+    isDisabled: false,
+    isPluginDisabled: false,
+    canDisable: true,
+    conflict: false,
+  };
+  return {
+    workdir,
+    statePath: join(workdir, "state.json"),
+    skillA: { ...baseSkill, skillMdPath: aPath, description: "a" },
+    skillB: { ...baseSkill, skillMdPath: bPath, description: "b" },
+    cleanup: () => rm(workdir, { recursive: true, force: true }),
+  };
+}
+
+test("two skills sharing an id at different paths are tracked as separate instances", async () => {
+  const { skillA, skillB, statePath, cleanup } = await setupTwoInstances();
+  try {
+    // Disable only instance A.
+    await disableSkill(skillA, "manual", { statePath });
+
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 1);
+    assert.equal(state.disabledSkills[0]!.id, "user:foo");
+    assert.equal(state.disabledSkills[0]!.skillMdPath, skillA.skillMdPath + ".skill-router-disabled");
+    assert.equal(
+      state.disabledSkills[0]!.instanceKey,
+      skillInstanceKey(skillA.id, skillA.skillMdPath),
+    );
+
+    // Route usage to instance B; the records must coexist.
+    await withStateLock(statePath, async () => {
+      const s = await loadState(statePath);
+      await saveState(recordRoutedSkill(s, {
+        id: skillB.id,
+        pluginKey: null,
+        skillMdPath: skillB.skillMdPath,
+        name: skillB.name,
+        query: "use B",
+        confidence: "high",
+        routedAt: "2026-05-21T00:00:00.000Z",
+      }), statePath);
+    });
+
+    const after = await loadState(statePath);
+    assert.equal(after.disabledSkills.length, 1, "disabled A is still present");
+    assert.equal(after.routedSkills?.length, 1, "routed entry for B is recorded");
+    assert.equal(after.routedSkills?.[0]?.skillMdPath, skillB.skillMdPath);
+    assert.notEqual(
+      after.disabledSkills[0]!.instanceKey,
+      after.routedSkills?.[0]?.instanceKey,
+    );
+
+    // Enabling instance A by its own Skill restores A only and leaves B alone.
+    const disabledA = { ...skillA, isDisabled: true, skillMdPath: skillA.skillMdPath + ".skill-router-disabled" };
+    await enableSkill(disabledA, { statePath });
+
+    const final = await loadState(statePath);
+    assert.equal(final.disabledSkills.length, 0);
+    assert.equal(final.routedSkills?.length, 1, "B routed record survives enabling A");
+    assert.equal(final.routedSkills?.[0]?.skillMdPath, skillB.skillMdPath);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("disableSkill checks outOfRoot before canDisable so symlink-escape reports the specific error", async () => {
   // Regression guard: host-level listSkills() now marks out-of-root symlink
   // skills with canDisable=false, so if disableSkill checked canDisable first
@@ -678,6 +765,37 @@ test("disableSkill checks outOfRoot before canDisable so symlink-escape reports 
   }
 });
 
+test("enableSkillFromState refuses to silently pick one of multiple same-id instances", async () => {
+  const { skillA, skillB, statePath, cleanup } = await setupTwoInstances();
+  try {
+    await disableSkill(skillA, "manual", { statePath });
+    await disableSkill(skillB, "manual", { statePath });
+
+    // The ambiguity error must recommend the actual CLI form
+    // (`skills enable <instanceKey>`, positional) — not a non-existent
+    // `--instance-key=<key>` flag. The examples should be copy-pasteable.
+    await assert.rejects(
+      () => enableSkillFromState("user:foo", { statePath }),
+      (err: Error) => {
+        const msg = err.message;
+        assert.match(msg, /ambiguous skill id/i);
+        assert.match(msg, /skill-router skills enable /);
+        assert.doesNotMatch(msg, /--instance-key/);
+        const keyA = skillInstanceKey(skillA.id, skillA.skillMdPath);
+        const keyB = skillInstanceKey(skillB.id, skillB.skillMdPath);
+        assert.match(msg, new RegExp(`skill-router skills enable ${keyA}\\b`));
+        assert.match(msg, new RegExp(`skill-router skills enable ${keyB}\\b`));
+        return true;
+      },
+    );
+    // Both records still on disk.
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 2);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("enableSkill refuses skills flagged outOfRoot", async () => {
   const { skill, statePath, cleanup } = await setup();
   try {
@@ -686,6 +804,26 @@ test("enableSkill refuses skills flagged outOfRoot", async () => {
       () => enableSkill(outOfRoot, { statePath }),
       /resolves outside the skills root/i,
     );
+  } finally {
+    await cleanup();
+  }
+});
+
+test("enableSkillFromState resolves an explicit instanceKey unambiguously", async () => {
+  const { skillA, skillB, statePath, cleanup } = await setupTwoInstances();
+  try {
+    await disableSkill(skillA, "manual", { statePath });
+    await disableSkill(skillB, "manual", { statePath });
+    const keyA = skillInstanceKey(skillA.id, skillA.skillMdPath);
+
+    const result = await enableSkillFromState(keyA, { statePath });
+    assert.equal(result.alreadyEnabled, false);
+    assert.equal(await fileExists(skillA.skillMdPath), true);
+    assert.equal(await fileExists(skillB.skillMdPath + ".skill-router-disabled"), true);
+
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 1);
+    assert.equal(state.disabledSkills[0]!.skillMdPath, skillB.skillMdPath + ".skill-router-disabled");
   } finally {
     await cleanup();
   }
