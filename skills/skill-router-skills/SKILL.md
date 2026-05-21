@@ -1,6 +1,6 @@
 ---
 name: skill-router-skills
-description: Use when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills for Claude Code or Codex. For Codex, also use as a last-resort resolver for locally disabled skills before falling back to general knowledge.
+description: Use when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills across supported hosts.
 metadata:
   skill-router.version: "1"
   skill-router.hosts: "claude-code,codex"
@@ -9,26 +9,22 @@ metadata:
 # skill-router - Agent Skills routing and slimming
 
 Use this skill when the user wants to inspect installed Agent Skills, identify
-unused or stale skills, disable or restore skills, or route a Codex request to a
-locally disabled skill. Keep the workflow host-aware: Claude Code uses skill
-management by default, while Codex also uses disabled-skill routing as a
-last-resort fallback.
+unused or stale skills, disable or restore skills, or route a request to a
+locally disabled skill. The skill instructions are host-neutral; installation
+methods provide the host-specific plugin or slash-command entry point.
 
 ## Locate the CLI
 
-Prefer `${SKILL_ROUTER_CLI}` when it is set. Otherwise locate the bundled
-`skill-router` executable for the active host:
+Prefer `${SKILL_ROUTER_CLI}` when it is set. Otherwise locate the bundled CLI
+next to this skill installation:
 
-- Claude Code: use `${CLAUDE_PLUGIN_ROOT}/bin/skill-router`. If
-  `${CLAUDE_PLUGIN_ROOT}` is unset, compute it as the directory two levels above
-  this `SKILL.md`.
-- Codex: find the newest installed local plugin bundle under
-  `${CODEX_HOME:-$HOME/.codex}/plugins/cache/local/skill-router/*/bin/skill-router`.
-  If that is not available and the current working directory is this repository,
-  use `plugins/codex/bin/skill-router`.
+- Installed plugin: compute the directory two levels above this `SKILL.md`, then
+  append `bin/skill-router`.
+- Repository checkout: use `bin/skill-router`.
 
-Always invoke the CLI by absolute path. Pass `--host=codex` for Codex. Claude
-Code is the default host, but `--host=claude-code` is also accepted.
+Always invoke the CLI by absolute path. Pass `--host=<claude-code|codex>` when
+the target host is not already provided by `${SKILL_ROUTER_HOST}`. The default
+host is `claude-code`.
 
 ## Manage skills
 
@@ -59,17 +55,17 @@ If the user wants to adjust the staleness threshold, mention
 { "unusedForDays": 60, "routeMode": "auto" }
 ```
 
-## Route disabled Codex skills
+## Route disabled skills
 
-In Codex only, use this as a closed last-resort fallback when no enabled skill
-clearly matches and the request looks skill-shaped: operating, querying,
-configuring, deploying, inspecting, or troubleshooting a named tool, API,
-service, dashboard, datastore, CLI, DSL, URL, or platform workflow.
+Use this as a closed last-resort fallback when no enabled skill clearly matches
+and the request looks skill-shaped: operating, querying, configuring, deploying,
+inspecting, or troubleshooting a named tool, API, service, dashboard, datastore,
+CLI, DSL, URL, or platform workflow.
 
 Run the route command before solving from general knowledge:
 
 ```bash
-"<abs-path-to-skill-router>" --host=codex skills route --query "<current user request>" --json
+"<abs-path-to-skill-router>" --host=<claude-code|codex> skills route --query "<current user request>" --json
 ```
 
 If the result has `action: "read-skill-file"` and a non-null `selected`, read
@@ -92,12 +88,11 @@ does not identify a confident disabled-skill match.
 - Never disable a skill without explicit user confirmation.
 - Do not disable a whole plugin when a disabled skill still depends on that
   plugin's MCP tools or app tools.
-- State is stored under `~/.skill-router/state-claude-code.json` or
-  `~/.skill-router/state-codex.json`.
+- State is stored under `~/.skill-router/state-<host>.json`.
 
 ## References
 
-- `references/cli-location.md` - host-specific CLI lookup details.
+- `references/cli-location.md` - CLI lookup details.
 - `references/slimming.md` - listing, suggestions, disable, enable, and status.
-- `references/disabled-routing.md` - Codex route/body verification workflow.
+- `references/disabled-routing.md` - route/body verification workflow.
 - `references/safety.md` - confirmation, protection, and repair rules.

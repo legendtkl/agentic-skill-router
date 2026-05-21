@@ -1,6 +1,5 @@
 node_modules/
-plugins/claude-code/lib/
-plugins/codex/lib/
+lib/
 *.log
 .DS_Store
 *.tmp

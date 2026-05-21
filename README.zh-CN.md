@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-`skill-router` 是 Claude Code 和 Codex 的 Skill 管理 CLI 与插件资产。当前范围是从 `~/github/agent-cleaner` 迁移出来的 skill-only 核心：枚举已安装 skills、读取本地会话记录中的使用情况、建议过期或长期未使用的 skills，并通过重命名 `SKILL.md` 的方式安全禁用或恢复指定 skill。
+`skill-router` 是面向受支持宿主的 Agent Skills 管理 CLI 与安装资产。当前范围是从 `~/github/agent-cleaner` 迁移出来的 skill-only 核心：枚举已安装 skills、读取本地会话记录中的使用情况、建议过期或长期未使用的 skills，并通过重命名 `SKILL.md` 的方式安全禁用或恢复指定 skill。
 
 Subagent 管理不属于本仓库范围。
 
@@ -32,31 +32,31 @@ npm run install:codex-plugin
 
 ## CLI
 
-同一份 bundle 也可以直接作为 CLI 使用。
+同一份顶层 bundle 也可以直接作为 CLI 使用。
 
 Claude Code：
 
 ```bash
-plugins/claude-code/bin/skill-router skills list
-plugins/claude-code/bin/skill-router skills suggest
-plugins/claude-code/bin/skill-router skills disable user:lark-mail --yes
-plugins/claude-code/bin/skill-router skills enable user:lark-mail
-plugins/claude-code/bin/skill-router skills status
+bin/skill-router skills list
+bin/skill-router skills suggest
+bin/skill-router skills disable user:lark-mail --yes
+bin/skill-router skills enable user:lark-mail
+bin/skill-router skills status
 ```
 
 Codex：
 
 ```bash
-plugins/codex/bin/skill-router --host=codex skills list
-plugins/codex/bin/skill-router --host=codex skills suggest --json
-plugins/codex/bin/skill-router --host=codex skills route --query "draft a Lark mail reply" --json
-plugins/codex/bin/skill-router --host=codex skills route --mode=metadata --query "draft a Lark mail reply" --json
-plugins/codex/bin/skill-router --host=codex skills route --mode=body --query "draft a Lark mail reply" --json
-plugins/codex/bin/skill-router --host=codex skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
-plugins/codex/bin/skill-router --host=codex skills dci open dci-abc123def0 --line=20 --window=80 --json
-plugins/codex/bin/skill-router --host=codex skills disable user:codex:lark-mail --yes
-plugins/codex/bin/skill-router --host=codex skills enable user:codex:lark-mail
-plugins/codex/bin/skill-router --host=codex skills status
+bin/skill-router --host=codex skills list
+bin/skill-router --host=codex skills suggest --json
+bin/skill-router --host=codex skills route --query "draft a Lark mail reply" --json
+bin/skill-router --host=codex skills route --mode=metadata --query "draft a Lark mail reply" --json
+bin/skill-router --host=codex skills route --mode=body --query "draft a Lark mail reply" --json
+bin/skill-router --host=codex skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
+bin/skill-router --host=codex skills dci open dci-abc123def0 --line=20 --window=80 --json
+bin/skill-router --host=codex skills disable user:codex:lark-mail --yes
+bin/skill-router --host=codex skills enable user:codex:lark-mail
+bin/skill-router --host=codex skills status
 ```
 
 `--unused-for=<duration>` 支持 `30`、`30d`、`2w`、`3m` 和 `1y`。持久化默认配置位于 `~/.skill-router/config.json`：
@@ -67,14 +67,17 @@ plugins/codex/bin/skill-router --host=codex skills status
 
 ## 工作原理
 
-Skill 分发资产由同一个 Agent Skills 源生成：
+同一个 Agent Skills 源通过多种宿主安装入口分发：
 
-- `shared/skills/skill-router-skills/SKILL.md` 是 source of truth。
-- `shared/skills/skill-router-skills/references/` 存放共享工作流细节。
-- `shared/host-overlays/` 定义 Claude Code 与 Codex 的分发输出。
-- `plugins/*/skills/skill-router-skills/` 和 `plugins/codex/prompts/skill-router-skills.md` 由 `npm run generate:assets` 与 `npm run build` 生成。
+- `skills/skill-router-skills/SKILL.md` 是唯一 source of truth。
+- `skills/skill-router-skills/references/` 存放共享工作流细节。
+- `bin/skill-router` 和 `lib/skill-router.mjs` 是共享 CLI runtime。
+- `plugins/claude-code/` 与 `plugins/codex/` 只提供宿主 manifest 和宿主入口。
+- 安装脚本会把同一份 `skills/`、`bin/` 和 `lib/` 复制到目标宿主的本地插件缓存中。
+- 安装后的 manifest 会被规范化为 `./skills/`，源码和 npm 包中的 manifest 则指向顶层统一 `skills/`。
+- `plugins/codex/prompts/skill-router-skills.md` 是 Codex slash command 的生成 shim。
 
-不要直接编辑生成后的插件 skill 文件。应更新 shared skill 或 host overlay，然后重新生成资产。
+不要创建宿主专属的 `SKILL.md` 副本；应更新统一 skill 源，然后重新安装或构建。
 
 Skill 来源：
 
@@ -109,7 +112,7 @@ Skill 来源：
 - 高置信路由会返回 `action: "read-skill-file"` 和 `selected.skillMdPath`。
 - 返回路径可能以 `SKILL.md.skill-router-disabled` 结尾；它仍然可以作为指令安全读取。
 - 路由使用会写入状态文件，便于后续识别频繁被代理调用的已禁用 skills。
-- 如果 metadata 路由不够确定，Codex 可以使用有界 body-verification 工具：
+- 如果 metadata 路由不够确定，Skill Router 可以使用有界 body-verification 工具：
   - `skills dci budget --json`
   - `skills dci search --query "<request>" [--query "<derived query>"] --json`
   - `skills dci grep --pattern "<phrase>" --json` 用于字面短语搜索；只有明确要使用正则时才加 `--regex`
@@ -179,11 +182,13 @@ src/                         TypeScript source
   apply.ts                   disable / enable / reapply logic
   state.ts                   ~/.skill-router state files
   hosts/{base,claude-code,codex}.ts
-plugins/claude-code/         Claude Code plugin asset
-plugins/codex/               Codex plugin asset and slash command prompt
-shared/                      Shared Agent Skill source and host overlays
+bin/                         共享 CLI wrapper
+lib/                         生成的共享 CLI bundle
+skills/                      统一 Agent Skill 源
+plugins/claude-code/         Claude Code plugin manifest
+plugins/codex/               Codex plugin manifest and slash command prompt
 scripts/                     build / install / uninstall helpers
 tests/                       node:test suites and fixtures
 ```
 
-`plugins/*/lib/` 下的 generated bundles 是构建产物，已被 gitignore。生成的 skill / prompt assets 会被跟踪，以便 fresh checkout 后可直接安装插件；请重新生成它们，而不是手工编辑。
+`lib/` 下的 generated bundle 是构建产物，已被 gitignore。Codex slash prompt 是生成资产，以便 fresh checkout 后可直接安装插件；请重新生成它，而不是手工编辑。
