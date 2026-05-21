@@ -228,6 +228,20 @@ npm pack --dry-run
 Networked end-to-end suites (`npm run test:e2e`, `npm run test:e2e:codex`,
 `npm run test:e2e:claude`) are not part of CI; run them locally when relevant.
 
+To compare routing thresholds before and after a change, run the evaluation
+harness:
+
+```bash
+npm run eval:route                # prints markdown + JSON summary, mode=auto
+npm run eval:route -- --mode=metadata
+npm run eval:route -- --json      # JSON only, easier to diff
+```
+
+Fixture: `tests/fixtures/route-cases.json`. Cases cover Chinese, English, API
+names, product names, umbrella vs specific skills, and multi-domain keyword
+piles. The script is informational — failing metrics do not fail the command,
+and `eval:route` is intentionally not wired into `npm test`.
+
 Layout:
 
 ```text

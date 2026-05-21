@@ -1,0 +1,194 @@
+{
+  "$schema": "see scripts/eval-route.mjs for schema",
+  "description": "Route evaluation fixture. Skills are synthetic but mirror real installed-skill metadata shapes (matching tests/fixtures/routing-benchmark.json and skills/skill-router-skills). The eval script builds a Skill[] catalog from `skills` and runs each query through the selected route mode.",
+  "skills": [
+    {
+      "id": "user:codex:lark-mail",
+      "name": "lark-mail",
+      "description": "发送、回复、搜索飞书邮件",
+      "metadata": {
+        "name": "lark-mail",
+        "description": "发送、回复、搜索飞书邮件",
+        "aliases": ["飞书邮箱", "飞书邮件", "lark mail", "feishu mail"],
+        "domains": ["lark", "feishu", "email"],
+        "intents": ["send_mail", "reply_mail", "search_mail"]
+      }
+    },
+    {
+      "id": "user:codex:lark-task",
+      "name": "lark-task",
+      "description": "管理飞书任务和待办",
+      "metadata": {
+        "name": "lark-task",
+        "description": "管理飞书任务和待办",
+        "aliases": ["飞书任务"],
+        "domains": ["lark", "feishu"],
+        "intents": ["create_task", "update_task"]
+      }
+    },
+    {
+      "id": "user:codex:lark-approval",
+      "name": "lark-approval",
+      "description": "飞书审批：审批实例、审批任务管理。",
+      "metadata": {
+        "name": "lark-approval",
+        "description": "飞书审批：审批实例、审批任务管理。",
+        "aliases": ["飞书审批", "lark approval"],
+        "domains": ["lark", "feishu"],
+        "intents": ["approve_instance", "list_approvals"]
+      }
+    },
+    {
+      "id": "user:codex:bytedance-es",
+      "name": "bytedance-es",
+      "description": "Query Elasticsearch via Kibana console API: execute ES DSL queries, search indices, retrieve documents, and get ES index mapping.",
+      "metadata": {
+        "name": "bytedance-es",
+        "description": "Query Elasticsearch via Kibana console API: execute ES DSL queries, search indices, retrieve documents, and get ES index mapping.",
+        "aliases": ["Elasticsearch", "ES"],
+        "tools": ["Kibana console API", "Elasticsearch DSL"],
+        "domains": ["bytedance", "search"],
+        "intents": ["execute_es_dsl", "get_index_mapping"]
+      }
+    },
+    {
+      "id": "user:codex:bytedance-auth",
+      "name": "bytedance-auth",
+      "description": "Operate bytedcli authentication flows: login, logout, status, user info, SSO JWT, and ByteCloud Auth token.",
+      "metadata": {
+        "name": "bytedance-auth",
+        "description": "Operate bytedcli authentication flows: login, logout, status, user info, SSO JWT, and ByteCloud Auth token.",
+        "aliases": ["bytedcli auth", "bytedance auth"],
+        "tools": ["bytedcli auth"],
+        "domains": ["bytedance"],
+        "intents": ["login", "logout", "status", "get_user_info", "prepare_sso_jwt"]
+      }
+    },
+    {
+      "id": "user:codex:bytedcli",
+      "name": "bytedcli",
+      "description": "Unified skill for the bytedcli command surface. Covers auth/tokens, ES, Cache, BMQ, TCC, RDS, Hive, Dorado, Aeolus, Codebase, Devflow, TOS, ENV, Neptune, Log, APM, and many internal platforms. Router skill that routes to subskills.",
+      "metadata": {
+        "name": "bytedcli",
+        "description": "Unified skill for the bytedcli command surface. Covers auth/tokens, ES, Cache, BMQ, TCC, RDS, Hive, Dorado, Aeolus, Codebase, Devflow, TOS, ENV, Neptune, Log, APM, and many internal platforms. Router skill that routes to subskills."
+      }
+    },
+    {
+      "id": "user:codex:tea-data-query",
+      "name": "tea-data-query",
+      "description": "TEA 数据查询工具。输入一个 TEA 的 URL 链接，自动解析 project_id、dashboard_id 或 report_id，通过 DataOpen API 查询并展示数据。支持 Dashboard 和 Report。",
+      "metadata": {
+        "name": "tea-data-query",
+        "description": "TEA 数据查询工具。输入一个 TEA 的 URL 链接，自动解析 project_id、dashboard_id 或 report_id，通过 DataOpen API 查询并展示数据。支持 Dashboard 和 Report。",
+        "aliases": ["TEA"],
+        "tools": ["DataOpen API"],
+        "intents": ["query_dashboard", "query_report"]
+      }
+    },
+    {
+      "id": "user:codex:skill-router-skills",
+      "name": "skill-router-skills",
+      "description": "Use when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills across supported hosts.",
+      "metadata": {
+        "name": "skill-router-skills",
+        "description": "Use when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills across supported hosts.",
+        "aliases": ["skill router", "skill-router"],
+        "domains": ["agent-skills"],
+        "intents": ["audit_skills", "disable_skill", "restore_skill", "route_skill"]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "exact-name-en",
+      "query": "lark mail",
+      "expected": "user:codex:lark-mail",
+      "shouldSelect": true,
+      "category": "exact-name"
+    },
+    {
+      "name": "alias-cjk",
+      "query": "飞书发邮件给张三",
+      "expected": "user:codex:lark-mail",
+      "shouldSelect": true,
+      "category": "alias-cjk"
+    },
+    {
+      "name": "alias-cjk-paraphrase",
+      "query": "帮我用飞书邮箱回复邮件",
+      "expected": "user:codex:lark-mail",
+      "shouldSelect": true,
+      "category": "alias-cjk"
+    },
+    {
+      "name": "approval-distinctive-cjk",
+      "query": "查询飞书审批实例",
+      "expected": "user:codex:lark-approval",
+      "shouldSelect": true,
+      "category": "product-cjk"
+    },
+    {
+      "name": "tool-api-multi-domain",
+      "query": "通过 Kibana console API 执行 Elasticsearch DSL 查询并获取 index mapping",
+      "expected": "user:codex:bytedance-es",
+      "shouldSelect": true,
+      "category": "metadata-tool-intent"
+    },
+    {
+      "name": "api-name-en",
+      "query": "use Kibana console API to get index mapping",
+      "expected": "user:codex:bytedance-es",
+      "shouldSelect": true,
+      "category": "api-name"
+    },
+    {
+      "name": "umbrella-vs-specific",
+      "query": "操作 bytedcli auth login status 获取 user info",
+      "expected": "user:codex:bytedance-auth",
+      "shouldSelect": true,
+      "category": "umbrella-vs-specific"
+    },
+    {
+      "name": "product-name-skill-router",
+      "query": "audit installed skill router skills and disable unused ones",
+      "expected": "user:codex:skill-router-skills",
+      "shouldSelect": true,
+      "category": "product-name"
+    },
+    {
+      "name": "negative-generic-cjk",
+      "query": "查询 API 工具",
+      "expected": null,
+      "shouldSelect": false,
+      "category": "negative-generic"
+    },
+    {
+      "name": "negative-generic-en",
+      "query": "search data tool",
+      "expected": null,
+      "shouldSelect": false,
+      "category": "negative-generic"
+    },
+    {
+      "name": "negative-multi-domain",
+      "query": "task calendar approval mail",
+      "expected": null,
+      "shouldSelect": false,
+      "category": "multi-domain-keyword-pile"
+    },
+    {
+      "name": "negative-single-cjk-cue",
+      "query": "飞书",
+      "expected": null,
+      "shouldSelect": false,
+      "category": "single-generic-cue"
+    },
+    {
+      "name": "negative-single-en-cue",
+      "query": "lark",
+      "expected": null,
+      "shouldSelect": false,
+      "category": "single-generic-cue"
+    }
+  ]
+}
