@@ -30,8 +30,13 @@ export async function disableSkill(
   reason: string,
   deps: ApplyDeps = {},
 ): Promise<{ state: State; alreadyDisabled: boolean }> {
-  if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
+  // Check outOfRoot before canDisable so that the more specific
+  // SkillOutOfRootError is surfaced for symlink-escape cases, mirroring the
+  // host-level `disable()` ordering. Out-of-root skills now also report
+  // canDisable=false, but reporting "builtin" for them would mask the real
+  // remediation path.
   if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
+  if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
 
   return withStateLock(deps.statePath, async () => {
     const { livePath, disabledPath } = pathsForSkill(skill);

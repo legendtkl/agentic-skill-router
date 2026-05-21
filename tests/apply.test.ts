@@ -654,6 +654,30 @@ test("disableSkill refuses skills flagged outOfRoot and leaves SKILL.md alone", 
   }
 });
 
+test("disableSkill checks outOfRoot before canDisable so symlink-escape reports the specific error", async () => {
+  // Regression guard: host-level listSkills() now marks out-of-root symlink
+  // skills with canDisable=false, so if disableSkill checked canDisable first
+  // it would surface a misleading "builtin" error and hide the real
+  // remediation path. The outOfRoot guard must fire first to match the
+  // host-level disable() ordering.
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const outOfRootAndNotDisableable: Skill = {
+      ...skill,
+      outOfRoot: true,
+      canDisable: false,
+    };
+    await assert.rejects(
+      () => disableSkill(outOfRootAndNotDisableable, "x", { statePath }),
+      (err: Error) =>
+        err.name === "SkillOutOfRootError" &&
+        /resolves outside the skills root/i.test(err.message),
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
 test("enableSkill refuses skills flagged outOfRoot", async () => {
   const { skill, statePath, cleanup } = await setup();
   try {
