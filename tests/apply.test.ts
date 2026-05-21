@@ -634,3 +634,35 @@ test("disable on builtin throws BuiltinSkillCannotDisableError", async () => {
     await cleanup();
   }
 });
+
+test("disableSkill refuses skills flagged outOfRoot and leaves SKILL.md alone", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const outOfRoot: Skill = { ...skill, outOfRoot: true };
+    await assert.rejects(
+      () => disableSkill(outOfRoot, "x", { statePath }),
+      /resolves outside the skills root/i,
+    );
+    // The original SKILL.md must still be live; nothing was renamed.
+    assert.equal(await fileExists(skill.skillMdPath), true);
+    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), false);
+    // No state record should have been written.
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("enableSkill refuses skills flagged outOfRoot", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const outOfRoot: Skill = { ...skill, outOfRoot: true, isDisabled: true };
+    await assert.rejects(
+      () => enableSkill(outOfRoot, { statePath }),
+      /resolves outside the skills root/i,
+    );
+  } finally {
+    await cleanup();
+  }
+});

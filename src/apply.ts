@@ -11,7 +11,7 @@ import {
   saveState,
   withStateLock,
 } from "./state.ts";
-import { BuiltinSkillCannotDisableError, SkillConflictError } from "./types.ts";
+import { BuiltinSkillCannotDisableError, SkillConflictError, SkillOutOfRootError } from "./types.ts";
 import type { DisableRecord, HostName, PendingOp, Skill, State } from "./types.ts";
 
 export interface ApplyDeps {
@@ -31,6 +31,7 @@ export async function disableSkill(
   deps: ApplyDeps = {},
 ): Promise<{ state: State; alreadyDisabled: boolean }> {
   if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
+  if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
 
   return withStateLock(deps.statePath, async () => {
     const { livePath, disabledPath } = pathsForSkill(skill);
@@ -96,6 +97,7 @@ export async function enableSkill(
   skill: Skill,
   deps: ApplyDeps = {},
 ): Promise<{ state: State; alreadyEnabled: boolean }> {
+  if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
   return withStateLock(deps.statePath, async () => {
     const { livePath, disabledPath } = pathsForSkill(skill);
     return enableSkillPaths(skill.id, livePath, disabledPath, deps);

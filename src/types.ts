@@ -33,6 +33,13 @@ export interface Skill {
   canDisable: boolean;
   /** both SKILL.md and SKILL.md.skill-router-disabled exist — needs repair */
   conflict: boolean;
+  /**
+   * True when the skill directory is a symlink whose realpath resolves outside
+   * the skills root that contained it. The CLI still lists such skills for
+   * visibility, but disable/enable refuses to act on them to avoid renaming
+   * files in user directories the agent was never granted access to.
+   */
+  outOfRoot?: boolean;
 }
 
 export interface UsageStat {
@@ -133,5 +140,25 @@ export class SkillConflictError extends Error {
       `live SKILL.md if you want it disabled) and retry.`,
     );
     this.name = "SkillConflictError";
+  }
+}
+
+/**
+ * Raised when disable/enable is asked to act on a skill whose realpath
+ * resolves outside the skills root that discovered it (e.g. a symlink
+ * targeting a directory the user did not put under their skills root).
+ * Renaming through such a symlink would silently mutate the link target
+ * elsewhere on the filesystem, which is almost never what the user wants.
+ */
+export class SkillOutOfRootError extends Error {
+  constructor(skillId: string, skillMdPath: string) {
+    super(
+      `Refusing to modify skill "${skillId}": its SKILL.md (${skillMdPath}) ` +
+      `resolves outside the skills root that discovered it. Skills that live ` +
+      `via a symlink whose target is outside the skills root are visible but ` +
+      `cannot be disabled or enabled by skill-router. Move the skill into a ` +
+      `skills root (or replace the symlink with a real directory) and retry.`,
+    );
+    this.name = "SkillOutOfRootError";
   }
 }
