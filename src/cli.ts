@@ -815,15 +815,18 @@ async function cmdEnable(argv: string[], hostName: HostName): Promise<number> {
         //    the canonical "unknown skill id" error.
         const keys = instanceKeysById.get(target);
         if (keys && keys.size > 1) {
+          // `skills enable` takes the instanceKey as a positional argument; the
+          // suggestion lines must be a ready-to-paste invocation so the user
+          // doesn't have to guess CLI syntax (there is no --instance-key flag).
           const lines = [...keys]
             .map((k) => {
               const c = candidatesByInstanceKey.get(k)!;
-              return `  ${k}  (${c.description})`;
+              return `  skill-router skills enable ${k}  # ${c.description}`;
             })
             .join("\n");
           console.error(
             `ambiguous skill id "${target}" matches ${keys.size} instances; ` +
-            `pass the instanceKey to choose one of:\n${lines}`,
+            `re-run with one of:\n${lines}`,
           );
           return 2;
         }

@@ -444,7 +444,12 @@ test("CLI enable refuses to silently pick when two disabled instances share an i
     assert.ok(err, "expected ambiguous enable to fail");
     const e = err as { code?: number; stderr?: string };
     assert.equal(e.code, 2);
-    assert.match(e.stderr ?? "", /ambiguous skill id/i);
+    const stderr = e.stderr ?? "";
+    assert.match(stderr, /ambiguous skill id/i);
+    // The remediation hint MUST be the actual supported CLI syntax — a
+    // positional instanceKey, NOT a non-existent `--instance-key` flag.
+    assert.match(stderr, /skill-router skills enable /);
+    assert.doesNotMatch(stderr, /--instance-key/);
 
     // Both records survive: nothing was renamed silently.
     const after = JSON.parse(await readFile(statePath, "utf8")) as {

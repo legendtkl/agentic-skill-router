@@ -288,6 +288,7 @@ test("status recovers a disable where rename completed but state save crashed", 
       disabledPath,
       startedAt: "2026-05-22T00:00:00.000Z",
       record: {
+        instanceKey: skillInstanceKey(skill.id, disabledPath),
         id: skill.id,
         pluginKey: skill.pluginKey,
         skillMdPath: disabledPath,
@@ -353,6 +354,7 @@ test("status rolls back a disable pending op when both files are absent", async 
   try {
     await rm(skill.skillMdPath);
     const record = {
+      instanceKey: skillInstanceKey(skill.id, skill.skillMdPath + ".skill-router-disabled"),
       id: skill.id,
       pluginKey: skill.pluginKey,
       skillMdPath: skill.skillMdPath + ".skill-router-disabled",
@@ -504,6 +506,7 @@ test("status leaves a split-brain pending op alone for manual repair", async () 
       disabledPath,
       startedAt: "2026-05-22T00:00:00.000Z",
       record: {
+        instanceKey: skillInstanceKey(skill.id, disabledPath),
         id: skill.id,
         pluginKey: skill.pluginKey,
         skillMdPath: disabledPath,
