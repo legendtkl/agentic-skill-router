@@ -10,11 +10,12 @@
  *
  * Idempotent: re-running upgrades the install in place.
  */
-import { chmod, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { isManagedUnchanged } from "./prompt-marker.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
@@ -92,6 +93,26 @@ async function enablePlugin() {
 
 async function installSlashCommand() {
   await mkdir(dirname(promptPath), { recursive: true });
+
+  let existing;
+  try {
+    existing = await readFile(promptPath, "utf8");
+  } catch (err) {
+    if (err && /** @type {NodeJS.ErrnoException} */(err).code !== "ENOENT") throw err;
+  }
+
+  if (existing !== undefined && !isManagedUnchanged(existing)) {
+    const backupPath = `${promptPath}.user-modified.bak`;
+    await copyFile(promptPath, backupPath);
+    process.stderr.write(
+      `! ${promptPath} has local edits; keeping your version.\n` +
+      `  A backup of the current file was written to ${backupPath}.\n` +
+      `  To install the latest managed slash command, remove or rename the file and re-run install.\n`,
+    );
+    log(`  skipped slash command /skill-router:skills (user-modified)`);
+    return;
+  }
+
   await cp(promptSrc, promptPath);
   log(`  installed slash command /skill-router:skills`);
 }
