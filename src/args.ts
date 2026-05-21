@@ -4,23 +4,37 @@ import { parseArgs, type ParseArgsConfig } from "node:util";
  * Shared CLI argument-parsing helpers used by `src/cli.ts`.
  *
  * The whole CLI uses {@link parseStrict} so that mistyped options
- * (`--qurey`, `--jsoon`, etc.) fail fast with exit code 2 and a clear
- * "unknown option" message that includes the command name and an
- * optional did-you-mean suggestion.
+ * (`--qurey`, `--jsoon`, etc.) or other malformed flag usage fails fast
+ * with exit code 2 and a clear message that includes the command name.
  */
 
-export class UnknownOptionError extends Error {
+/**
+ * Base error class for any `node:util.parseArgs` strict-mode failure that
+ * should be presented to the user as a CLI usage error (exit code 2),
+ * not as an uncaught exception with a stack trace.
+ */
+export class ParseArgsError extends Error {
+  readonly commandName: string;
+  readonly code: string;
+
+  constructor(commandName: string, code: string, message: string) {
+    super(message);
+    this.name = "ParseArgsError";
+    this.commandName = commandName;
+    this.code = code;
+  }
+}
+
+export class UnknownOptionError extends ParseArgsError {
   readonly optionName: string;
   readonly suggestion?: string;
-  readonly commandName: string;
 
   constructor(commandName: string, optionName: string, suggestion?: string) {
     const base = `unknown option \`${optionName}\``;
     const tail = suggestion ? `. Did you mean \`${suggestion}\`?` : "";
-    super(`${base}${tail}`);
+    super(commandName, "ERR_PARSE_ARGS_UNKNOWN_OPTION", `${base}${tail}`);
     this.name = "UnknownOptionError";
     this.optionName = optionName;
-    this.commandName = commandName;
     if (suggestion !== undefined) this.suggestion = suggestion;
   }
 }
@@ -38,11 +52,11 @@ export interface ParseStrictOptions<C extends ParseArgsConfig> {
 }
 
 /**
- * Wraps {@link parseArgs} with `strict: true` and rethrows
- * `ERR_PARSE_ARGS_UNKNOWN_OPTION` as an {@link UnknownOptionError} carrying
- * a did-you-mean suggestion based on Levenshtein distance.
+ * Wraps {@link parseArgs} with `strict: true` and converts any
+ * `ERR_PARSE_ARGS_*` failure into a {@link ParseArgsError} (or its
+ * {@link UnknownOptionError} subclass with a did-you-mean suggestion).
  *
- * Other parseArgs errors propagate unchanged so misuses surface verbatim.
+ * Non-parseArgs errors propagate unchanged.
  */
 export function parseStrict<C extends ParseArgsConfig>(
   opts: ParseStrictOptions<C>,
@@ -51,33 +65,46 @@ export function parseStrict<C extends ParseArgsConfig>(
   try {
     return parseArgs<C>({ ...opts.config, strict: true });
   } catch (err) {
-    if (isUnknownOptionError(err)) {
+    if (!isParseArgsError(err)) throw err;
+    if (err.code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
       const optionName = extractOptionName(err.message);
       const suggestion = optionName ? suggestOption(optionName, known) : undefined;
       throw new UnknownOptionError(opts.commandName, optionName ?? "<unknown>", suggestion);
     }
-    throw err;
+    throw new ParseArgsError(opts.commandName, err.code, err.message);
   }
 }
 
 /**
- * Writes a friendly error message and returns the standard exit code (2)
- * for "incorrect usage" failures.
+ * Writes a friendly error message for any parseArgs strict-mode failure
+ * and returns the standard exit code (2) for "incorrect usage" errors.
  */
-export function reportUnknownOption(err: UnknownOptionError): number {
-  const tail = err.suggestion ? ` Did you mean \`${err.suggestion}\`?` : "";
+export function reportParseArgsError(err: ParseArgsError): number {
+  if (err instanceof UnknownOptionError) {
+    const tail = err.suggestion ? ` Did you mean \`${err.suggestion}\`?` : "";
+    process.stderr.write(
+      `error: unknown option \`${err.optionName}\`.${tail} (try \`${err.commandName} --help\`)\n`,
+    );
+    return 2;
+  }
   process.stderr.write(
-    `error: unknown option \`${err.optionName}\`.${tail} (try \`${err.commandName} --help\`)\n`,
+    `error: ${err.message} (try \`${err.commandName} --help\`)\n`,
   );
   return 2;
 }
 
-function isUnknownOptionError(err: unknown): err is Error & { code: string } {
-  return (
-    err instanceof Error &&
-    "code" in err &&
-    (err as { code?: unknown }).code === "ERR_PARSE_ARGS_UNKNOWN_OPTION"
-  );
+/**
+ * @deprecated Use {@link reportParseArgsError} which also handles other
+ * `ERR_PARSE_ARGS_*` codes. Kept for backwards compatibility.
+ */
+export function reportUnknownOption(err: UnknownOptionError): number {
+  return reportParseArgsError(err);
+}
+
+function isParseArgsError(err: unknown): err is Error & { code: string } {
+  if (!(err instanceof Error) || !("code" in err)) return false;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === "string" && code.startsWith("ERR_PARSE_ARGS_");
 }
 
 function extractOptionName(message: string): string | undefined {

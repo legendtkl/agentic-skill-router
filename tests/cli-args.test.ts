@@ -241,6 +241,85 @@ test("skills status rejects unknown option", async () => {
   }
 });
 
+async function expectParseArgsUsageError(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  expected: { stderrMatch: RegExp; commandName: string },
+): Promise<void> {
+  let caught: unknown;
+  try {
+    await runCli(args, env);
+  } catch (err) {
+    caught = err;
+  }
+  assert.ok(caught, `expected exit code 2 for ${args.join(" ")}`);
+  const e = caught as { code?: number; stderr?: string };
+  assert.equal(e.code, 2, `expected exit code 2, got ${e.code} for ${args.join(" ")}`);
+  const stderr = e.stderr ?? "";
+  assert.match(stderr, expected.stderrMatch, `stderr should match ${expected.stderrMatch} for ${args.join(" ")}; got: ${stderr}`);
+  assert.ok(
+    stderr.includes(expected.commandName),
+    `stderr should mention the command path ${expected.commandName}; got: ${stderr}`,
+  );
+  assert.doesNotMatch(
+    stderr,
+    /\sat\s.*\(.*:\d+:\d+\)/,
+    `stderr must not include a stack trace for ${args.join(" ")}; got: ${stderr}`,
+  );
+}
+
+test("skills list rejects --json=1 (boolean flag with value) with exit code 2", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    await expectParseArgsUsageError(
+      ["skills", "list", "--json=1"],
+      fake.env,
+      {
+        stderrMatch: /does not take an argument/i,
+        commandName: "skill-router skills list",
+      },
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills route rejects --query with missing value with exit code 2", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    // --query at end of argv with no value triggers
+    // ERR_PARSE_ARGS_INVALID_OPTION_VALUE ("argument missing").
+    await expectParseArgsUsageError(
+      ["skills", "route", "--query"],
+      fake.env,
+      {
+        stderrMatch: /argument missing/i,
+        commandName: "skill-router skills route",
+      },
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills list rejects unexpected positional with exit code 2", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    // `skills list` does not set allowPositionals, so extra positionals
+    // trigger ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL.
+    await expectParseArgsUsageError(
+      ["skills", "list", "unexpected-arg"],
+      fake.env,
+      {
+        stderrMatch: /does not take positional arguments|unexpected argument/i,
+        commandName: "skill-router skills list",
+      },
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("skills dci grep / find / open / inspect / read / select reject unknown option", async () => {
   const fake = await makeFakeCodexUser();
   try {

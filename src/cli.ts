@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseStrict, reportUnknownOption, UnknownOptionError } from "./args.ts";
+import { ParseArgsError, parseStrict, reportParseArgsError } from "./args.ts";
 import { ClaudeCodeHost } from "./hosts/claude-code.ts";
 import { CodexHost } from "./hosts/codex.ts";
 import type { Host } from "./hosts/base.ts";
@@ -59,8 +59,8 @@ export async function run(argv: string[]): Promise<number> {
     console.error(`unknown command: ${command}`);
     return usage(2);
   } catch (err) {
-    if (err instanceof UnknownOptionError) {
-      return reportUnknownOption(err);
+    if (err instanceof ParseArgsError) {
+      return reportParseArgsError(err);
     }
     throw err;
   }
