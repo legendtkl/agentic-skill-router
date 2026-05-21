@@ -1,4 +1,4 @@
-import { lookupUsage, lookupUsageStrict } from "./usage.ts";
+import { isPluginShortAmbiguous, lookupUsage, lookupUsageStrict } from "./usage.ts";
 import type { Skill, Suggestion, UsageStat } from "./types.ts";
 
 /**
@@ -55,23 +55,31 @@ export function suggest(
     // Strict lookup: don't fall through to a sibling's bare-name usage when
     // multiple skills share the same name (would mask a true never-used).
     const u = lookupUsageStrict(skill, usage, skills);
+    const ambiguous = isPluginShortAmbiguous(skill, skills);
     if (!u || u.callCount === 0 || !u.lastUsed) {
-      out.push({
+      const details = ambiguous
+        ? "no invocations found in transcripts (plugin-short attribution ambiguous; usage recorded under the bare 'pluginShort:name' form is shared with another plugin skill of the same name)"
+        : "no invocations found in transcripts";
+      const sugg: Suggestion = {
         skill,
         reason: "never-used",
-        confidence: "high",
-        details: "no invocations found in transcripts",
-      });
+        confidence: ambiguous ? "low" : "high",
+        details,
+      };
+      if (ambiguous) sugg.attributionAmbiguous = true;
+      out.push(sugg);
       continue;
     }
     if (u.lastUsed < cutoff) {
       const days = Math.floor((now.getTime() - u.lastUsed.getTime()) / (24 * 60 * 60 * 1000));
-      out.push({
+      const sugg: Suggestion = {
         skill,
         reason: "stale",
         confidence: "medium",
         details: `last used ${days} days ago (${u.callCount} total calls)`,
-      });
+      };
+      if (ambiguous) sugg.attributionAmbiguous = true;
+      out.push(sugg);
     }
   }
 
@@ -79,8 +87,8 @@ export function suggest(
   out.sort((a, b) => {
     const cw = confidenceWeight(b.confidence) - confidenceWeight(a.confidence);
     if (cw !== 0) return cw;
-    const aLast = lookupUsage(a.skill, usage)?.lastUsed?.getTime() ?? 0;
-    const bLast = lookupUsage(b.skill, usage)?.lastUsed?.getTime() ?? 0;
+    const aLast = lookupUsage(a.skill, usage, skills)?.lastUsed?.getTime() ?? 0;
+    const bLast = lookupUsage(b.skill, usage, skills)?.lastUsed?.getTime() ?? 0;
     return aLast - bLast;
   });
   return out;
