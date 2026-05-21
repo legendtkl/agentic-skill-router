@@ -197,8 +197,18 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
     const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "list", "--json"], { env });
-    const listed = JSON.parse(list.stdout) as Array<{ id: string; lastUsed: string | null }>;
+    const listed = JSON.parse(list.stdout) as Array<{
+      id: string;
+      canDisable: boolean;
+      description: string;
+      lastUsed: string | null;
+    }>;
     assert.ok(listed.some((s) => s.id === "user:codex:brand" && s.lastUsed === "2026-04-20T09:00:00.000Z"));
+    assert.ok(listed.some((s) => s.id === "project:codex:.:project-root" && s.description === "Project root skill"));
+    assert.ok(
+      listed.some((s) => s.id === "project:codex:packages:project-package" && s.description === "Project package skill"),
+    );
+    assert.ok(listed.some((s) => s.id === "builtin:codex-admin:admin-policy" && s.canDisable === false));
 
     const suggest = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "suggest", "--unused-for=365d", "--json"], { env });
     const suggestions = JSON.parse(suggest.stdout) as Array<{ id: string }>;
@@ -217,6 +227,79 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
 
     await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "enable", "user:codex:unused-local"], { env });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI refuses to disable Codex admin skills", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    await assert.rejects(
+      () => execFileAsync(
+        process.execPath,
+        ["--import", "tsx", cli, "--host=codex", "skills", "disable", "builtin:codex-admin:admin-policy"],
+        { env },
+      ),
+      (err: unknown) => {
+        assert.match((err as { stderr?: string }).stderr ?? "", /Cannot disable builtin skill/);
+        return true;
+      },
+    );
+    assert.equal(await fileExists(join(fake.adminSkillsRoot, "admin-policy", "SKILL.md")), true);
+    assert.equal(await fileExists(join(fake.adminSkillsRoot, "admin-policy", "SKILL.md.skill-router-disabled")), false);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI status scans Codex project and admin roots for orphan disabled markers", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const projectRoot = join(fake.root, "project");
+    await writeSkill(
+      join(projectRoot, ".agents", "skills", "orphan-project"),
+      "orphan-project",
+      "Project orphan marker",
+      "",
+      true,
+    );
+    await writeSkill(
+      join(fake.adminSkillsRoot, "orphan-admin"),
+      "orphan-admin",
+      "Admin orphan marker",
+      "",
+      true,
+    );
+
+    const env = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "status", "--json"], { env });
+    const parsedStatus = JSON.parse(status.stdout) as { orphanMarkers: string[] };
+    assert.ok(
+      parsedStatus.orphanMarkers.some((p) => p.endsWith("project/.agents/skills/orphan-project/SKILL.md.skill-router-disabled")),
+    );
+    assert.ok(
+      parsedStatus.orphanMarkers.some((p) => p.endsWith("etc/codex/skills/orphan-admin/SKILL.md.skill-router-disabled")),
+    );
   } finally {
     await fake.cleanup();
   }

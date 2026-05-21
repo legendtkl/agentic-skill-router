@@ -1,12 +1,16 @@
+import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, rm, cp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { ClaudeCodeHost } from "../src/hosts/claude-code.ts";
 
+const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = dirname(__dirname);
 const FIXTURE_SKILLS = join(__dirname, "fixtures/skills");
 
 async function makeFakeClaudeHome(): Promise<{ home: string; cleanup: () => Promise<void> }> {
@@ -122,6 +126,34 @@ test("listSkills enumerates Claude project skill roots from cwd to repo root", a
 
     const roots = await host.skillRoots();
     assert.ok(roots.some((root) => root.endsWith(".claude/skills")));
+  } finally {
+    await cleanupProject();
+    await cleanupHome();
+  }
+});
+
+test("CLI list --json discovers Claude project skill roots from SKILL_ROUTER_CWD", async () => {
+  const { home, cleanup: cleanupHome } = await makeFakeClaudeHome();
+  const { cwd, cleanup: cleanupProject } = await makeFakeProject();
+  try {
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+    const result = await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "list", "--json"],
+      {
+        env: {
+          ...process.env,
+          CLAUDE_HOME: home,
+          SKILL_ROUTER_CWD: cwd,
+        },
+      },
+    );
+    const listed = JSON.parse(result.stdout) as Array<{ id: string; description: string }>;
+
+    assert.ok(listed.some((s) => s.id === "project:claude:.:root-skill" && s.description === "root project skill"));
+    assert.ok(
+      listed.some((s) => s.id === "project:claude:packages:package-skill" && s.description === "nested project skill"),
+    );
   } finally {
     await cleanupProject();
     await cleanupHome();
