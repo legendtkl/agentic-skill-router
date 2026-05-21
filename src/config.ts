@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { Config, RouteMode } from "./types.ts";
@@ -229,11 +229,17 @@ interface LockOwner {
 
 /**
  * Serialize a read-modify-write on the config file via a sibling `.lock`
- * file. Acquires by opening with `O_CREAT | O_EXCL | O_WRONLY` (only the
- * first writer wins), retries with a small backoff while another holder is
- * in flight, and deletes the lock file on completion. Times out so a
- * crashed previous run on the same path eventually surfaces as an error
- * rather than hanging the CLI forever.
+ * file. Acquires by writing a fully-formed owner record to a private temp
+ * file and then `link()`-ing it into place at the canonical lock path — an
+ * atomic operation on POSIX. The first linker wins; everyone else sees
+ * `EEXIST` against a lock file that is guaranteed to already contain a
+ * complete owner record, eliminating the window where a contender could
+ * observe an "owned but empty" lock and incorrectly reap it.
+ *
+ * Retries with a small backoff while another holder is in flight and
+ * deletes the lock file on completion. Times out so a crashed previous run
+ * on the same path eventually surfaces as an error rather than hanging the
+ * CLI forever.
  *
  * To recover from abrupt termination (SIGKILL, power loss) that leaves a
  * stale lock behind, the lock file records the owner's PID and start time.
@@ -252,25 +258,18 @@ export async function withLockedConfigUpdate<T>(
   const lockPath = `${path}.lock`;
   const started = Date.now();
   while (true) {
-    try {
-      const handle = await open(lockPath, "wx", 0o600);
-      const owner: LockOwner = { pid: process.pid, startedAt: Date.now() };
-      await handle.writeFile(JSON.stringify(owner));
-      await handle.close();
-      break;
-    } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      if (await tryReapStaleLock(lockPath)) {
-        // Loop immediately to re-attempt acquisition; another contender may
-        // win the race after our unlink, in which case we fall back to the
-        // normal retry path below.
-        continue;
-      }
-      if (Date.now() - started > CONFIG_LOCK_TIMEOUT_MS) {
-        throw new Error(`timed out waiting for config lock: ${lockPath}`);
-      }
-      await sleep(CONFIG_LOCK_RETRY_MS);
+    const acquired = await tryAcquireLock(lockPath);
+    if (acquired) break;
+    if (await tryReapStaleLock(lockPath)) {
+      // Loop immediately to re-attempt acquisition; another contender may
+      // win the race after our unlink, in which case we fall back to the
+      // normal retry path below.
+      continue;
     }
+    if (Date.now() - started > CONFIG_LOCK_TIMEOUT_MS) {
+      throw new Error(`timed out waiting for config lock: ${lockPath}`);
+    }
+    await sleep(CONFIG_LOCK_RETRY_MS);
   }
   try {
     return await fn();
@@ -284,10 +283,46 @@ export async function withLockedConfigUpdate<T>(
 }
 
 /**
+ * Try to atomically acquire the lock by writing a complete owner record to
+ * a private temp file and `link()`-ing it into place at `lockPath`. Returns
+ * `true` if this caller now owns the lock, `false` if another holder beat
+ * us to it (EEXIST). Any other error is re-thrown.
+ *
+ * Using `link()` rather than `open(..., 'wx')` plus a follow-up `writeFile`
+ * eliminates the small window where a contender could observe the lock as
+ * "owned but empty": by the time anyone else can see `lockPath`, the file
+ * it points to already contains a fully serialized owner record.
+ */
+async function tryAcquireLock(lockPath: string): Promise<boolean> {
+  const owner: LockOwner = { pid: process.pid, startedAt: Date.now() };
+  // Per-attempt unique tmp name so a previous failed attempt by the same
+  // process cannot collide with this one.
+  const tmpPath = `${lockPath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
+  await writeFile(tmpPath, JSON.stringify(owner), { mode: 0o600, flag: "wx" });
+  try {
+    await link(tmpPath, lockPath);
+    return true;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw err;
+  } finally {
+    // The tmp file is just a vehicle for the atomic link; once linked (or
+    // failed to link) it has served its purpose. Best-effort unlink — if
+    // this fails the file is orphaned but harmless.
+    try {
+      await unlink(tmpPath);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/**
  * Decide whether the lock at `lockPath` is stale and, if so, unlink it.
  * Returns `true` when the caller should retry acquisition immediately.
  *
- * A lock is considered stale when either:
+ * A lock is considered stale only when its owner record is fully parseable
+ * AND either:
  *   - the recorded `pid` is not a live process (`process.kill(pid, 0)`
  *     throws `ESRCH`), or
  *   - the recorded `startedAt` is older than {@link CONFIG_LOCK_MAX_AGE_MS}.
@@ -296,8 +331,16 @@ export async function withLockedConfigUpdate<T>(
  * the dead writer's PID to an unrelated live process, the lock will still
  * be reaped after the timeout.
  *
- * Reads that fail (missing file, malformed JSON, missing fields) are also
- * treated as stale so a corrupt lock cannot block the CLI forever.
+ * Critically, an empty or unparseable owner record is NEVER reaped. The
+ * atomic `link()`-based acquisition in {@link tryAcquireLock} guarantees
+ * that any lock file visible to a contender already contains a complete
+ * owner record, so an empty/partial record indicates either external
+ * corruption or a stranger writing to the path — neither case justifies
+ * silently hijacking the lock. Returning `false` here forces the caller
+ * down the normal retry-with-backoff path until the lock either becomes
+ * legible or the age fallback fires (the file's age is invisible until we
+ * can parse its `startedAt`, so a permanently-corrupt lock will surface as
+ * a timeout, which is the correct loud failure mode).
  *
  * The unlink itself is best-effort: a concurrent reaper may have already
  * removed the file. The caller retries via the normal acquisition loop, so
@@ -314,7 +357,14 @@ async function tryReapStaleLock(lockPath: string): Promise<boolean> {
     return false;
   }
   const owner = parseLockOwner(raw);
-  const stale = owner === null || !isPidAlive(owner.pid) || Date.now() - owner.startedAt > CONFIG_LOCK_MAX_AGE_MS;
+  if (owner === null) {
+    // Empty / malformed owner record. With atomic link acquisition this
+    // should not happen for locks we created; treat as a live (but
+    // unreadable) holder rather than a stale one, and let the caller retry
+    // until either the record becomes legible or the overall timeout fires.
+    return false;
+  }
+  const stale = !isPidAlive(owner.pid) || Date.now() - owner.startedAt > CONFIG_LOCK_MAX_AGE_MS;
   if (!stale) return false;
   try {
     await unlink(lockPath);

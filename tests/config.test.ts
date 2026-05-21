@@ -264,6 +264,40 @@ test("setConfigValue reaps stale lock from a dead PID and succeeds", async () =>
   }
 });
 
+test("setConfigValue does not reap an empty lock file (atomic acquisition invariant)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "skill-router-empty-lock-"));
+  const path = join(dir, "config.json");
+  const lockPath = `${path}.lock`;
+  try {
+    await writeFile(path, JSON.stringify({ unusedForDays: 30 }) + "\n");
+    // Simulate the window between `open(..., 'wx')` and writing the owner
+    // record under the old implementation — an attacker could plant an
+    // empty lock file and have a contender hijack it. With atomic
+    // tmp-file + link() acquisition this must never reap; the contender
+    // must wait until the overall lock timeout surfaces a loud error
+    // instead of silently stealing the lock.
+    await writeFile(lockPath, "");
+    const started = Date.now();
+    await assert.rejects(
+      () => setConfigValue("routeMode", "metadata", path),
+      /timed out waiting for config lock/,
+    );
+    // Sanity: the call actually waited rather than returning immediately
+    // after stealing the lock. The lock timeout is 5s, so anything >=1s
+    // proves we backed off through the retry loop instead of hijacking.
+    assert.ok(Date.now() - started >= 1000, "expected to wait for timeout, not hijack empty lock");
+    // The empty lock we planted is still there — we did not unlink it.
+    const stat = await (await import("node:fs/promises")).readFile(lockPath, "utf8");
+    assert.equal(stat, "");
+    // And the config file was not touched.
+    const cfg = await loadConfig(path);
+    assert.equal(cfg.unusedForDays, 30);
+    assert.equal(cfg.routeMode, "auto");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("setConfigValue reaps stale lock older than the age threshold and succeeds", async () => {
   const dir = await mkdtemp(join(tmpdir(), "skill-router-stale-age-"));
   const path = join(dir, "config.json");
