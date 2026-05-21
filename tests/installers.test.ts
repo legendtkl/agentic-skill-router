@@ -413,6 +413,9 @@ test("[codex] uninstall is a no-op when no install exists (no config.toml create
 
     // No cache, no prompt — uninstall must not crash with missing files.
     assert.equal(await pathExists(join(codexHome, "prompts", "skill-router-skills.md")), false);
+    // And uninstall must not spuriously create config.toml (e.g. by writing a
+    // disabled plugin stanza on an empty setup).
+    assert.equal(await pathExists(join(codexHome, "config.toml")), false, "config.toml must not be created on no-op uninstall");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -421,12 +424,22 @@ test("[codex] uninstall is a no-op when no install exists (no config.toml create
 test("[claude] uninstall is a no-op when no install exists", async () => {
   const root = await mkdtemp(join(tmpdir(), "sr-installer-claude-noinstall-"));
   try {
+    const claudeHome = join(root, ".claude");
+
     await execFileAsync(process.execPath, ["scripts/uninstall.mjs"], {
       cwd: REPO_ROOT,
       env: sandboxEnv(root),
       maxBuffer: MAX_BUFFER,
     });
-    // No assertion beyond non-zero exit; absence of crash is the contract.
+    // Uninstall must not crash, and must not spuriously create config files
+    // (e.g. by writing a disabled plugin stanza into settings.json or the
+    // installed_plugins.json registry on an empty setup).
+    assert.equal(await pathExists(join(claudeHome, "settings.json")), false, "settings.json must not be created on no-op uninstall");
+    assert.equal(
+      await pathExists(join(claudeHome, "plugins", "installed_plugins.json")),
+      false,
+      "installed_plugins.json must not be created on no-op uninstall",
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
