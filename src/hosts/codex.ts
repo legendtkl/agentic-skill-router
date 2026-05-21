@@ -117,7 +117,7 @@ export class CodexHost implements Host {
   }
 
   async usageStats(): Promise<Map<string, UsageStat>> {
-    return collectUsageStats(this.sessionsDir);
+    return collectUsageStats(this.sessionsDir, { host: this.name });
   }
 
   async skillRoots(): Promise<string[]> {
