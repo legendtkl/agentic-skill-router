@@ -285,6 +285,84 @@ test("DCI search truncates oversized skill bodies at the per-skill byte budget",
   }
 });
 
+test("DCI search truncation respects UTF-8 multibyte character boundaries", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    // Build a SKILL.md whose byte length exceeds the per-skill budget, with a
+    // 3-byte Chinese character straddling the byte limit. The lead byte sits
+    // at offset (maxSkillBytes - 1), so a naive byte-cut decode would emit a
+    // U+FFFD replacement character for the dangling lead byte.
+    const limit = DCI_BUDGET.maxSkillBytes;
+    const frontmatter = "---\nname: utf8-boundary-probe\ndescription: Chinese disabled helper for boundary truncation\n---\n\n";
+    const frontmatterBytes = Buffer.byteLength(frontmatter, "utf8");
+    // First block of complete Chinese characters that fit before the boundary
+    // straddle, leaving room for the straddling character. Each Chinese char
+    // is 3 bytes in UTF-8.
+    const headerChar = "中"; // 中
+    const straddleChar = "文"; // 文 (3 bytes: e6 96 87) — lead byte lands inside limit
+    const tailChar = "语"; // 语
+    const padBytes = limit - frontmatterBytes - 1; // leave 1 byte for the straddling char's lead byte
+    if (padBytes <= 0 || padBytes % 3 !== 0) {
+      // The fixture math assumes the limit and frontmatter align on a 3-byte
+      // multiple; adjust the frontmatter padding here if upstream constants
+      // change so the straddle is always lead-byte-aligned at `limit - 1`.
+      const adjust = padBytes <= 0 ? 0 : padBytes % 3;
+      assert.fail(`utf8 boundary fixture misaligned: padBytes=${padBytes}, adjust=${adjust}`);
+    }
+    const head = headerChar.repeat(padBytes / 3);
+    const tail = tailChar.repeat(64); // body continues well past the limit
+    const body = `${head}${straddleChar}${tail}\n`;
+    const fileContent = `${frontmatter}${body}`;
+    const fileBytes = Buffer.byteLength(fileContent, "utf8");
+    assert.ok(fileBytes > limit, "fixture must exceed the per-skill byte limit");
+
+    const dir = join(corpus.root, "utf8-boundary-probe");
+    await mkdir(dir, { recursive: true });
+    const skillMdPath = join(dir, "SKILL.md.skill-router-disabled");
+    await writeFile(skillMdPath, fileContent);
+    const skill: Skill = {
+      id: "user:codex:utf8-boundary-probe",
+      name: "utf8-boundary-probe",
+      description: "Chinese disabled helper for boundary truncation",
+      source: "user",
+      pluginKey: null,
+      skillMdPath,
+      isDisabled: true,
+      isPluginDisabled: false,
+      canDisable: true,
+      conflict: false,
+    };
+    corpus.skills.push(skill);
+
+    const result = await dciSearchDisabledSkills([skill], headerChar.repeat(3), { topK: 3 });
+    assert.equal(result.corpus.loaded, 1);
+    assert.equal(result.corpus.truncated, 1);
+    assert.equal(result.warnings[0]?.code, "skill-body-truncated");
+    assert.equal(result.warnings[0]?.bytesRead, limit);
+    assert.equal(result.warnings[0]?.fileBytes, fileBytes);
+    // The matched snippet must contain only complete characters: no U+FFFD
+    // replacement character must appear anywhere in the loaded body.
+    assert.equal(result.matches.length, 1);
+    const snippetText = result.matches[0]?.snippets[0]?.text ?? "";
+    assert.ok(snippetText.length > 0, "expected a snippet for the Chinese header content");
+    assert.ok(!snippetText.includes("�"), `snippet must not contain U+FFFD: ${JSON.stringify(snippetText)}`);
+
+    // Also verify the straddling and tail characters were dropped cleanly:
+    // the loaded body should contain every header character and end before
+    // the incomplete straddle byte, so neither the straddle nor any tail char
+    // should appear.
+    const grep = await dciGrepDisabledSkills([skill], straddleChar, { topK: 3 });
+    assert.equal(grep.matches.length, 0, "straddling character must not survive truncation");
+    const tailGrep = await dciGrepDisabledSkills([skill], tailChar, { topK: 3 });
+    assert.equal(tailGrep.matches.length, 0, "tail content past the byte limit must not survive truncation");
+    const headGrep = await dciGrepDisabledSkills([skill], headerChar.repeat(2), { topK: 3 });
+    assert.equal(headGrep.matches.length, 1, "complete leading characters must be preserved");
+    assert.ok(!(headGrep.matches[0]?.snippets[0]?.text ?? "").includes("�"));
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI search stops reading when the total corpus byte budget is exhausted", async () => {
   const corpus = await makeCorpus(0);
   try {

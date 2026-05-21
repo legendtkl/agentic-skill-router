@@ -593,15 +593,47 @@ async function readSkillPrefix(
       ? await handle.read(buffer, 0, bytesToRead, 0)
       : { bytesRead: 0 };
     const bytesRead = result.bytesRead;
+    const truncated = stats.size > bytesRead;
+    // When the file is truncated mid-character, walk back to the last
+    // complete UTF-8 boundary so that `toString('utf8')` does not emit
+    // U+FFFD replacement characters for an incomplete trailing sequence.
+    const decodeEnd = truncated ? utf8SafeEnd(buffer, bytesRead) : bytesRead;
     return {
-      content: buffer.subarray(0, bytesRead).toString("utf8"),
+      content: buffer.subarray(0, decodeEnd).toString("utf8"),
       bytesRead,
       fileBytes: stats.size,
-      truncated: stats.size > bytesRead,
+      truncated,
     };
   } finally {
     await handle.close();
   }
+}
+
+// Returns the largest end offset in `buffer` (<= `length`) that ends on a
+// complete UTF-8 character boundary. Walks back at most 3 bytes, since any
+// valid UTF-8 sequence is at most 4 bytes long.
+function utf8SafeEnd(buffer: Buffer, length: number): number {
+  if (length <= 0) return 0;
+  const lastByte = buffer[length - 1]!;
+  // A single-byte (ASCII) character ends cleanly on its own.
+  if ((lastByte & 0x80) === 0) return length;
+  const minStart = Math.max(0, length - 4);
+  // Walk back through continuation bytes (10xxxxxx) to find the lead byte.
+  for (let i = length - 1; i >= minStart; i--) {
+    const byte = buffer[i]!;
+    if ((byte & 0xc0) === 0x80) continue; // continuation byte, keep walking
+    // Found a lead byte. Determine its expected sequence length.
+    let expected: number;
+    if ((byte & 0xe0) === 0xc0) expected = 2;
+    else if ((byte & 0xf0) === 0xe0) expected = 3;
+    else if ((byte & 0xf8) === 0xf0) expected = 4;
+    else return length; // not a UTF-8 lead byte; let toString handle it
+    const actual = length - i;
+    if (actual >= expected) return length; // sequence is complete
+    return i; // truncate before the incomplete lead byte
+  }
+  // Buffer is entirely continuation bytes within the lookback window.
+  return minStart;
 }
 
 function emptyCorpusSummary(scanned: number): DciCorpusSummary {
