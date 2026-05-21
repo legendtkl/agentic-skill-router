@@ -46,6 +46,55 @@ test("metadata route uses aliases and emits field-level evidence", () => {
   assert.ok(result.selected?.evidence?.some((e) => e.field === "alias" && /飞书邮箱/.test(e.text)));
 });
 
+test("metadata route does not promote short alias substrings to exact matches", () => {
+  const ai = skill("ai-helper", "AI workflow helper", {
+    metadata: {
+      name: "ai-helper",
+      description: "AI workflow helper",
+      aliases: ["ai"],
+      intents: ["summarize_report"],
+    },
+  });
+
+  const result = routeDisabledSkillsMetadata([ai], "OpenAI workflow daily report paid ads aiops", { topK: 3 });
+
+  assert.equal(result.selected, null);
+  assert.notEqual(result.matches[0]?.confidence, "high");
+  assert.ok(!result.matches[0]?.reason.includes("matched alias"));
+});
+
+test("metadata route keeps exact short alias queries high confidence", () => {
+  const ai = skill("ai-helper", "AI workflow helper", {
+    metadata: {
+      name: "ai-helper",
+      description: "AI workflow helper",
+      aliases: ["ai"],
+    },
+  });
+
+  const result = routeDisabledSkillsMetadata([ai], "ai", { topK: 3 });
+
+  assert.equal(result.selected?.skill.id, "user:codex:ai-helper");
+  assert.equal(result.selected?.confidence, "high");
+  assert.ok(result.selected?.reason.includes("matched alias"));
+});
+
+test("metadata route keeps standalone short aliases selectable in longer queries", () => {
+  const ai = skill("ai-helper", "AI workflow helper", {
+    metadata: {
+      name: "ai-helper",
+      description: "AI workflow helper",
+      aliases: ["ai"],
+    },
+  });
+
+  const result = routeDisabledSkillsMetadata([ai], "use ai", { topK: 3 });
+
+  assert.equal(result.selected?.skill.id, "user:codex:ai-helper");
+  assert.equal(result.selected?.confidence, "high");
+  assert.ok(result.selected?.reason.includes("matched alias phrase"));
+});
+
 test("metadata route does not select generic-only requests", () => {
   const generic = skill("platform-helper", "API tool query helper for managing platform workflows");
   const result = routeDisabledSkillsMetadata([generic], "查询 API 工具", { topK: 3 });

@@ -9,6 +9,7 @@ interface QueryPlan {
   raw: string;
   compact: string;
   terms: Set<string>;
+  boundaryTerms: Set<string>;
   distinctiveTerms: Set<string>;
   genericTerms: Set<string>;
 }
@@ -36,6 +37,8 @@ interface ScoredMetadataSkill {
   matchedGenericTerms: Set<string>;
   matchedName: boolean;
   matchedAlias: boolean;
+  containedNameMatched: boolean;
+  containedAliasMatched: boolean;
   exactNameMatched: boolean;
   exactAliasMatched: boolean;
   matchedTool: boolean;
@@ -187,13 +190,14 @@ function manyFields(fieldName: MetadataField["field"], values: string[] | undefi
 
 function analyzeQuery(raw: string): QueryPlan {
   const terms = termsFor(raw);
+  const boundaryTerms = boundaryTermsFor(raw);
   const distinctiveTerms = new Set<string>();
   const genericTerms = new Set<string>();
   for (const term of terms) {
     if (isGenericTerm(term)) genericTerms.add(term);
     else distinctiveTerms.add(term);
   }
-  return { raw, compact: compact(raw), terms, distinctiveTerms, genericTerms };
+  return { raw, compact: compact(raw), terms, boundaryTerms, distinctiveTerms, genericTerms };
 }
 
 function computeIdf(candidates: IndexedSkill[]): Map<string, number> {
@@ -215,6 +219,8 @@ function scoreIndexedSkill(candidate: IndexedSkill, query: QueryPlan, idf: Map<s
   let rawScore = 0;
   let matchedName = false;
   let matchedAlias = false;
+  let containedNameMatched = false;
+  let containedAliasMatched = false;
   let exactNameMatched = false;
   let exactAliasMatched = false;
   let matchedTool = false;
@@ -224,17 +230,22 @@ function scoreIndexedSkill(candidate: IndexedSkill, query: QueryPlan, idf: Map<s
   const evidence: MatchEvidence[] = [];
 
   for (const item of candidate.fields) {
-    if (query.compact.length >= 4 && item.compact !== "" && (query.compact === item.compact || query.compact.includes(item.compact))) {
-      const exactFieldEqualsQuery = query.compact === item.compact;
+    const exactFieldEqualsQuery = item.compact !== "" && query.compact === item.compact;
+    const partialFieldAppearsInQuery = !exactFieldEqualsQuery &&
+      query.compact.length >= 4 &&
+      fieldAppearsInQuery(item, query);
+    if (exactFieldEqualsQuery || partialFieldAppearsInQuery) {
       const contribution = item.field === "name" ? 4.0 : item.field === "alias" ? 3.5 : item.weight * 0.8;
       rawScore += contribution;
       if (item.field === "name") {
         matchedName = true;
+        containedNameMatched = containedNameMatched || partialFieldAppearsInQuery;
         exactNameMatched = exactNameMatched || exactFieldEqualsQuery;
       }
       if (item.field === "alias") {
         matchedAlias = true;
-        exactAliasMatched = true;
+        containedAliasMatched = containedAliasMatched || partialFieldAppearsInQuery;
+        exactAliasMatched = exactAliasMatched || exactFieldEqualsQuery;
       }
       evidence.push(evidenceFor(item, item.text, contribution));
     }
@@ -246,6 +257,7 @@ function scoreIndexedSkill(candidate: IndexedSkill, query: QueryPlan, idf: Map<s
     }
 
     for (const term of query.terms) {
+      if (isShortLatinTerm(term) && !query.boundaryTerms.has(term)) continue;
       const quality = matchQuality(term, item);
       if (quality <= 0) continue;
       const generic = isGenericTerm(term);
@@ -266,7 +278,15 @@ function scoreIndexedSkill(candidate: IndexedSkill, query: QueryPlan, idf: Map<s
   let score = Math.min(1, rawScore / Math.max(4, distinctiveCount * 3.2));
   if (exactNameMatched) score = Math.max(score, 0.9);
   if (exactAliasMatched) score = Math.max(score, 0.85);
-  if (matchedDistinctiveTerms.size < 2 && !exactNameMatched && !exactAliasMatched) score = Math.min(score, 0.54);
+  if (containedAliasMatched) score = Math.max(score, 0.75);
+  if (
+    matchedDistinctiveTerms.size < 2 &&
+    !exactNameMatched &&
+    !exactAliasMatched &&
+    !containedAliasMatched
+  ) {
+    score = Math.min(score, 0.54);
+  }
   if (matchedDistinctiveTerms.size === 0 && !matchedName && !matchedAlias) score = Math.min(score, 0.34);
   if (candidate.isUmbrella && !exactNameMatched && !exactAliasMatched) score = Math.min(score, 0.68);
 
@@ -278,6 +298,8 @@ function scoreIndexedSkill(candidate: IndexedSkill, query: QueryPlan, idf: Map<s
     matchedGenericTerms,
     matchedName,
     matchedAlias,
+    containedNameMatched,
+    containedAliasMatched,
     exactNameMatched,
     exactAliasMatched,
     matchedTool,
@@ -294,6 +316,26 @@ function matchQuality(term: string, item: MetadataField): number {
     return isCjk(term) ? 0.7 : 0.6;
   }
   return 0;
+}
+
+function fieldAppearsInQuery(item: MetadataField, query: QueryPlan): boolean {
+  if (item.compact === "" || !query.compact.includes(item.compact)) return false;
+
+  if (item.field !== "alias" && item.field !== "name") {
+    return item.compact.length >= 4;
+  }
+
+  if (isCjk(item.compact)) {
+    return Array.from(item.compact).length >= 3;
+  }
+
+  // Short Latin aliases such as "ai" and "es" are handled by term matching,
+  // which preserves token boundaries and avoids OpenAI/daily-style substrings.
+  if (item.compact.length < 5) return query.boundaryTerms.has(item.compact);
+
+  const parts = latinBoundaryParts(item.text);
+  return query.boundaryTerms.has(item.compact) ||
+    (parts.length > 0 && parts.every((part) => query.boundaryTerms.has(part)));
 }
 
 function evidenceFor(item: MetadataField, matched: string, contribution: number): MatchEvidence {
@@ -332,7 +374,9 @@ function toRouteMatch(item: ScoredMetadataSkill): SkillRouteMatch {
       candidateTokenCount: item.evidence.length,
       cueHitCount: item.matchedDistinctiveTerms.size,
       matchedName: item.exactNameMatched || item.exactAliasMatched,
-      matchedPhrase: item.evidence.some((e) => e.matched.length >= 8 && compact(e.text).includes(compact(e.matched))),
+      matchedPhrase: item.containedNameMatched ||
+        item.containedAliasMatched ||
+        item.evidence.some((e) => e.matched.length >= 8 && compact(e.text).includes(compact(e.matched))),
     },
   };
 }
@@ -358,6 +402,8 @@ function reasonFor(item: ScoredMetadataSkill): string {
     `matched ${item.matchedDistinctiveTerms.size} distinctive metadata term(s)`,
   ];
   if (item.matchedGenericTerms.size > 0) parts.push(`matched ${item.matchedGenericTerms.size} generic term(s)`);
+  if (item.containedNameMatched) parts.push("matched name phrase");
+  if (item.containedAliasMatched) parts.push("matched alias phrase");
   if (item.exactNameMatched) parts.push("matched name");
   if (item.exactAliasMatched) parts.push("matched alias");
   if (item.matchedTool) parts.push("matched tool/API field");
@@ -408,8 +454,56 @@ function termsFor(input: string): Set<string> {
   return terms;
 }
 
+function boundaryTermsFor(input: string): Set<string> {
+  const prepared = input.normalize("NFKC").toLowerCase();
+  const terms = new Set<string>();
+
+  for (const match of prepared.matchAll(/https?:\/\/[^\s"'<>]+|[a-z0-9][a-z0-9_:+./-]*/g)) {
+    const token = match[0];
+    if (token.length >= 2) terms.add(token);
+    for (const part of token.split(/[-_:+./]+/)) {
+      if (part.length >= 2) terms.add(part);
+    }
+  }
+
+  for (const match of prepared.matchAll(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu)) {
+    const chars = Array.from(match[0]);
+    if (chars.length === 1) {
+      terms.add(chars[0]!);
+      continue;
+    }
+    if (chars.length <= 8) terms.add(chars.join(""));
+    for (let size = 2; size <= 3; size++) {
+      for (let i = 0; i <= chars.length - size; i++) {
+        terms.add(chars.slice(i, i + size).join(""));
+      }
+    }
+  }
+
+  return terms;
+}
+
+function latinBoundaryParts(input: string): string[] {
+  const prepared = input.normalize("NFKC").toLowerCase();
+  const parts = new Set<string>();
+  for (const match of prepared.matchAll(/[a-z0-9][a-z0-9_:+./-]*/g)) {
+    const token = match[0];
+    const splitParts = token.split(/[-_:+./]+/).filter((part) => part.length >= 2);
+    if (splitParts.length > 1) {
+      for (const part of splitParts) parts.add(part);
+    } else if (token.length >= 2) {
+      parts.add(token);
+    }
+  }
+  return [...parts];
+}
+
 function compact(input: string): string {
   return input.normalize("NFKC").toLowerCase().replace(/[^\p{Letter}\p{Number}]+/gu, "");
+}
+
+function isShortLatinTerm(term: string): boolean {
+  return /^[a-z0-9]+$/.test(term) && term.length <= 3;
 }
 
 function isCjk(term: string): boolean {
