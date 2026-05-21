@@ -151,7 +151,9 @@ test("CodexHost enumerates codex, agents, system, and plugin skills", async () =
     assert.equal(byId.get("builtin:codex-system:openai-docs")?.canDisable, false);
     assert.equal(byId.get("builtin:codex-admin:admin-policy")?.canDisable, false);
     assert.equal(byId.get("project:codex:.:project-root")?.description, "Project root skill");
+    assert.equal(byId.get("project:codex:.:project-root")?.source, "project");
     assert.equal(byId.get("project:codex:packages:project-package")?.description, "Project package skill");
+    assert.equal(byId.get("project:codex:packages:project-package")?.source, "project");
     assert.equal(byId.get("plugin:gmail@openai-curated:gmail")?.isPluginDisabled, false);
     assert.equal(byId.get("plugin:browser-use@openai-bundled:browser")?.isPluginDisabled, true);
 

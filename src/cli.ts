@@ -1085,7 +1085,7 @@ function printSkillTable(skills: Skill[], usage: Map<string, UsageStat>): void {
   rows.sort((a, b) => (b.last > a.last ? 1 : a.last > b.last ? -1 : 0));
   const widths = {
     id: Math.max(2, ...rows.map((r) => r.id.length)),
-    source: 7,
+    source: Math.max(7, ...rows.map((r) => r.source.length)),
     disabled: Math.max(10, ...rows.map((r) => r.disabled.length)),
     last: 10,
     calls: 5,

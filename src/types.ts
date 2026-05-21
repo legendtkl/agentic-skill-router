@@ -1,7 +1,7 @@
 export type HostName = "claude-code" | "codex";
 export type RouteMode = "lexical" | "metadata" | "body" | "dci" | "auto";
 
-export type SkillSource = "user" | "plugin" | "builtin";
+export type SkillSource = "user" | "project" | "plugin" | "builtin";
 
 export interface SkillMetadata {
   name: string;

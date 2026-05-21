@@ -122,7 +122,9 @@ test("listSkills enumerates Claude project skill roots from cwd to repo root", a
     const byId = new Map(skills.map((s) => [s.id, s]));
 
     assert.equal(byId.get("project:claude:.:root-skill")?.description, "root project skill");
+    assert.equal(byId.get("project:claude:.:root-skill")?.source, "project");
     assert.equal(byId.get("project:claude:packages:package-skill")?.description, "nested project skill");
+    assert.equal(byId.get("project:claude:packages:package-skill")?.source, "project");
 
     const roots = await host.skillRoots();
     assert.ok(roots.some((root) => root.endsWith(".claude/skills")));
@@ -148,11 +150,20 @@ test("CLI list --json discovers Claude project skill roots from SKILL_ROUTER_CWD
         },
       },
     );
-    const listed = JSON.parse(result.stdout) as Array<{ id: string; description: string }>;
+    const listed = JSON.parse(result.stdout) as Array<{ id: string; description: string; source: string }>;
 
-    assert.ok(listed.some((s) => s.id === "project:claude:.:root-skill" && s.description === "root project skill"));
     assert.ok(
-      listed.some((s) => s.id === "project:claude:packages:package-skill" && s.description === "nested project skill"),
+      listed.some(
+        (s) => s.id === "project:claude:.:root-skill" && s.description === "root project skill" && s.source === "project",
+      ),
+    );
+    assert.ok(
+      listed.some(
+        (s) =>
+          s.id === "project:claude:packages:package-skill" &&
+          s.description === "nested project skill" &&
+          s.source === "project",
+      ),
     );
   } finally {
     await cleanupProject();
