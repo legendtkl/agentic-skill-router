@@ -162,10 +162,15 @@ function classify(testCase, result) {
     ? selectedId !== null && selectedId === expected
     : selectedId === null;
 
-  // Top-3 recall: did the expected id appear anywhere in the top-K matches? For
-  // negative cases we don't credit recall (it would be meaningless).
+  // Top-3 recall is the named metric, so it must ALWAYS measure the first
+  // three returned matches regardless of the route call's --topK. The route
+  // is invoked with topK = max(userArg, 3) so the underlying list always
+  // contains at least three candidates when available; here we slice to 3 so
+  // the metric stays "true top-3" even if the user passed --topK=1 or 5.
+  // For negative cases we don't credit recall (it would be meaningless).
+  const top3Ids = topIds.slice(0, 3);
   const top3Hit = expectsSelect
-    ? expected !== null && topIds.includes(expected)
+    ? expected !== null && top3Ids.includes(expected)
     : null;
 
   // Ambiguous reject: positive case where top-1 is correct but selected was
@@ -236,12 +241,16 @@ function summarize(mode, rows) {
   };
 }
 
-function renderMarkdown(mode, fixtureRelPath, rows, summary) {
+function renderMarkdown(mode, fixtureRelPath, rows, summary, opts) {
   const lines = [];
   lines.push(`# Route evaluation (mode=${mode})`);
   lines.push("");
   lines.push(`Fixture: \`${fixtureRelPath}\``);
   lines.push(`Cases: ${summary.cases} (positive=${summary.positiveCases}, negative=${summary.negativeCases})`);
+  // Surface both knobs: the user-requested --topK (route call width) and the
+  // effective top-3 slice used for the recall metric. They are intentionally
+  // decoupled so the metric remains "true top-3" regardless of --topK.
+  lines.push(`Route topK: ${opts.routeTopK} (--topK=${opts.userTopK}; top-3 recall always measures the first 3 matches)`);
   lines.push("");
   lines.push("## Metrics");
   lines.push("");
@@ -322,13 +331,20 @@ async function main() {
     throw new Error(`fixture must contain skills[] and cases[]: ${fixturePath}`);
   }
 
+  // Decouple the route call's topK from the top-3 recall metric: the metric
+  // ALWAYS slices the first three matches (see classify()), so we request at
+  // least 3 from the route regardless of --topK. The user-requested value is
+  // surfaced in the report header and JSON payload so the output remains
+  // meaningful.
+  const routeTopK = Math.max(opts.topK, 3);
+
   const workDir = await mkdtemp(join(tmpdir(), "skill-router-eval-"));
   const rows = [];
   try {
     const skills = await materializeSkillFiles(join(workDir, "skills"), fixture.skills);
 
     for (const testCase of fixture.cases) {
-      const result = await routeOnce(opts.mode, skills, testCase.query, { topK: opts.topK });
+      const result = await routeOnce(opts.mode, skills, testCase.query, { topK: routeTopK });
       const classification = classify(testCase, result);
       const { routedSource, escalated } = attributeSource(opts.mode, result);
       rows.push({
@@ -350,6 +366,11 @@ async function main() {
   const payload = {
     mode: opts.mode,
     fixture: fixtureRelPath,
+    // userTopK is the value the caller passed via --topK (may be < or > 3).
+    // routeTopK is what we actually requested from the route (>= 3) so the
+    // top-3 recall metric always has at least three candidates to slice from.
+    userTopK: opts.topK,
+    routeTopK,
     summary,
     cases: rows,
   };
@@ -359,7 +380,7 @@ async function main() {
     return;
   }
 
-  process.stdout.write(`${renderMarkdown(opts.mode, fixtureRelPath, rows, summary)}\n`);
+  process.stdout.write(`${renderMarkdown(opts.mode, fixtureRelPath, rows, summary, { userTopK: opts.topK, routeTopK })}\n`);
   process.stdout.write("\n## JSON summary\n\n");
   process.stdout.write("```json\n");
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
