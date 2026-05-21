@@ -1,7 +1,12 @@
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { parseFrontmatter } from "./frontmatter.ts";
+import { parseFrontmatterWithWarnings } from "./frontmatter.ts";
 import type { Skill, SkillMetadata } from "./types.ts";
+
+export interface FrontmatterReadResult {
+  metadata: SkillMetadata;
+  warnings: string[];
+}
 
 export const DISABLED_SUFFIX = ".skill-router-disabled";
 
@@ -413,11 +418,17 @@ async function fileExists(path: string): Promise<boolean> {
 export async function readSkillFrontmatter(
   skillMdPath: string,
 ): Promise<SkillMetadata> {
+  return (await readSkillFrontmatterDetailed(skillMdPath)).metadata;
+}
+
+export async function readSkillFrontmatterDetailed(
+  skillMdPath: string,
+): Promise<FrontmatterReadResult> {
   const raw = await readFile(skillMdPath, "utf8");
-  const fm = parseFrontmatter(raw);
+  const { data: fm, warnings } = parseFrontmatterWithWarnings(raw);
   const name = scalar(fm["name"]) ?? basename(dirname(skillMdPath)) ?? "";
   const description = scalar(fm["description"]) ?? "";
-  return {
+  const metadata: SkillMetadata = {
     name,
     description,
     ...optionalArray("aliases", fm["aliases"]),
@@ -427,6 +438,7 @@ export async function readSkillFrontmatter(
     ...optionalArray("intents", fm["intents"]),
     ...optionalArray("examples", fm["examples"]),
   };
+  return { metadata, warnings };
 }
 
 function scalar(value: string | string[] | undefined): string | undefined {

@@ -187,6 +187,33 @@ examples:
 ---
 ```
 
+### SKILL.md frontmatter support
+
+`skill-router` ships a minimal, dependency-free YAML parser tuned for the
+SKILL.md subset that Claude Code and Codex skills actually use. The supported
+forms are:
+
+- Top-level scalar `key: value` pairs. Quoted (`"..."`/`'...'`) and unquoted
+  values both work; for unquoted scalars an inline ` # comment` is stripped.
+- Literal (`|`) and folded (`>`) block strings as the value of a top-level
+  key — e.g. multi-line `description`s.
+- Top-level arrays in either inline (`tags: [feishu, email]`) or block list
+  (`- item`) form.
+
+Anything else — nested mappings under a key (e.g. `metadata.routing.aliases`),
+anchors/aliases, tags, flow mappings, or multi-document streams — is **not**
+supported. When the parser encounters a nested mapping it drops that key and
+emits a warning such as:
+
+```
+frontmatter: skipped nested mapping under `metadata` (line 7)
+```
+
+Warnings are attached to the skill record as the optional
+`frontmatterWarnings` field and surfaced in `skills list --json` output so
+authors can spot silently-skipped metadata. Keep all routing metadata at the
+top level (see the `lark-mail` example above) so it parses reliably.
+
 ## Troubleshooting
 
 See [`docs/troubleshooting.md`](docs/troubleshooting.md) for recovery

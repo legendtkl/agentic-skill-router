@@ -289,3 +289,84 @@ test("symlink skill whose target is inside the same skills root remains disable-
     await cleanup();
   }
 });
+
+test("listSkills attaches frontmatterWarnings for nested mappings", async () => {
+  const home = await mkdtemp(join(tmpdir(), "skill-router-nested-fm-"));
+  try {
+    await mkdir(join(home, "skills", "nested-meta"), { recursive: true });
+    await writeFile(
+      join(home, "skills", "nested-meta", "SKILL.md"),
+      [
+        "---",
+        "name: nested-meta",
+        "description: has unsupported nested mapping",
+        "metadata:",
+        "  routing:",
+        "    aliases:",
+        "      -飞书邮箱",
+        "tags: [feishu]",
+        "---",
+        "",
+      ].join("\n"),
+    );
+    await mkdir(join(home, "skills", "clean-meta"), { recursive: true });
+    await writeFile(
+      join(home, "skills", "clean-meta", "SKILL.md"),
+      "---\nname: clean-meta\ndescription: no nested mapping\n---\n",
+    );
+
+    const host = new ClaudeCodeHost({ claudeHome: home });
+    const skills = await host.listSkills();
+    const nested = skills.find((s) => s.id === "user:nested-meta");
+    const clean = skills.find((s) => s.id === "user:clean-meta");
+    assert.ok(nested);
+    assert.ok(clean);
+    assert.ok(nested!.frontmatterWarnings && nested!.frontmatterWarnings.length === 1);
+    assert.match(nested!.frontmatterWarnings![0]!, /skipped nested mapping under `metadata`/);
+    assert.equal(clean!.frontmatterWarnings, undefined);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("CLI list --json surfaces frontmatterWarnings only when non-empty", async () => {
+  const home = await mkdtemp(join(tmpdir(), "skill-router-nested-fm-cli-"));
+  try {
+    await mkdir(join(home, "skills", "nested-cli"), { recursive: true });
+    await writeFile(
+      join(home, "skills", "nested-cli", "SKILL.md"),
+      [
+        "---",
+        "name: nested-cli",
+        "description: nested mapping warning probe",
+        "metadata:",
+        "  routing:",
+        "    aliases: [飞书]",
+        "---",
+        "",
+      ].join("\n"),
+    );
+    await mkdir(join(home, "skills", "clean-cli"), { recursive: true });
+    await writeFile(
+      join(home, "skills", "clean-cli", "SKILL.md"),
+      "---\nname: clean-cli\ndescription: ok\n---\n",
+    );
+
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+    const result = await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "list", "--json"],
+      { env: { ...process.env, CLAUDE_HOME: home, SKILL_ROUTER_CWD: home } },
+    );
+    const listed = JSON.parse(result.stdout) as Array<{ id: string; frontmatterWarnings?: string[] }>;
+    const nested = listed.find((s) => s.id === "user:nested-cli");
+    const clean = listed.find((s) => s.id === "user:clean-cli");
+    assert.ok(nested);
+    assert.ok(clean);
+    assert.ok(nested!.frontmatterWarnings && nested!.frontmatterWarnings.length === 1);
+    assert.match(nested!.frontmatterWarnings![0]!, /skipped nested mapping/);
+    assert.equal(clean!.frontmatterWarnings, undefined);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

@@ -943,6 +943,7 @@ async function cmdStatus(argv: string[], hostName: HostName): Promise<number> {
 function projectSkill(s: Skill, usage: Map<string, UsageStat>, inventory?: Skill[]) {
   const u = lookupUsage(s, usage, inventory);
   const ambiguous = inventory ? isPluginShortAmbiguous(s, inventory) : false;
+  const warnings = s.frontmatterWarnings ?? [];
   return {
     id: s.id,
     name: s.name,
@@ -958,6 +959,7 @@ function projectSkill(s: Skill, usage: Map<string, UsageStat>, inventory?: Skill
     lastUsed: u?.lastUsed?.toISOString() ?? null,
     callCount: u?.callCount ?? 0,
     ...(ambiguous ? { attributionAmbiguous: true } : {}),
+    ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
   };
 }
 
