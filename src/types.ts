@@ -94,6 +94,16 @@ export interface DisableRecord {
  * intended.
  */
 export interface PendingOp {
+  /**
+   * Stable per-instance identity for the skill this op targets, derived from
+   * `{id, skillMdPath}`. Two same-`id` instances at different paths produce
+   * different `instanceKey` values, so their in-flight intents are tracked as
+   * separate journal entries rather than overwriting each other on retry.
+   *
+   * Legacy entries written before this field existed are synthesized on load
+   * from `(id, disabledPath)`.
+   */
+  instanceKey: string;
   op: "disable" | "enable";
   id: string;
   livePath: string;
@@ -102,9 +112,9 @@ export interface PendingOp {
   /** Snapshot of the disable record the caller intends to commit on success. */
   record?: DisableRecord;
   /**
-   * Snapshot of any pre-existing disable record for this id at the moment the
-   * pending op was written. Lets rollback restore the prior record instead of
-   * silently dropping a still-valid user intent. Absent means there was no
+   * Snapshot of any pre-existing disable record for this instance at the moment
+   * the pending op was written. Lets rollback restore the prior record instead
+   * of silently dropping a still-valid user intent. Absent means there was no
    * pre-existing record.
    */
   priorRecord?: DisableRecord;

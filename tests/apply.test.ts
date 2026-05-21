@@ -282,6 +282,7 @@ test("status recovers a disable where rename completed but state save crashed", 
     await rename(skill.skillMdPath, disabledPath);
 
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -324,6 +325,7 @@ test("status rolls back a disable where rename never happened", async () => {
     // Intent written, but the rename never completed: live file still present,
     // no disabled marker, no disable record.
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, skill.skillMdPath + ".skill-router-disabled"),
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -364,6 +366,7 @@ test("status rolls back a disable pending op when both files are absent", async 
       reason: "manual",
     } as const;
     const pending: PendingOp = {
+      instanceKey: record.instanceKey,
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -410,6 +413,7 @@ test("status does NOT re-disable an enabled skill when the post-rename state sav
     const stateAfterCrash = await loadState(statePath);
     assert.equal(stateAfterCrash.disabledSkills.length, 1);
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       op: "enable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -441,6 +445,7 @@ test("status leaves an enable split-brain pending op alone for manual repair", a
 
     const stateAfterCrash = await loadState(statePath);
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       op: "enable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -473,6 +478,7 @@ test("status rolls back an enable where rename never happened (disable record st
     // still present, live file still absent, disable record still present.
     const stateAfterCrash = await loadState(statePath);
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       op: "enable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -500,6 +506,7 @@ test("status leaves a split-brain pending op alone for manual repair", async () 
     const disabledPath = skill.skillMdPath + ".skill-router-disabled";
     await writeFile(disabledPath, "stale\n");
     const pending: PendingOp = {
+      instanceKey: skillInstanceKey(skill.id, disabledPath),
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -579,6 +586,7 @@ test("status preserves a pre-existing disable record when disable rollback fires
       "prior disable record should still be in state",
     );
     const pending: PendingOp = {
+      instanceKey: stateBeforeAttempt.disabledSkills[0]!.instanceKey,
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
@@ -827,6 +835,112 @@ test("enableSkillFromState resolves an explicit instanceKey unambiguously", asyn
     const state = await loadState(statePath);
     assert.equal(state.disabledSkills.length, 1);
     assert.equal(state.disabledSkills[0]!.skillMdPath, skillB.skillMdPath + ".skill-router-disabled");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("pending enable op for one same-id instance survives an enable on the other", async () => {
+  // Regression guard: pending journal entries used to be keyed by bare `id`,
+  // so two same-id instances would overwrite each other's in-flight intents.
+  // Concretely: A crash leaves a pending enable for instance A behind (rename
+  // never completed, so A still looks disabled on disk). The user then enables
+  // instance B successfully. With the old `id`-keyed journal, B's enable would
+  // remove A's pending entry, and a later `status` would have no record of
+  // A's intent. With instanceKey-keyed journals the two entries coexist, and
+  // `status` reconciles each one correctly.
+  const { skillA, skillB, statePath, cleanup } = await setupTwoInstances();
+  try {
+    await disableSkill(skillA, "manual", { statePath });
+    await disableSkill(skillB, "manual", { statePath });
+    const disabledA = skillA.skillMdPath + ".skill-router-disabled";
+    const disabledB = skillB.skillMdPath + ".skill-router-disabled";
+    const keyA = skillInstanceKey(skillA.id, skillA.skillMdPath);
+    const keyB = skillInstanceKey(skillB.id, skillB.skillMdPath);
+
+    // Manually inject a pending enable for A that did not complete its rename
+    // (live absent, disabled present). This is the exact crash shape that
+    // exposes the keying bug if the journal collapses by `id`.
+    const stateAfterDisables = await loadState(statePath);
+    const pendingForA: PendingOp = {
+      instanceKey: keyA,
+      op: "enable",
+      id: skillA.id,
+      livePath: skillA.skillMdPath,
+      disabledPath: disabledA,
+      startedAt: "2026-05-22T00:00:00.000Z",
+    };
+    await saveState(addPendingOp(stateAfterDisables, pendingForA), statePath);
+
+    // Now enable instance B. This drives the same journal API; if pending ops
+    // were keyed by `id`, B's enable would clobber A's pending entry.
+    const result = await enableSkillFromState(keyB, { statePath });
+    assert.equal(result.id, skillB.id);
+    assert.equal(result.instanceKey, keyB);
+    assert.equal(await fileExists(skillB.skillMdPath), true, "B is enabled on disk");
+    assert.equal(await fileExists(disabledB), false);
+    assert.equal(await fileExists(disabledA), true, "A's disabled marker is untouched");
+    assert.equal(await fileExists(skillA.skillMdPath), false);
+
+    // A's pending enable journal entry MUST still be present after B's enable.
+    const afterB = await loadState(statePath);
+    const pendingEntries = afterB.pendingOps ?? [];
+    assert.equal(
+      pendingEntries.length,
+      1,
+      "A's pending entry must not be removed when B is enabled",
+    );
+    assert.equal(pendingEntries[0]!.instanceKey, keyA);
+    assert.equal(pendingEntries[0]!.op, "enable");
+    // A's disable record must also still be present (B's commit only cleared
+    // its own record, identified by instanceKey).
+    const disabledRecords = afterB.disabledSkills;
+    assert.equal(disabledRecords.length, 1);
+    assert.equal(disabledRecords[0]!.instanceKey, keyA);
+
+    // Running status (reapplyMissing) now reconciles A: rename never happened,
+    // so the pending op rolls back and A's disable record stays valid.
+    const recon = await reapplyMissing({ statePath, skills: [skillA, skillB] });
+    assert.deepEqual(recon.recoveredRollbacks, [skillA.id]);
+    assert.deepEqual(recon.recoveredCommits, []);
+    const final = await loadState(statePath);
+    assert.equal(final.pendingOps?.length ?? 0, 0);
+    assert.equal(final.disabledSkills.length, 1, "A's disable record survives rollback");
+    assert.equal(final.disabledSkills[0]!.instanceKey, keyA);
+    assert.equal(await fileExists(disabledA), true);
+    assert.equal(await fileExists(skillB.skillMdPath), true);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("loadState synthesizes instanceKey for legacy pending ops missing the field", async () => {
+  // Migration safety: state files written before instanceKey was added to
+  // PendingOp should still reconcile cleanly. We hand-write a legacy entry
+  // (no instanceKey key) and verify the validator synthesizes one from
+  // (id, disabledPath) so subsequent journal operations key by it.
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    const legacy = {
+      schema: 1,
+      host: "claude-code",
+      disabledSkills: [],
+      pendingOps: [{
+        op: "disable",
+        id: skill.id,
+        livePath: skill.skillMdPath,
+        disabledPath,
+        startedAt: "2026-05-22T00:00:00.000Z",
+      }],
+    };
+    await writeFile(statePath, JSON.stringify(legacy));
+    const loaded = await loadState(statePath);
+    assert.equal(loaded.pendingOps?.length, 1);
+    assert.equal(
+      loaded.pendingOps?.[0]?.instanceKey,
+      skillInstanceKey(skill.id, disabledPath),
+    );
   } finally {
     await cleanup();
   }

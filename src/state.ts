@@ -99,11 +99,19 @@ function validatePendingOp(x: unknown): PendingOp | null {
   if (typeof x["livePath"] !== "string" || x["livePath"] === "") return null;
   if (typeof x["disabledPath"] !== "string" || x["disabledPath"] === "") return null;
   if (typeof x["startedAt"] !== "string") return null;
+  if (x["instanceKey"] !== undefined && typeof x["instanceKey"] !== "string") return null;
   const record = x["record"] === undefined ? undefined : validateRecord(x["record"]);
   if (x["record"] !== undefined && !record) return null;
   const priorRecord = x["priorRecord"] === undefined ? undefined : validateRecord(x["priorRecord"]);
   if (x["priorRecord"] !== undefined && !priorRecord) return null;
+  // Migration: legacy journal entries written before pending ops carried an
+  // instanceKey synthesize one from (id, disabledPath). The disabledPath is the
+  // canonical resting location for the SKILL.md the op targets, so this matches
+  // the instanceKey newly-written ops use, even for crashes that predated the
+  // field's addition.
+  const instanceKey = skillInstanceKey(x["id"], x["disabledPath"]);
   return {
+    instanceKey,
     op,
     id: x["id"],
     livePath: x["livePath"],
@@ -466,17 +474,21 @@ export function findDisableRecord(state: State, instanceKey: string): DisableRec
 }
 
 export function addPendingOp(state: State, op: PendingOp): State {
-  const filtered = (state.pendingOps ?? []).filter((p) => p.id !== op.id);
+  // Identity is `instanceKey`: two same-id instances at different paths must
+  // hold separate in-flight intents, otherwise a crash-then-retry on instance B
+  // could overwrite instance A's pending entry and let a later `status` undo
+  // A's intent.
+  const filtered = (state.pendingOps ?? []).filter((p) => p.instanceKey !== op.instanceKey);
   return { ...state, pendingOps: [...filtered, op] };
 }
 
-export function removePendingOp(state: State, id: string): State {
-  const remaining = (state.pendingOps ?? []).filter((p) => p.id !== id);
+export function removePendingOp(state: State, instanceKey: string): State {
+  const remaining = (state.pendingOps ?? []).filter((p) => p.instanceKey !== instanceKey);
   return { ...state, pendingOps: remaining };
 }
 
-export function findPendingOp(state: State, id: string): PendingOp | undefined {
-  return state.pendingOps?.find((p) => p.id === id);
+export function findPendingOp(state: State, instanceKey: string): PendingOp | undefined {
+  return state.pendingOps?.find((p) => p.instanceKey === instanceKey);
 }
 
 export function recordRoutedSkill(

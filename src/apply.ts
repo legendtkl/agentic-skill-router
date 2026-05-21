@@ -72,6 +72,7 @@ export async function disableSkill(
     // instead of silently forgetting the user's prior disabled intent.
     const priorRecord = findDisableRecord(initial, record.instanceKey);
     const pending: PendingOp = {
+      instanceKey: record.instanceKey,
       op: "disable",
       id: skill.id,
       livePath,
@@ -94,7 +95,7 @@ export async function disableSkill(
     // pending entry in a single write. If THIS save fails, the next `status`
     // sees pending=disable + disabled file present and finishes the commit
     // idempotently.
-    const committed = removePendingOp(addDisableRecord(beforeRename, record), skill.id);
+    const committed = removePendingOp(addDisableRecord(beforeRename, record), record.instanceKey);
     await saveState(committed, deps.statePath);
     return { state: committed, alreadyDisabled };
   });
@@ -315,29 +316,29 @@ async function reconcilePendingOp(
 ): Promise<PendingResolution> {
   const liveExists = await fileExists(pending.livePath);
   const disabledExists = await fileExists(pending.disabledPath);
-  // Derive the instanceKey for record removal. Prefer the pending record's
-  // own instanceKey when present so journal-recovered ops match the exact
-  // record they wrote, then fall back to deriving it from (id, disabledPath).
-  const pendingInstanceKey = pending.record?.instanceKey ?? skillInstanceKey(pending.id, pending.disabledPath);
+  // The pending op's own `instanceKey` is the canonical journal key. The
+  // validator synthesizes it from `(id, disabledPath)` for legacy entries that
+  // predate the field, so it is always populated here.
+  const pendingInstanceKey = pending.instanceKey;
 
   if (pending.op === "disable") {
     if (disabledExists && !liveExists) {
-      const record = pending.record ?? state.disabledSkills.find((r) => r.id === pending.id);
+      const record = pending.record ?? state.disabledSkills.find((r) => r.instanceKey === pendingInstanceKey);
       const withRecord = record ? addDisableRecord(state, record) : state;
-      return { state: removePendingOp(withRecord, pending.id), commit: "committed" };
+      return { state: removePendingOp(withRecord, pendingInstanceKey), commit: "committed" };
     }
     if (liveExists && !disabledExists) {
       // Rename never happened — atomically undo this attempt. If a prior
       // disable record existed before the pending op was written, restore it
       // so subsequent `status` runs can still reapply the user's intent.
       return {
-        state: removePendingOp(rollbackDisableRecord(state, pending, pendingInstanceKey), pending.id),
+        state: removePendingOp(rollbackDisableRecord(state, pending, pendingInstanceKey), pendingInstanceKey),
         commit: "rolled-back",
       };
     }
     if (!liveExists && !disabledExists) {
       return {
-        state: removePendingOp(removeDisableRecord(state, pendingInstanceKey), pending.id),
+        state: removePendingOp(removeDisableRecord(state, pendingInstanceKey), pendingInstanceKey),
         commit: "rolled-back",
       };
     }
@@ -352,17 +353,17 @@ async function reconcilePendingOp(
     // we MUST NOT leave the disable record in place, otherwise reapply would
     // re-disable the skill on the next status.
     return {
-      state: removePendingOp(removeDisableRecord(state, pendingInstanceKey), pending.id),
+      state: removePendingOp(removeDisableRecord(state, pendingInstanceKey), pendingInstanceKey),
       commit: "committed",
     };
   }
   if (disabledExists && !liveExists) {
     // Rename never happened; the original disable record remains valid.
-    return { state: removePendingOp(state, pending.id), commit: "rolled-back" };
+    return { state: removePendingOp(state, pendingInstanceKey), commit: "rolled-back" };
   }
   if (!liveExists && !disabledExists) {
     return {
-      state: removePendingOp(removeDisableRecord(state, pendingInstanceKey), pending.id),
+      state: removePendingOp(removeDisableRecord(state, pendingInstanceKey), pendingInstanceKey),
       commit: "committed",
     };
   }
@@ -466,6 +467,7 @@ async function enableSkillPaths(
   // a successfully enabled skill.
   const startedAt = (deps.now?.() ?? new Date()).toISOString();
   const pending: PendingOp = {
+    instanceKey,
     op: "enable",
     id,
     livePath,
@@ -485,8 +487,9 @@ async function enableSkillPaths(
   }
 
   // Phase 2: rename completed; remove the disable record (by instanceKey
-  // identity) and clear the journal entry together.
-  const committed = removePendingOp(removeDisableRecord(beforeRename, instanceKey), id);
+  // identity) and clear the journal entry together. Both removals use
+  // `instanceKey` so two same-id instances never trample each other's state.
+  const committed = removePendingOp(removeDisableRecord(beforeRename, instanceKey), instanceKey);
   await saveState(committed, deps.statePath);
   return { state: committed, alreadyEnabled };
 }
