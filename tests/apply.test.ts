@@ -550,6 +550,70 @@ test("loadState ignores pendingOps from older state files (back-compat)", async 
   }
 });
 
+test("status preserves a pre-existing disable record when disable rollback fires", async () => {
+  // Regression: an upstream tool temporarily restored SKILL.md while state
+  // already recorded the skill as disabled. A fresh disable attempt is then
+  // interrupted before the rename completes (live file still present, no
+  // disabled marker). Rollback must restore the original disable record so a
+  // subsequent `status` can reapply the user's intent — not silently forget it.
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    await disableSkill(skill, "first", { statePath });
+    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    // Upstream tool restores the live file but the disabled marker also stays
+    // around briefly; remove it to model the moment the new disable attempt
+    // is journaled (live present, disabled absent).
+    await rename(disabledPath, skill.skillMdPath);
+
+    // Drive a second disableSkill attempt that journals its intent (snapshotting
+    // the still-valid prior record into priorRecord). We then simulate a crash
+    // before the rename by reverting the live/disabled state and asking
+    // reapplyMissing to reconcile the journal.
+    const stateBeforeAttempt = await loadState(statePath);
+    assert.equal(
+      stateBeforeAttempt.disabledSkills.length,
+      1,
+      "prior disable record should still be in state",
+    );
+    const pending: PendingOp = {
+      op: "disable",
+      id: skill.id,
+      livePath: skill.skillMdPath,
+      disabledPath,
+      startedAt: "2026-05-22T00:00:00.000Z",
+      record: {
+        ...stateBeforeAttempt.disabledSkills[0]!,
+        disabledAt: "2026-05-22T00:00:00.000Z",
+        reason: "second",
+      },
+      priorRecord: stateBeforeAttempt.disabledSkills[0]!,
+    };
+    await saveState(addPendingOp(stateBeforeAttempt, pending), statePath);
+
+    const result = await reapplyMissing({ statePath, skills: [skill] });
+    assert.deepEqual(result.recoveredRollbacks, [skill.id]);
+    assert.deepEqual(result.recoveredCommits, []);
+    // Because the prior record survived the rollback, the same reapplyMissing
+    // run also re-renames the upstream-restored live file back to disabled.
+    // Without the fix the record would be gone and `reapplied` would be empty,
+    // silently dropping the user's intent.
+    assert.deepEqual(result.reapplied, [skill.id]);
+
+    const after = await loadState(statePath);
+    assert.equal(after.pendingOps?.length ?? 0, 0);
+    assert.equal(
+      after.disabledSkills.length,
+      1,
+      "prior disable record must survive a rollback",
+    );
+    assert.equal(after.disabledSkills[0]!.reason, "first");
+    assert.equal(await fileExists(skill.skillMdPath), false);
+    assert.equal(await fileExists(disabledPath), true);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("disable on builtin throws BuiltinSkillCannotDisableError", async () => {
   const { statePath, cleanup } = await setup();
   try {

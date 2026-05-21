@@ -71,6 +71,8 @@ function validatePendingOp(x: unknown): PendingOp | null {
   if (typeof x["startedAt"] !== "string") return null;
   const record = x["record"] === undefined ? undefined : validateRecord(x["record"]);
   if (x["record"] !== undefined && !record) return null;
+  const priorRecord = x["priorRecord"] === undefined ? undefined : validateRecord(x["priorRecord"]);
+  if (x["priorRecord"] !== undefined && !priorRecord) return null;
   return {
     op,
     id: x["id"],
@@ -78,6 +80,7 @@ function validatePendingOp(x: unknown): PendingOp | null {
     disabledPath: x["disabledPath"],
     startedAt: x["startedAt"],
     ...(record ? { record } : {}),
+    ...(priorRecord ? { priorRecord } : {}),
   };
 }
 

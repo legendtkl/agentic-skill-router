@@ -77,6 +77,13 @@ export interface PendingOp {
   startedAt: string;
   /** Snapshot of the disable record the caller intends to commit on success. */
   record?: DisableRecord;
+  /**
+   * Snapshot of any pre-existing disable record for this id at the moment the
+   * pending op was written. Lets rollback restore the prior record instead of
+   * silently dropping a still-valid user intent. Absent means there was no
+   * pre-existing record.
+   */
+  priorRecord?: DisableRecord;
 }
 
 export interface RoutedSkillRecord {

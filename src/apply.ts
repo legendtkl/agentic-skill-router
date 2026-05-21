@@ -4,6 +4,7 @@ import { DISABLED_SUFFIX } from "./scan.ts";
 import {
   addDisableRecord,
   addPendingOp,
+  findDisableRecord,
   loadState,
   removeDisableRecord,
   removePendingOp,
@@ -59,6 +60,9 @@ export async function disableSkill(
     // the rename, the journal lets `status` either complete the rename or
     // roll back the intent without leaving a half-applied disable record.
     const initial = await loadState(deps.statePath, deps.host);
+    // Snapshot any pre-existing disable record so a rollback can restore it
+    // instead of silently forgetting the user's prior disabled intent.
+    const priorRecord = findDisableRecord(initial, skill.id);
     const pending: PendingOp = {
       op: "disable",
       id: skill.id,
@@ -66,6 +70,7 @@ export async function disableSkill(
       disabledPath,
       startedAt,
       record,
+      ...(priorRecord ? { priorRecord } : {}),
     };
     const beforeRename = addPendingOp(initial, pending);
     await saveState(beforeRename, deps.statePath);
@@ -208,7 +213,8 @@ interface PendingResolution {
  * disable intent:
  *   - disabled file present, live absent → rename completed; commit the record.
  *   - live present, disabled absent → rename never happened; roll back intent
- *     (do NOT add the disable record).
+ *     to the snapshot captured in `priorRecord` (a previously-valid disable
+ *     record stays, fresh attempts that had no prior record are dropped).
  *   - both absent → SKILL.md vanished entirely; roll back intent and let the
  *     existing orphan/missing-file diagnostics take over for any pre-existing
  *     record.
@@ -239,9 +245,11 @@ async function reconcilePendingOp(
       return { state: removePendingOp(withRecord, pending.id), commit: "committed" };
     }
     if (liveExists && !disabledExists) {
-      // Rename never happened — make sure no stale disable record persists.
+      // Rename never happened — atomically undo this attempt. If a prior
+      // disable record existed before the pending op was written, restore it
+      // so subsequent `status` runs can still reapply the user's intent.
       return {
-        state: removePendingOp(removeDisableRecord(state, pending.id), pending.id),
+        state: removePendingOp(rollbackDisableRecord(state, pending), pending.id),
         commit: "rolled-back",
       };
     }
@@ -310,6 +318,19 @@ export async function findOrphanMarkers(
     }
   }
   return orphans;
+}
+
+/**
+ * Roll back the disable-record portion of a pending disable op. If the pending
+ * op snapshotted a pre-existing record (`priorRecord`), restore it so the
+ * user's previous disable intent survives. Otherwise drop the (uncommitted)
+ * record we wrote during the failed attempt.
+ */
+function rollbackDisableRecord(state: State, pending: PendingOp): State {
+  if (pending.priorRecord) {
+    return addDisableRecord(state, pending.priorRecord);
+  }
+  return removeDisableRecord(state, pending.id);
 }
 
 async function fileExists(path: string): Promise<boolean> {
