@@ -757,24 +757,104 @@ function scoreSearchMatch(hitCount: number, queryTermCount: number, phraseMatche
   return Math.min(1, termScore + (phraseMatched ? 0.35 : 0));
 }
 
+// Minimal generic-term heuristic for snippet scoring. Kept local to dci.ts so
+// the snippet selector stays self-contained: a richer notion of generic terms
+// lives in metadata-route.ts but is not exported. Short Latin tokens (<=2
+// chars) plus a few common English/Chinese stop terms count as generic; every
+// other matched query term is treated as distinctive.
+const SNIPPET_GENERIC_TERMS: ReadonlySet<string> = new Set([
+  "api",
+  "tool",
+  "tools",
+  "helper",
+  "use",
+  "get",
+  "the",
+  "and",
+  "for",
+  "with",
+  "工具",
+  "查询",
+  "搜索",
+  "管理",
+  "操作",
+  "平台",
+  "任务",
+  "服务",
+]);
+
+function isGenericSnippetTerm(term: string): boolean {
+  if (term.length <= 2 && /^[a-z0-9]+$/.test(term)) return true;
+  return SNIPPET_GENERIC_TERMS.has(term);
+}
+
+// Score per matched line, then return the top N by score (desc) with stable
+// tie-break by original line number (asc). Previously this returned the first
+// N matching lines top-to-bottom, which let earlier generic-only matches
+// crowd out strong evidence (phrase / distinctive matches) later in the file.
 function snippetsForTerms(lines: string[], terms: Set<string>, phrase: string, maxSnippets: number): DciSnippet[] {
-  const snippets: DciSnippet[] = [];
-  for (let i = 0; i < lines.length && snippets.length < maxSnippets; i++) {
+  if (maxSnippets <= 0) return [];
+  const scored: { line: number; text: string; score: number }[] = [];
+  const metadataRange = detectMetadataRange(lines);
+
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
     const lineTerms = termsFor(line);
     const linePhrase = compact(line);
-    let matched = phrase.length >= 4 && linePhrase.includes(phrase);
-    if (!matched) {
-      for (const term of terms) {
-        if (lineTerms.has(term) || linePhrase.includes(term)) {
-          matched = true;
-          break;
-        }
-      }
+    let score = 0;
+
+    const phraseMatched = phrase.length >= 4 && linePhrase.includes(phrase);
+    if (phraseMatched) score += 5;
+
+    const onMetadataLine = isMetadataLine(i, line, metadataRange);
+    for (const term of terms) {
+      if (!(lineTerms.has(term) || linePhrase.includes(term))) continue;
+      if (isGenericSnippetTerm(term)) score += 0.3;
+      else score += 2;
+      if (onMetadataLine) score += 1;
     }
-    if (matched) snippets.push({ line: i + 1, text: clampLine(line) });
+
+    if (score > 0) scored.push({ line: i + 1, text: clampLine(line), score });
   }
-  return snippets;
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return a.line - b.line;
+  });
+
+  return scored.slice(0, maxSnippets).map((item) => ({ line: item.line, text: item.text }));
+}
+
+interface MetadataRange {
+  start: number;
+  end: number;
+}
+
+// Detect a YAML frontmatter block at the top of a SKILL.md so snippet scoring
+// can give a small bonus to query terms that land on a metadata line (e.g.
+// `name:` / `description:`). Frontmatter must open and close with `---` and
+// start within the first few lines of the file.
+function detectMetadataRange(lines: string[]): MetadataRange | null {
+  let start = -1;
+  for (let i = 0; i < Math.min(lines.length, 3); i++) {
+    if (lines[i]!.trim() === "---") {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) return null;
+  for (let i = start + 1; i < lines.length && i < start + 200; i++) {
+    if (lines[i]!.trim() === "---") return { start, end: i };
+  }
+  return null;
+}
+
+function isMetadataLine(index: number, line: string, range: MetadataRange | null): boolean {
+  if (range && index >= range.start && index <= range.end) return true;
+  // Outside a detected frontmatter, treat top-of-file `key: value` lines as
+  // metadata so SKILL.md files with non-standard headers still get the bonus.
+  if (index <= 6 && /^[A-Za-z][A-Za-z0-9_-]{0,40}\s*:\s+\S/.test(line)) return true;
+  return false;
 }
 
 function compareScored(a: ScoredLoadedSkill, b: ScoredLoadedSkill): number {
