@@ -237,6 +237,10 @@ test("symlink skill whose target is outside the skills root is marked outOfRoot 
     assert.ok(external, "external symlink skill should still be listed for visibility");
     assert.equal(external!.outOfRoot, true, "out-of-root symlink should be flagged");
     assert.equal(external!.isDisabled, false);
+    // Out-of-root symlinks must also report canDisable === false so that
+    // policy/suggestion bulk paths skip them instead of attempting a rename
+    // that the host would reject mid-batch.
+    assert.equal(external!.canDisable, false, "out-of-root symlink must report canDisable=false");
 
     // host-level disable refuses with a clear error
     await assert.rejects(
@@ -275,6 +279,7 @@ test("symlink skill whose target is inside the same skills root remains disable-
     const linked = skills.find((s) => s.id === "user:inside-link");
     assert.ok(linked, "in-root symlink skill should be listed");
     assert.notEqual(linked!.outOfRoot, true, "in-root symlink should NOT be flagged out-of-root");
+    assert.equal(linked!.canDisable, true, "in-root symlink should remain disable-able");
 
     // The host can still disable a regular in-root skill the normal way.
     const real = skills.find((s) => s.id === "user:inside-real");

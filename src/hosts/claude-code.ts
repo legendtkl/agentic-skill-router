@@ -69,7 +69,7 @@ export class ClaudeCodeHost implements Host {
         skillMdPath,
         isDisabled,
         isPluginDisabled: false,
-        canDisable: true,
+        canDisable: !outOfRoot,
         conflict,
         outOfRoot,
       };
@@ -162,16 +162,19 @@ export class ClaudeCodeHost implements Host {
   }
 
   async disable(skill: Skill, _reason: string): Promise<void> {
-    if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
+    // Check outOfRoot before canDisable so that the more specific
+    // "resolves outside the skills root" error wins for symlink escapes,
+    // even though out-of-root skills now also report canDisable=false.
     if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
+    if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
     if (skill.isDisabled) return; // idempotent
     const target = skill.skillMdPath + DISABLED_SUFFIX;
     await rename(skill.skillMdPath, target);
   }
 
   async enable(skill: Skill): Promise<void> {
-    if (!skill.canDisable) return; // builtins are never disabled
     if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
+    if (!skill.canDisable) return; // builtins are never disabled
     if (!skill.isDisabled) return; // idempotent
     if (!skill.skillMdPath.endsWith(DISABLED_SUFFIX)) return;
     const target = skill.skillMdPath.slice(0, -DISABLED_SUFFIX.length);

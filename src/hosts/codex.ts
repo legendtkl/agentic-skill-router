@@ -105,7 +105,7 @@ export class CodexHost implements Host {
           skillMdPath,
           isDisabled,
           isPluginDisabled,
-          canDisable: true,
+          canDisable: !outOfRoot,
           conflict,
           outOfRoot,
         };
@@ -133,15 +133,18 @@ export class CodexHost implements Host {
   }
 
   async disable(skill: Skill, _reason: string): Promise<void> {
-    if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
+    // Check outOfRoot before canDisable so that the more specific
+    // "resolves outside the skills root" error wins for symlink escapes,
+    // even though out-of-root skills now also report canDisable=false.
     if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
+    if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
     if (skill.isDisabled) return;
     await rename(skill.skillMdPath, skill.skillMdPath + DISABLED_SUFFIX);
   }
 
   async enable(skill: Skill): Promise<void> {
-    if (!skill.canDisable) return;
     if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
+    if (!skill.canDisable) return;
     if (!skill.isDisabled) return;
     if (!skill.skillMdPath.endsWith(DISABLED_SUFFIX)) return;
     await rename(skill.skillMdPath, skill.skillMdPath.slice(0, -DISABLED_SUFFIX.length));
@@ -165,7 +168,7 @@ export class CodexHost implements Host {
         skillMdPath,
         isDisabled,
         isPluginDisabled: false,
-        canDisable: opts.canDisable,
+        canDisable: opts.canDisable && !outOfRoot,
         conflict,
         outOfRoot,
       };

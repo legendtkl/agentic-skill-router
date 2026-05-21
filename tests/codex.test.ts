@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -269,6 +269,65 @@ test("CodexHost disable + enable round-trip on a codex user skill", async () => 
     await host.enable(disabledBrand!);
     assert.equal(await fileExists(brand!.skillMdPath), true);
   } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CodexHost flags out-of-root symlink skills as canDisable=false across user, plugin, and project roots", async () => {
+  const fake = await makeFakeCodexUser();
+  const outside = await mkdtemp(join(tmpdir(), "skill-router-codex-outside-"));
+  try {
+    // Real skill directories placed entirely outside any Codex skills root.
+    // Each is fully valid as a skill, but their SKILL.md must NOT be
+    // renamed by skill-router when reached through an in-root symlink.
+    const externUserDir = join(outside, "ext-user");
+    await mkdir(externUserDir, { recursive: true });
+    await writeFile(join(externUserDir, "SKILL.md"), "---\nname: ext-user\ndescription: outside codex user root\n---\n");
+    await symlink(externUserDir, join(fake.codexHome, "skills", "ext-user-link"));
+
+    const externAgentsDir = join(outside, "ext-agents");
+    await mkdir(externAgentsDir, { recursive: true });
+    await writeFile(join(externAgentsDir, "SKILL.md"), "---\nname: ext-agents\ndescription: outside agents root\n---\n");
+    await symlink(externAgentsDir, join(fake.agentsHome, "skills", "ext-agents-link"));
+
+    const externProjectDir = join(outside, "ext-project");
+    await mkdir(externProjectDir, { recursive: true });
+    await writeFile(join(externProjectDir, "SKILL.md"), "---\nname: ext-project\ndescription: outside project root\n---\n");
+    const projectAgentsSkills = join(fake.root, "project", ".agents", "skills");
+    await mkdir(projectAgentsSkills, { recursive: true });
+    await symlink(externProjectDir, join(projectAgentsSkills, "ext-project-link"));
+
+    const externPluginDir = join(outside, "ext-plugin");
+    await mkdir(externPluginDir, { recursive: true });
+    await writeFile(join(externPluginDir, "SKILL.md"), "---\nname: ext-plugin\ndescription: outside plugin root\n---\n");
+    const pluginSkillsRoot = join(fake.codexHome, "plugins", "cache", "openai-curated", "gmail", "3c463363", "skills");
+    await symlink(externPluginDir, join(pluginSkillsRoot, "ext-plugin-link"));
+
+    const host = new CodexHost({
+      codexHome: fake.codexHome,
+      agentsHome: fake.agentsHome,
+      cwd: fake.cwd,
+      adminSkillsRoot: fake.adminSkillsRoot,
+    });
+    const byId = new Map((await host.listSkills()).map((s) => [s.id, s]));
+
+    const checks = [
+      "user:codex:ext-user-link",
+      "user:agents:ext-agents-link",
+      "project:codex:.:ext-project-link",
+      "plugin:gmail@openai-curated:ext-plugin-link",
+    ];
+    for (const id of checks) {
+      const s = byId.get(id);
+      assert.ok(s, `expected out-of-root symlink skill listed: ${id}`);
+      assert.equal(s!.outOfRoot, true, `${id} should be flagged outOfRoot`);
+      // The whole point of this fix: bulk policy/suggest paths must not
+      // pick these up. canDisable=false is how they get skipped.
+      assert.equal(s!.canDisable, false, `${id} must report canDisable=false`);
+      await assert.rejects(() => host.disable(s!, "test"), /resolves outside the skills root/i);
+    }
+  } finally {
+    await rm(outside, { recursive: true, force: true });
     await fake.cleanup();
   }
 });
