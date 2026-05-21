@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,13 @@ function sandboxEnv(root: string, extra: NodeJS.ProcessEnv = {}): NodeJS.Process
   delete env["http_proxy"];
   delete env["https_proxy"];
   return env;
+}
+
+async function seedStaleVersion(cacheRoot: string, name: string): Promise<string> {
+  const dir = join(cacheRoot, name);
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "marker.txt"), `stale ${name}`);
+  return dir;
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -444,3 +451,103 @@ test("[claude] uninstall is a no-op when no install exists", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+for (const variant of [
+  {
+    label: "claude-code",
+    script: "scripts/install.mjs",
+    cacheRelative: ["plugins", "cache", "local", "skill-router"],
+    sandboxRootName: "claude",
+  },
+  {
+    label: "codex",
+    script: "scripts/install-codex.mjs",
+    cacheRelative: ["plugins", "cache", "local", "skill-router"],
+    sandboxRootName: "codex",
+  },
+]) {
+  // We rely on the install scripts honoring CLAUDE_HOME/CODEX_HOME under the
+  // sandbox env (set by sandboxEnv). For the claude variant the cache lives
+  // under `${root}/.claude`, for codex under `${root}/.codex`. The cleanup
+  // tests pre-seed stale version dirs under those paths.
+  const cacheParentFor = (root: string): string =>
+    variant.sandboxRootName === "claude" ? join(root, ".claude") : join(root, ".codex");
+
+  test(`install (${variant.label}) removes stale plugin cache versions by default`, async () => {
+    const root = await mkdtemp(join(tmpdir(), `skill-router-cleanup-${variant.label}-`));
+    try {
+      const cacheRoot = join(cacheParentFor(root), ...variant.cacheRelative);
+      await mkdir(cacheRoot, { recursive: true });
+      const staleA = await seedStaleVersion(cacheRoot, "0.0.1");
+      const staleB = await seedStaleVersion(cacheRoot, "0.0.2");
+
+      const { stdout } = await execFileAsync(process.execPath, [variant.script], {
+        cwd: REPO_ROOT,
+        env: sandboxEnv(root),
+        maxBuffer: MAX_BUFFER,
+      });
+
+      const currentDir = join(cacheRoot, PKG_VERSION);
+      assert.equal(await pathExists(currentDir), true, "current version directory must remain");
+      assert.equal(await pathExists(staleA), false, "stale version 0.0.1 must be removed");
+      assert.equal(await pathExists(staleB), false, "stale version 0.0.2 must be removed");
+
+      const remaining = (await readdir(cacheRoot)).sort();
+      assert.deepEqual(remaining, [PKG_VERSION]);
+      assert.match(stdout, /cleaned cache: 0\.0\.1, 0\.0\.2/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test(`install (${variant.label}) with --keep-old preserves stale versions`, async () => {
+    const root = await mkdtemp(join(tmpdir(), `skill-router-cleanup-keep-${variant.label}-`));
+    try {
+      const cacheRoot = join(cacheParentFor(root), ...variant.cacheRelative);
+      await mkdir(cacheRoot, { recursive: true });
+      const staleA = await seedStaleVersion(cacheRoot, "0.0.1");
+      const staleB = await seedStaleVersion(cacheRoot, "0.0.2");
+
+      const { stdout } = await execFileAsync(process.execPath, [variant.script, "--keep-old"], {
+        cwd: REPO_ROOT,
+        env: sandboxEnv(root),
+        maxBuffer: MAX_BUFFER,
+      });
+
+      const currentDir = join(cacheRoot, PKG_VERSION);
+      assert.equal(await pathExists(currentDir), true, "current version directory must remain");
+      assert.equal(await pathExists(staleA), true, "stale version 0.0.1 must be kept");
+      assert.equal(await pathExists(staleB), true, "stale version 0.0.2 must be kept");
+      assert.match(stdout, /kept old versions: 0\.0\.1, 0\.0\.2/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test(`install (${variant.label}) only removes the symlink for stale entries pointing outside the cache root`, async () => {
+    const root = await mkdtemp(join(tmpdir(), `skill-router-cleanup-symlink-${variant.label}-`));
+    try {
+      const cacheRoot = join(cacheParentFor(root), ...variant.cacheRelative);
+      const outsideDir = join(root, "outside");
+      await mkdir(cacheRoot, { recursive: true });
+      await mkdir(outsideDir, { recursive: true });
+      const sentinel = join(outsideDir, "do-not-delete.txt");
+      await writeFile(sentinel, "must survive cleanup");
+
+      const symlinkPath = join(cacheRoot, "0.0.1");
+      await symlink(outsideDir, symlinkPath, "dir");
+
+      await execFileAsync(process.execPath, [variant.script], {
+        cwd: REPO_ROOT,
+        env: sandboxEnv(root),
+        maxBuffer: MAX_BUFFER,
+      });
+
+      assert.equal(await pathExists(symlinkPath), false, "symlink stale entry must be removed");
+      assert.equal(await pathExists(outsideDir), true, "outside directory must survive");
+      assert.equal(await pathExists(sentinel), true, "outside file must survive");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}

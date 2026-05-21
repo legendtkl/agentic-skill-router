@@ -10,9 +10,9 @@
  *
  * Idempotent: re-running upgrades the install in place.
  */
-import { chmod, copyFile, cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, cp, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { isManagedUnchanged } from "./prompt-marker.mjs";
@@ -28,10 +28,12 @@ const PLUGIN_NAME = "skill-router";
 const MARKETPLACE = "local";
 const PLUGIN_KEY = `${PLUGIN_NAME}@${MARKETPLACE}`;
 const codexHome = process.env["CODEX_HOME"] || join(homedir(), ".codex");
-const installPath = join(codexHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME, version);
+const cacheRoot = join(codexHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME);
+const installPath = join(cacheRoot, version);
 const configPath = join(codexHome, "config.toml");
 const promptSrc = join(pluginSrc, "prompts/skill-router-skills.md");
 const promptPath = join(codexHome, "prompts/skill-router-skills.md");
+const keepOld = process.argv.includes("--keep-old");
 
 async function main() {
   log(`installing ${PLUGIN_KEY} v${version}`);
@@ -41,6 +43,7 @@ async function main() {
   await copyPlugin();
   await enablePlugin();
   await installSlashCommand();
+  await cleanupOldVersions(cacheRoot, version, { keepOld });
 
   log("");
   log("✓ installed.");
@@ -139,6 +142,48 @@ function setPluginEnabled(config, pluginKey, enabled) {
   else block.push(`enabled = ${enabled}`);
   lines.splice(start, end - start, ...block);
   return lines.join("\n").replace(/\n*$/, "\n");
+}
+
+async function cleanupOldVersions(cacheRoot, currentVersion, { keepOld }) {
+  let entries;
+  try {
+    entries = await readdir(cacheRoot, { withFileTypes: true });
+  } catch (err) {
+    if (err && /** @type {NodeJS.ErrnoException} */(err).code === "ENOENT") return;
+    throw err;
+  }
+  const siblings = entries
+    .map((entry) => entry.name)
+    .filter((name) => name !== currentVersion);
+  if (siblings.length === 0) {
+    log("  no old versions to clean");
+    return;
+  }
+  if (keepOld) {
+    log(`  kept old versions: ${siblings.sort().join(", ")}`);
+    return;
+  }
+
+  // Containment guard: anchor every delete under the canonical cache root.
+  // We realpath the *cache root* (not the sibling entry) so a sibling that
+  // happens to be a symlink pointing outside the cache root removes only the
+  // symlink itself, not its target tree (`fs.rm` does not follow symlinks).
+  const canonicalCacheRoot = await realpath(cacheRoot);
+  const safeParent = canonicalCacheRoot.endsWith(sep) ? canonicalCacheRoot : canonicalCacheRoot + sep;
+  const removed = [];
+  for (const name of siblings) {
+    if (name === "" || name === "." || name === "..") continue;
+    if (name.includes(sep) || name.includes("/")) continue;
+    const target = join(canonicalCacheRoot, name);
+    if (!(target + sep).startsWith(safeParent) || target === canonicalCacheRoot) {
+      log(`  skipped (outside cache root): ${target}`);
+      continue;
+    }
+    await rm(target, { recursive: true, force: true });
+    removed.push(name);
+  }
+  if (removed.length === 0) log("  no old versions to clean");
+  else log(`  cleaned cache: ${removed.sort().join(", ")}`);
 }
 
 async function atomicWrite(path, content) {
