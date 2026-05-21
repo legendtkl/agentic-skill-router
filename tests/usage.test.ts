@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -74,6 +74,30 @@ test("collectUsageStats picks up <command-name> tags from string content", async
 test("collectUsageStats returns empty map when projectsDir does not exist", async () => {
   const stats = await collectUsageStats("/nonexistent/path/skill-router-test");
   assert.equal(stats.size, 0);
+});
+
+test("collectUsageStats skips unreadable transcript files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "skill-router-usage-read-error-"));
+  const projectsDir = join(root, "projects");
+  const sessionDir = join(projectsDir, "proj");
+  const readable = join(sessionDir, "readable.jsonl");
+  const unreadable = join(sessionDir, "unreadable.jsonl");
+  const mkLine = (skill: string) => `${JSON.stringify({
+    timestamp: "2026-04-10T08:00:00.000Z",
+    message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
+  })}\n`;
+  await mkdir(sessionDir, { recursive: true });
+  await writeFile(readable, mkLine("foo"), "utf8");
+  await writeFile(unreadable, mkLine("bar"), "utf8");
+  await chmod(unreadable, 0o000);
+  try {
+    const stats = await collectUsageStats(projectsDir);
+    assert.equal(stats.get("foo")?.callCount, 1);
+    assert.equal(stats.get("bar"), undefined);
+  } finally {
+    await chmod(unreadable, 0o600).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("collectUsageStats: bar is tracked once", async () => {

@@ -212,7 +212,12 @@ export async function collectUsageStats(
     }
 
     if (!fileStats) {
-      fileStats = await scanFileSerialized(file);
+      try {
+        fileStats = await scanFileSerialized(file);
+      } catch (err: unknown) {
+        if (isSkippableScanError(err)) continue;
+        throw err;
+      }
     }
 
     if (useCache) {
@@ -236,6 +241,11 @@ export async function collectUsageStats(
     });
   }
   return out;
+}
+
+function isSkippableScanError(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "EACCES" || code === "EPERM";
 }
 
 async function listJsonlFiles(root: string): Promise<string[]> {
