@@ -256,6 +256,60 @@ test("DCI search and grep enforce the candidate budget even with large topK", as
   }
 });
 
+test("DCI search truncates oversized skill bodies at the per-skill byte budget", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const huge = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:huge-body-probe",
+      name: "huge-body-probe",
+      description: "Generic disabled helper",
+      body: `${"x".repeat(DCI_BUDGET.maxSkillBytes + 512)}\nunseenzephyrmarker`,
+      isDisabled: true,
+    });
+    corpus.skills.push(huge);
+
+    const result = await dciSearchDisabledSkills([huge], "unseenzephyrmarker", { topK: 3 });
+    assert.equal(result.matches.length, 0);
+    assert.equal(result.corpus.loaded, 1);
+    assert.equal(result.corpus.truncated, 1);
+    assert.ok(result.corpus.bytesRead <= DCI_BUDGET.maxSkillBytes);
+    assert.equal(result.warnings[0]?.code, "skill-body-truncated");
+    assert.equal(result.warnings[0]?.id, "user:codex:huge-body-probe");
+    assert.equal(result.warnings[0]?.limitBytes, DCI_BUDGET.maxSkillBytes);
+
+    const route = await dciRouteDisabledSkills([huge], "unseenzephyrmarker", { topK: 3 });
+    assert.equal(route.selected, null);
+    assert.equal(route.diagnostics?.dci?.warnings?.[0]?.code, "skill-body-truncated");
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI search stops reading when the total corpus byte budget is exhausted", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const skillCount = Math.ceil(DCI_BUDGET.maxCorpusBytes / DCI_BUDGET.maxSkillBytes) + 3;
+    for (let i = 0; i < skillCount; i++) {
+      corpus.skills.push(await writeCorpusSkill(corpus.root, {
+        id: `user:codex:corpus-budget-${i}`,
+        name: `corpus-budget-${i}`,
+        description: "Generic disabled helper",
+        body: `${"x".repeat(DCI_BUDGET.maxSkillBytes + 512)}${i === skillCount - 1 ? "\nunseencorpusmarker" : ""}`,
+        isDisabled: true,
+      }));
+    }
+
+    const result = await dciSearchDisabledSkills(corpus.skills, "unseencorpusmarker", { topK: 3 });
+    assert.equal(result.matches.length, 0);
+    assert.equal(result.corpus.bytesRead, DCI_BUDGET.maxCorpusBytes);
+    assert.ok(result.corpus.loaded < skillCount);
+    assert.ok(result.corpus.skipped > 0);
+    assert.ok(result.warnings.some((warning) => warning.code === "corpus-budget-exhausted"));
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI route checks ambiguity before applying topK", async () => {
   const corpus = await makeCorpus(0);
   try {

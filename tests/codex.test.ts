@@ -440,10 +440,18 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
       ["--import", "tsx", cli, "--host=codex", "skills", "dci", "budget", "--json"],
       { env },
     );
-    const parsedBudget = JSON.parse(budget.stdout) as { maxQueries: number; maxSelections: number; maxOpenChars: number };
+    const parsedBudget = JSON.parse(budget.stdout) as {
+      maxQueries: number;
+      maxSelections: number;
+      maxOpenChars: number;
+      maxSkillBytes: number;
+      maxCorpusBytes: number;
+    };
     assert.equal(parsedBudget.maxQueries, 3);
     assert.equal(parsedBudget.maxSelections, 3);
     assert.equal(parsedBudget.maxOpenChars, 24_000);
+    assert.equal(parsedBudget.maxSkillBytes, 64_000);
+    assert.equal(parsedBudget.maxCorpusBytes, 1_000_000);
 
     const route = await execFileAsync(
       process.execPath,

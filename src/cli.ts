@@ -608,6 +608,8 @@ async function cmdDciBudget(argv: string[]): Promise<number> {
   }
   console.log(`max queries:        ${DCI_BUDGET.maxQueries}`);
   console.log(`max candidates:     ${DCI_BUDGET.maxCandidates}`);
+  console.log(`max skill body:     ${DCI_BUDGET.maxSkillBytes} bytes`);
+  console.log(`max corpus body:    ${DCI_BUDGET.maxCorpusBytes} bytes`);
   console.log(`max find/open ops:  ${DCI_BUDGET.maxFindsOrOpens}`);
   console.log(`max full reads:     ${DCI_BUDGET.maxFullReads}`);
   console.log(`max selections:     ${DCI_BUDGET.maxSelections}`);
