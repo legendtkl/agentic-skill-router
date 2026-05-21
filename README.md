@@ -263,11 +263,20 @@ need network or local agent auth:
 | --- | --- | --- | --- |
 | Offline | `npm run test:e2e:offline` | nothing beyond `node` / `npm` and the bundled CLI (no network, no auth) | every PR and push to `main` |
 | Network | `npm run test:e2e:network` (alias: `npm run test:e2e`) | network to clone the pinned `openai/skills` GitHub ref | nightly schedule + manual `workflow_dispatch` |
-| Agent | `npm run test:e2e:agent` (or single-host `npm run test:e2e:codex` / `npm run test:e2e:claude`) | local `codex` / `claude` CLI plus their auth files | manual `workflow_dispatch` only (self-skips when binaries are missing) |
+| Agent | `npm run test:e2e:agent` (or single-host `npm run test:e2e:codex` / `npm run test:e2e:claude`) | local `codex` / `claude` CLI plus their auth files | manual `workflow_dispatch` only, and only on a self-hosted runner with the `skill-router-agent-e2e` label (self-skips when binaries are missing) |
 
 Run higher layers locally when changes touch host install, plugin loading,
 slash prompts, or the agent-facing workflow. The agent layer self-skips
 when the matching binary or auth file is not available.
+
+The `e2e-agent` workflow job uses `runs-on: [self-hosted, skill-router-agent-e2e]`.
+Without a configured self-hosted runner carrying that label, dispatched runs
+will queue and never start — that is intentional, since hosted GitHub runners
+do not satisfy the local `codex` / `claude` binary and auth requirements and
+the underlying tests would otherwise self-skip silently. To actually exercise
+the agent layer in CI, register a self-hosted runner with the
+`skill-router-agent-e2e` label, install `codex` and `claude` on its PATH, and
+configure their auth credentials.
 
 To compare routing thresholds before and after a change, run the evaluation
 harness:

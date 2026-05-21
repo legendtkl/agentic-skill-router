@@ -161,8 +161,15 @@ every PR without touching the network or requiring local agent binaries.
   machines that have a local `claude` binary.
 - These tests self-skip when the local agent binary or auth is missing, so
   they are safe to run on any developer machine.
-- CI runs this layer only via manual `workflow_dispatch` (and typically only
-  meaningfully on self-hosted runners that provide the binaries).
+- CI runs this layer only via manual `workflow_dispatch`, and the job is
+  pinned to `runs-on: [self-hosted, skill-router-agent-e2e]`. Hosted GitHub
+  runners would not satisfy the local `codex` / `claude` binary and auth
+  requirements, so without a configured self-hosted runner carrying the
+  `skill-router-agent-e2e` label the dispatched job will queue and never
+  start — by design, so the agent layer never silently self-skips in CI.
+- To actually exercise the agent layer in CI, register a self-hosted runner
+  with the `skill-router-agent-e2e` label, put `codex` and `claude` on its
+  PATH, and configure their auth credentials on that runner.
 
 ### Shared invariants for the OpenAI e2e files (layers 2 and 3)
 

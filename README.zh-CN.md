@@ -229,10 +229,17 @@ manifest 以及 Codex 的 prompt 文件都被包含。
 | --- | --- | --- | --- |
 | Offline | `npm run test:e2e:offline` | 仅需要 `node` / `npm` 和打包后的 CLI，不联网、不需要任何鉴权 | 每个 PR 与推 `main` |
 | Network | `npm run test:e2e:network`（别名：`npm run test:e2e`） | 需要联网拉取固定 ref 的 `openai/skills` 仓库 | Nightly 定时任务 + 手动 `workflow_dispatch` |
-| Agent | `npm run test:e2e:agent`（或单 host 的 `npm run test:e2e:codex` / `npm run test:e2e:claude`） | 需要本地存在 `codex` / `claude` CLI 及其鉴权文件 | 仅手动 `workflow_dispatch`（缺少二进制时测试会自动跳过） |
+| Agent | `npm run test:e2e:agent`（或单 host 的 `npm run test:e2e:codex` / `npm run test:e2e:claude`） | 需要本地存在 `codex` / `claude` CLI 及其鉴权文件 | 仅手动 `workflow_dispatch`，且必须由带 `skill-router-agent-e2e` label 的 self-hosted runner 承接（缺少二进制时测试会自动跳过） |
 
 涉及 host 安装、插件加载、slash prompt 或面向 agent 的工作流时，请在本地
 跑相应的更高层。Agent 层在缺少二进制或鉴权文件时会自动跳过。
+
+CI 中的 `e2e-agent` job 使用 `runs-on: [self-hosted, skill-router-agent-e2e]`。
+若未配置带这个 label 的 self-hosted runner，手动触发的 agent 层任务会一直
+排队、不会真正运行 —— 这是有意的，因为 GitHub 托管 runner 不具备本地
+`codex` / `claude` 二进制和鉴权文件，跑下去也只是测试自跳过。要真正在 CI
+里跑 agent 层，请注册一台 self-hosted runner，打上 `skill-router-agent-e2e`
+label，并把 `codex`、`claude` 放进 PATH 配好对应鉴权。
 
 目录结构：
 

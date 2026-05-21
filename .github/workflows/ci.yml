@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       run_agent_e2e:
-        description: "Run the agent e2e layer (needs local codex/claude binaries + auth; usually a no-op on hosted runners)"
+        description: "Run the agent e2e layer (requires a self-hosted runner with local codex/claude binaries + auth)"
         required: false
         default: "false"
 
@@ -48,12 +48,14 @@ jobs:
         run: npm run test:e2e:network
 
   e2e-agent:
-    # Manual dispatch only. Needs a local codex/claude binary and auth on the
-    # runner; hosted GitHub-managed runners typically do not satisfy this and
-    # the underlying test will skip itself. The job exists so that
-    # self-hosted runners with the right binaries can opt in.
+    # Manual dispatch only. Requires a self-hosted runner with the matching
+    # label that has a local `codex` and `claude` binary on PATH plus the
+    # corresponding auth configured (Codex auth, `~/.claude/.credentials.json`).
+    # Hosted GitHub-managed runners do not satisfy this; without a matching
+    # self-hosted runner the dispatched job will queue and never run, which
+    # is intentional and signals that no agent-capable runner is available.
     if: github.event_name == 'workflow_dispatch' && inputs.run_agent_e2e == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, skill-router-agent-e2e]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -62,5 +64,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Verify agent CLIs are available
+        run: |
+          set -e
+          command -v codex >/dev/null || { echo "codex binary missing on runner PATH"; exit 1; }
+          command -v claude >/dev/null || { echo "claude binary missing on runner PATH"; exit 1; }
       - name: e2e (agent)
         run: npm run test:e2e:agent
