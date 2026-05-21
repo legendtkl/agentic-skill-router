@@ -68,7 +68,7 @@ export async function readInstalledPlugins(path: string): Promise<InstalledPlugi
 }
 
 /** Naive dotted-numeric comparison; falls back to lexical for non-numeric. */
-function compareVersions(a: string, b: string): number {
+export function compareVersions(a: string, b: string): number {
   const ap = a.split(/[.\-+]/);
   const bp = b.split(/[.\-+]/);
   const len = Math.max(ap.length, bp.length);
