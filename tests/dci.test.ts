@@ -420,6 +420,60 @@ test("DCI route checks ambiguity before applying topK", async () => {
   }
 });
 
+test("DCI snippet scoring prefers strong evidence over earlier generic-only matches", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    // Construct a body where many generic-only matches appear EARLIER than
+    // the distinctive evidence line. With first-match selection, those
+    // earlier generic lines fill the maxSnippets=2 budget and the strong
+    // evidence line never makes it into the returned snippets.
+    const bodyLines: string[] = [];
+    for (let i = 0; i < 5; i++) bodyLines.push(`Helper tool for the workflow round ${i}.`); // generic-only
+    bodyLines.push("Distinctive evidence: dci-snippet-score-zephyr-marker appears here.");
+    bodyLines.push("Trailing prose unrelated to the probe.");
+    const body = bodyLines.join("\n");
+    const skill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:snippet-score-probe",
+      name: "snippet-score-probe",
+      description: "neutral disabled skill body for scoring tests",
+      body,
+      isDisabled: true,
+    });
+
+    const result = await dciSearchDisabledSkills(
+      [skill],
+      "dci-snippet-score-zephyr-marker helper workflow",
+      { topK: 1, maxSnippets: 2 },
+    );
+    assert.equal(result.matches.length, 1);
+    const snippets = result.matches[0]!.snippets;
+    assert.equal(snippets.length, 2);
+
+    // The distinctive-evidence line must appear in the bounded snippet
+    // window. Before this change the five earlier generic-only matches
+    // crowded it out entirely.
+    const evidenceSnippet = snippets.find((s) => s.text.includes("dci-snippet-score-zephyr-marker"));
+    assert.ok(evidenceSnippet, `expected evidence snippet in ${JSON.stringify(snippets)}`);
+
+    // Distinctive evidence outranks generic-only matches, so the evidence
+    // line is the highest-scoring snippet despite appearing later in the
+    // file.
+    assert.equal(snippets[0]!.text.includes("dci-snippet-score-zephyr-marker"), true);
+
+    // At most one of the five generic-only lines can occupy the remaining
+    // snippet slot; deterministic tie-break uses the earliest line number.
+    const genericOnly = snippets.filter((s) => !s.text.includes("dci-snippet-score-zephyr-marker"));
+    assert.equal(genericOnly.length, 1);
+
+    // Original line numbers from the file are preserved verbatim in the
+    // returned snippets; evidence sits below the first generic line.
+    assert.ok(evidenceSnippet.line > genericOnly[0]!.line);
+    assert.ok(genericOnly[0]!.line >= 1);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI grep returns bounded snippets from disabled skills", async () => {
   const corpus = await makeCorpus();
   try {
