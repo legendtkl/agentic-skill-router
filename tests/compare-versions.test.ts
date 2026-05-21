@@ -139,3 +139,98 @@ test("compareVersions: one-side non-semver still produces deterministic result",
   assert.equal(ab, -ba);
   assert.equal(sign(compareVersions(b, b)), 0);
 });
+
+test("compareVersions: transitive across strict semver, partial semver, and prerelease", () => {
+  // Reviewer's regression case: in the old dual-algorithm design we had
+  //   compareVersions("1.0.0", "1.0")        === 0  (fallback path)
+  //   compareVersions("1.0", "1.0.0-alpha")   <  0  (fallback path)
+  //   compareVersions("1.0.0", "1.0.0-alpha") >  0  (strict semver path)
+  // which violates transitivity (a == b and b < c implies a < c) and made
+  // sort() pick inconsistent "highest" entries when inputs mixed shapes.
+  // After the fix, the partial "1.0" must parse through the same numeric
+  // path as "1.0.0" so all three relate consistently.
+  const eq = sign(compareVersions("1.0.0", "1.0"));
+  const partialVsPrerelease = sign(compareVersions("1.0", "1.0.0-alpha"));
+  const strictVsPrerelease = sign(compareVersions("1.0.0", "1.0.0-alpha"));
+  assert.equal(eq, 0, "1.0.0 and 1.0 must compare equal numerically");
+  assert.equal(partialVsPrerelease, 1, "1.0 (stable) must outrank 1.0.0-alpha");
+  assert.equal(strictVsPrerelease, 1, "1.0.0 (stable) must outrank 1.0.0-alpha");
+
+  // Sort the same set and confirm the result is deterministic and matches
+  // semver expectations (prerelease at the bottom, the two stable forms
+  // tied at the top). Anti-symmetry of every pair is also checked.
+  const items = ["1.0.0", "1.0", "1.0.0-alpha"];
+  for (const x of items) {
+    for (const y of items) {
+      const xy = sign(compareVersions(x, y));
+      const yx = sign(compareVersions(y, x));
+      assert.equal(
+        xy + yx,
+        0,
+        `anti-symmetry failed for (${x}, ${y}): xy=${xy}, yx=${yx}`,
+      );
+    }
+  }
+  const sorted = [...items].sort((a, b) => compareVersions(a, b));
+  assert.equal(sorted[0], "1.0.0-alpha", `prerelease must sort first: ${sorted.join(", ")}`);
+  assert.ok(
+    (sorted[1] === "1.0.0" && sorted[2] === "1.0") ||
+      (sorted[1] === "1.0" && sorted[2] === "1.0.0"),
+    `the two stable equivalents must sort after the prerelease: ${sorted.join(", ")}`,
+  );
+
+  // Picking the "highest" descending — the operation readInstalledPlugins
+  // uses to deduplicate plugin install entries — must never return the
+  // prerelease over the stable equivalents.
+  const highest = [...items].sort((a, b) => compareVersions(b, a))[0];
+  assert.notEqual(highest, "1.0.0-alpha");
+});
+
+test("compareVersions: transitive across heterogeneous parsed and unparsable inputs", () => {
+  // A wider set that mixes strict semver, partial versions, extended dotted
+  // numerics, prereleases, and sentinel strings like "unknown". Verifies the
+  // total-order invariant: for every triple (x, y, z), if x <= y and y <= z
+  // then x <= z. This is what guarantees Array#sort produces a stable,
+  // deterministic result regardless of input shape.
+  const items = [
+    "2.0.0",
+    "1.10.0",
+    "1.2.0",
+    "1.0.0",
+    "1.0",
+    "1",
+    "1.0.0-rc.1",
+    "1.0.0-beta.2",
+    "1.0.0-alpha",
+    "1.2.3.4",
+    "v1.0.0",
+    "unknown",
+    "totally-bogus",
+  ];
+  for (const x of items) {
+    for (const y of items) {
+      const xy = sign(compareVersions(x, y));
+      const yx = sign(compareVersions(y, x));
+      assert.equal(
+        xy + yx,
+        0,
+        `anti-symmetry failed for (${x}, ${y}): xy=${xy}, yx=${yx}`,
+      );
+    }
+  }
+  for (const x of items) {
+    for (const y of items) {
+      for (const z of items) {
+        const xy = sign(compareVersions(x, y));
+        const yz = sign(compareVersions(y, z));
+        const xz = sign(compareVersions(x, z));
+        if (xy <= 0 && yz <= 0) {
+          assert.ok(
+            xz <= 0,
+            `transitivity failed: ${x} <= ${y} <= ${z} but ${x} > ${z} (xy=${xy}, yz=${yz}, xz=${xz})`,
+          );
+        }
+      }
+    }
+  }
+});

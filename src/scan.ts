@@ -67,34 +67,74 @@ export async function readInstalledPlugins(path: string): Promise<InstalledPlugi
   return out;
 }
 
-// MAJOR.MINOR.PATCH with optional -PRERELEASE and +BUILD per semver 2.0.
+// Strict semver 2.0: MAJOR.MINOR.PATCH with optional -PRERELEASE and +BUILD.
 // PRERELEASE and BUILD identifiers are dot-separated, alphanumeric or hyphen,
 // and numeric identifiers cannot have leading zeros.
 const SEMVER_RE =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
-interface ParsedSemver {
-  major: number;
-  minor: number;
-  patch: number;
-  prerelease: string[]; // empty means stable release
+// Loose dotted-numeric form: one or more numeric segments separated by dots,
+// optionally followed by `-PRERELEASE` and/or `+BUILD`. Catches partial
+// versions like "1", "1.0", and extended versions like "1.2.3.4" that strict
+// semver rejects, so they can still be ordered through the same numeric path.
+const LOOSE_VERSION_RE =
+  /^(\d+(?:\.\d+)*)(?:-((?:[0-9A-Za-z-]+)(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+
+interface ParsedVersion {
+  kind: "version";
+  // Numeric segments left-to-right. Always at least three (zero-padded if the
+  // source had fewer), with any extra segments appended after patch so longer
+  // versions still order correctly against shorter ones.
+  numeric: number[];
+  // Empty means stable release. Per semver 11.3 a stable release has higher
+  // precedence than any prerelease of the same MAJOR.MINOR.PATCH.
+  prerelease: string[];
 }
 
-function parseSemver(v: string): ParsedSemver | null {
-  const m = SEMVER_RE.exec(v);
-  if (!m) return null;
-  return {
-    major: Number.parseInt(m[1]!, 10),
-    minor: Number.parseInt(m[2]!, 10),
-    patch: Number.parseInt(m[3]!, 10),
-    prerelease: m[4] ? m[4].split(".") : [],
-    // BUILD metadata (m[5]) intentionally discarded; ignored for ordering.
-  };
+interface ParsedUnparsable {
+  kind: "unparsable";
+  raw: string;
+}
+
+type Parsed = ParsedVersion | ParsedUnparsable;
+
+function parseVersion(v: string): Parsed {
+  // Prefer strict semver so canonical inputs parse identically to before.
+  const strict = SEMVER_RE.exec(v);
+  if (strict) {
+    return {
+      kind: "version",
+      numeric: [
+        Number.parseInt(strict[1]!, 10),
+        Number.parseInt(strict[2]!, 10),
+        Number.parseInt(strict[3]!, 10),
+      ],
+      prerelease: strict[4] ? strict[4].split(".") : [],
+      // BUILD metadata (strict[5]) intentionally discarded; ignored for ordering.
+    };
+  }
+  // Fall back to loose dotted-numeric so partial ("1.0") and extended
+  // ("1.2.3.4") strings still parse through the same numeric ordering and
+  // stay transitive against strict semver values.
+  const loose = LOOSE_VERSION_RE.exec(v);
+  if (loose) {
+    const nums = loose[1]!.split(".").map((s) => Number.parseInt(s, 10));
+    // Zero-pad to at least MAJOR.MINOR.PATCH so "1" and "1.0" compare equal
+    // to "1.0.0" on the numeric axis.
+    while (nums.length < 3) nums.push(0);
+    return {
+      kind: "version",
+      numeric: nums,
+      prerelease: loose[2] ? loose[2].split(".") : [],
+    };
+  }
+  return { kind: "unparsable", raw: v };
 }
 
 function isNumericIdentifier(id: string): boolean {
   // Numeric identifiers are non-empty digit strings with no leading zeros
-  // (or just "0"). The regex above already enforces this for parsed input.
+  // (or just "0"). Loose-parsed prerelease ids may not satisfy this; only the
+  // strict-semver parser guarantees it. We re-check here per-id.
   return /^(0|[1-9]\d*)$/.test(id);
 }
 
@@ -132,41 +172,53 @@ function comparePrerelease(a: string[], b: string[]): number {
   return 0;
 }
 
-function legacyCompare(a: string, b: string): number {
-  // Original dotted-numeric + lexical compare. Kept as the fallback for
-  // non-semver inputs so unrelated callers see stable ordering.
-  const ap = a.split(/[.\-+]/);
-  const bp = b.split(/[.\-+]/);
-  const len = Math.max(ap.length, bp.length);
+function compareNumeric(a: number[], b: number[]): number {
+  // Pairwise compare with implicit 0 for missing trailing positions so a
+  // shorter list ("1.0.0") compares equal to its zero-padded longer form
+  // ("1.0.0.0").
+  const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
-    const an = Number.parseInt(ap[i] ?? "0", 10);
-    const bn = Number.parseInt(bp[i] ?? "0", 10);
-    if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return an - bn;
-    if (!Number.isFinite(an) || !Number.isFinite(bn)) {
-      const ax = ap[i] ?? "";
-      const bx = bp[i] ?? "";
-      if (ax !== bx) return ax < bx ? -1 : 1;
-    }
+    const an = i < a.length ? a[i]! : 0;
+    const bn = i < b.length ? b[i]! : 0;
+    if (an !== bn) return an < bn ? -1 : 1;
   }
   return 0;
 }
 
 /**
- * Compare two version strings using semver 2.0 ordering when both inputs are
- * valid semver. BUILD metadata is ignored. For any input that is not valid
- * semver, fall back to a dotted-numeric + lexical compare so unrelated
- * callers see stable, deterministic ordering.
+ * Compare two version strings with a single, transitive total order so sort
+ * comparators (e.g. picking the highest installed plugin entry) stay stable
+ * even when inputs mix strict semver, partial versions like "1.0", extended
+ * dotted-numeric like "1.2.3.4", and arbitrary sentinel strings like
+ * "unknown".
+ *
+ * Algorithm — single path, no branching by input shape:
+ *   1. Parse each input. Strict semver wins; otherwise loose dotted-numeric
+ *      (zero-padded to MAJOR.MINOR.PATCH, optional prerelease/build);
+ *      otherwise treat as unparsable.
+ *   2. Two parsed versions: compare by numeric tuple, then by prerelease per
+ *      semver 11.3-11.4. BUILD metadata is ignored.
+ *   3. Two unparsable strings: lexical compare on the raw string.
+ *   4. Mixed (one parsed, one unparsable): the parsed version always wins.
+ *      This is the load-bearing transitivity invariant — every parsed value
+ *      ranks above every unparsable value, so the relation stays a total
+ *      order and `Array#sort` produces consistent "highest" picks across
+ *      heterogeneous inputs.
  */
 export function compareVersions(a: string, b: string): number {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (pa && pb) {
-    if (pa.major !== pb.major) return pa.major < pb.major ? -1 : 1;
-    if (pa.minor !== pb.minor) return pa.minor < pb.minor ? -1 : 1;
-    if (pa.patch !== pb.patch) return pa.patch < pb.patch ? -1 : 1;
+  const pa = parseVersion(a);
+  const pb = parseVersion(b);
+  if (pa.kind === "version" && pb.kind === "version") {
+    const numeric = compareNumeric(pa.numeric, pb.numeric);
+    if (numeric !== 0) return numeric;
     return comparePrerelease(pa.prerelease, pb.prerelease);
   }
-  return legacyCompare(a, b);
+  if (pa.kind === "unparsable" && pb.kind === "unparsable") {
+    if (pa.raw === pb.raw) return 0;
+    return pa.raw < pb.raw ? -1 : 1;
+  }
+  // Mixed: any parsed version outranks any unparsable string.
+  return pa.kind === "version" ? 1 : -1;
 }
 
 interface ClaudeSettings {
