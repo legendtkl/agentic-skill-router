@@ -115,6 +115,20 @@ async function writeSkill(skillDir: string, name: string, description: string, b
   await writeFile(join(skillDir, `SKILL.md${disabled ? ".skill-router-disabled" : ""}`), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`);
 }
 
+async function writeCodexPluginInstall(
+  installPath: string,
+  opts: { name: string; version?: string; skillName: string; skillDescription: string },
+): Promise<void> {
+  await mkdir(join(installPath, ".codex-plugin"), { recursive: true });
+  const manifest: { name: string; version?: string; skills: string } = { name: opts.name, skills: "./skills/" };
+  if (opts.version !== undefined) manifest.version = opts.version;
+  await writeFile(
+    join(installPath, ".codex-plugin", "plugin.json"),
+    JSON.stringify(manifest),
+  );
+  await writeSkill(join(installPath, "skills", opts.skillName), opts.skillName, opts.skillDescription);
+}
+
 async function fileExists(path: string): Promise<boolean> {
   try { return (await stat(path)).isFile(); } catch { return false; }
 }
@@ -146,6 +160,81 @@ test("CodexHost enumerates codex, agents, system, and plugin skills", async () =
     assert.ok(roots.some((root) => root.endsWith("project/packages/.agents/skills")));
   } finally {
     await fake.cleanup();
+  }
+});
+
+test("CodexHost deduplicates cached plugin versions by plugin key", async () => {
+  const root = await mkdtemp(join(tmpdir(), "skill-router-codex-cache-"));
+  const codexHome = join(root, ".codex");
+  const agentsHome = join(root, ".agents");
+  const stateDir = join(root, ".skill-router");
+  const oldInstall = join(codexHome, "plugins", "cache", "openai-curated", "gmail", "old-cache");
+  const newInstall = join(codexHome, "plugins", "cache", "openai-curated", "gmail", "new-cache");
+  const fallbackOldInstall = join(codexHome, "plugins", "cache", "openai-curated", "calendar", "1.0.0");
+  const fallbackNewInstall = join(codexHome, "plugins", "cache", "openai-curated", "calendar", "2.0.0");
+  try {
+    await writeCodexPluginInstall(oldInstall, {
+      name: "gmail",
+      version: "1.0.0",
+      skillName: "gmail",
+      skillDescription: "old Gmail workflows",
+    });
+    await writeCodexPluginInstall(newInstall, {
+      name: "gmail",
+      version: "2.0.0",
+      skillName: "gmail",
+      skillDescription: "new Gmail workflows",
+    });
+    await writeCodexPluginInstall(fallbackOldInstall, {
+      name: "calendar",
+      version: "1.0.0",
+      skillName: "calendar",
+      skillDescription: "old Calendar workflows",
+    });
+    await writeCodexPluginInstall(fallbackNewInstall, {
+      name: "calendar",
+      skillName: "calendar",
+      skillDescription: "new Calendar workflows",
+    });
+
+    const host = new CodexHost({
+      codexHome,
+      agentsHome,
+      cwd: root,
+      adminSkillsRoot: join(root, "etc", "codex", "skills"),
+    });
+    const skills = await host.listSkills();
+    const gmailSkills = skills.filter((s) => s.id === "plugin:gmail@openai-curated:gmail");
+    assert.equal(gmailSkills.length, 1);
+    assert.equal(gmailSkills[0]!.description, "new Gmail workflows");
+    assert.match(gmailSkills[0]!.skillMdPath, /new-cache/);
+    const calendarSkills = skills.filter((s) => s.id === "plugin:calendar@openai-curated:calendar");
+    assert.equal(calendarSkills.length, 1);
+    assert.equal(calendarSkills[0]!.description, "new Calendar workflows");
+    assert.match(calendarSkills[0]!.skillMdPath, /2\.0\.0/);
+
+    const roots = await host.skillRoots();
+    assert.ok(roots.includes(join(newInstall, "skills")));
+    assert.ok(!roots.includes(join(oldInstall, "skills")));
+    assert.ok(roots.includes(join(fallbackNewInstall, "skills")));
+    assert.ok(!roots.includes(join(fallbackOldInstall, "skills")));
+
+    const env = {
+      ...process.env,
+      CODEX_HOME: codexHome,
+      AGENTS_HOME: agentsHome,
+      SKILL_ROUTER_CWD: root,
+      CODEX_ADMIN_SKILLS_ROOT: join(root, "etc", "codex", "skills"),
+      SKILL_ROUTER_STATE_DIR: stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+    const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "list", "--json"], { env });
+    const listed = JSON.parse(list.stdout) as Array<{ id: string; description: string }>;
+    const listedGmailSkills = listed.filter((s) => s.id === "plugin:gmail@openai-curated:gmail");
+    assert.equal(listedGmailSkills.length, 1);
+    assert.equal(listedGmailSkills[0]!.description, "new Gmail workflows");
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 
