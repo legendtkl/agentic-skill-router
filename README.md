@@ -203,6 +203,20 @@ If local proxy variables break npm, strip them:
 env -u HTTP_PROXY -u HTTPS_PROXY npm test
 ```
 
+Local CI reproduction (mirrors `.github/workflows/ci.yml`):
+
+```bash
+npm ci
+npm run generate:assets -- --check
+npm run typecheck
+npm test
+npm run build
+npm pack --dry-run
+```
+
+Networked end-to-end suites (`npm run test:e2e`, `npm run test:e2e:codex`,
+`npm run test:e2e:claude`) are not part of CI; run them locally when relevant.
+
 Layout:
 
 ```text
