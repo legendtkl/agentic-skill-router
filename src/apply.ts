@@ -115,7 +115,15 @@ export async function enableSkill(
 export async function enableSkillFromState(
   idOrInstanceKey: string,
   deps: ApplyDeps = {},
-): Promise<{ state: State; alreadyEnabled: boolean; cleanedStateOnly: boolean }> {
+): Promise<{
+  state: State;
+  alreadyEnabled: boolean;
+  cleanedStateOnly: boolean;
+  /** The resolved record's id (may differ from the raw input when an instanceKey was passed). */
+  id: string;
+  /** The resolved record's stable instanceKey. */
+  instanceKey: string;
+}> {
   return withStateLock(deps.statePath, async () => {
     const state = await loadState(deps.statePath, deps.host);
     const rec = resolveDisableRecord(state, idOrInstanceKey);
@@ -123,7 +131,12 @@ export async function enableSkillFromState(
     const liveBefore = await fileExists(livePath);
     const disabledBefore = await fileExists(disabledPath);
     const result = await enableSkillPaths(rec.instanceKey, livePath, disabledPath, deps, state);
-    return { ...result, cleanedStateOnly: !liveBefore && !disabledBefore };
+    return {
+      ...result,
+      cleanedStateOnly: !liveBefore && !disabledBefore,
+      id: rec.id,
+      instanceKey: rec.instanceKey,
+    };
   });
 }
 
