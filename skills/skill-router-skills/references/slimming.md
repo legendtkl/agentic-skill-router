@@ -1,9 +1,11 @@
 # Skill slimming
 
-Use `suggest` for cleanup requests:
+Use `suggest` for cleanup requests.
+
+Use the `skill_router` helper from `SKILL.md`.
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills suggest --json
+skill_router skills suggest --json
 ```
 
 Each suggestion includes `id`, `name`, `source`, `reason`, `confidence`, and
@@ -13,8 +15,8 @@ Show a compact table and ask for explicit confirmation before disabling.
 Supported disable forms:
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills disable <id...> --yes
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills disable --all-suggested --yes
+skill_router skills disable <id...> --yes
+skill_router skills disable --all-suggested --yes
 ```
 
 Other operations:

@@ -51,7 +51,7 @@ npm run build
 ```
 
 For Codex-related executable changes, also run the networked OpenAI skills e2e
-for the installed `skill-router` CLI path under `SKILL_ROUTER_HOST=codex`:
+for the installed `skill-router` CLI path inside an isolated temporary home:
 
 ```bash
 npm run test:e2e
@@ -68,6 +68,11 @@ npm run test:e2e:codex
 If either e2e is not run because local Codex, network, GitHub, or auth access is
 unavailable, state that explicitly in the final verification notes.
 
+Before finishing non-documentation changes, create an independent review agent
+to inspect the final diff for regressions, inconsistencies, and missing tests.
+Address any actionable findings or explicitly report why they are not being
+changed.
+
 Documentation-only changes may skip the test suite.
 
 ## Codex OpenAI E2E
@@ -76,13 +81,14 @@ Documentation-only changes may skip the test suite.
   guard for changes that touch Codex host discovery, Codex plugin install,
   disable/enable state, route selection, or disabled-skill DCI behavior.
 - Keep `npm run test:e2e` as the default e2e command for installed
-  `skill-router` behavior with `SKILL_ROUTER_HOST=codex`. It should not require
-  local Codex CLI auth, and tests should not pass `--host=codex` on each CLI
-  invocation.
+  `skill-router` behavior in a fresh temporary `HOME`. It must not require a
+  local Codex CLI, Codex auth, `CODEX_HOME`, `AGENTS_HOME`, or
+  `SKILL_ROUTER_HOST`; the installed plugin CLI must auto-detect its host from
+  the plugin bundle.
 - Keep `npm run test:e2e:codex` as the explicit real `codex exec` e2e for
   machines that have a local Codex CLI and auth.
-- The case must create a fresh `CODEX_HOME`, install the local skill-router
-  Codex plugin, install all curated skills from the pinned official
+- The case must create a fresh temporary home, install the local skill-router
+  Codex plugin under that home, install all curated skills from the pinned official
   `openai/skills` repository, disable a subset via the installed
   `skill-router` binary, and verify at least 20 realistic user queries through
   `skills route --json`.

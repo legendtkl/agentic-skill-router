@@ -3,10 +3,9 @@
 English | [简体中文](README.zh-CN.md)
 
 Skill management CLI and installation assets for Agent Skills across supported
-hosts. The current scope is the skill-only core migrated from
-`~/github/agent-cleaner`: enumerate installed skills, read usage from local
-transcripts, suggest stale or unused skills, and safely disable or restore
-selected skills by renaming `SKILL.md`.
+hosts. It enumerates installed skills, reads usage from local transcripts,
+suggests stale or unused skills, and safely disables or restores selected skills
+by renaming `SKILL.md`.
 
 Subagent management is intentionally out of scope for this repository.
 
@@ -37,9 +36,11 @@ Restart Codex, then run:
 
 ## CLI
 
-The same top-level bundle can be used directly.
+Installed plugin bundles also expose `bin/skill-router`. Run these commands
+from the installed plugin root, or use the absolute path printed by the
+installer.
 
-Claude Code:
+Installed Claude Code plugin:
 
 ```bash
 bin/skill-router skills list
@@ -49,19 +50,19 @@ bin/skill-router skills enable user:lark-mail
 bin/skill-router skills status
 ```
 
-Codex:
+Installed Codex plugin:
 
 ```bash
-bin/skill-router --host=codex skills list
-bin/skill-router --host=codex skills suggest --json
-bin/skill-router --host=codex skills route --query "draft a Lark mail reply" --json
-bin/skill-router --host=codex skills route --mode=metadata --query "draft a Lark mail reply" --json
-bin/skill-router --host=codex skills route --mode=body --query "draft a Lark mail reply" --json
-bin/skill-router --host=codex skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
-bin/skill-router --host=codex skills dci open dci-abc123def0 --line=20 --window=80 --json
-bin/skill-router --host=codex skills disable user:codex:lark-mail --yes
-bin/skill-router --host=codex skills enable user:codex:lark-mail
-bin/skill-router --host=codex skills status
+bin/skill-router skills list
+bin/skill-router skills suggest --json
+bin/skill-router skills route --query "draft a Lark mail reply" --json
+bin/skill-router skills route --mode=metadata --query "draft a Lark mail reply" --json
+bin/skill-router skills route --mode=body --query "draft a Lark mail reply" --json
+bin/skill-router skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
+bin/skill-router skills dci open dci-abc123def0 --line=20 --window=80 --json
+bin/skill-router skills disable user:codex:lark-mail --yes
+bin/skill-router skills enable user:codex:lark-mail
+bin/skill-router skills status
 ```
 
 `--unused-for=<duration>` accepts `30`, `30d`, `2w`, `3m`, and `1y`.
@@ -70,6 +71,9 @@ The persistent default lives at `~/.skill-router/config.json`:
 ```json
 { "unusedForDays": 60, "routeMode": "auto" }
 ```
+
+Installed plugin CLIs auto-detect their host. Repository checkout CLI runs
+default to Claude Code and is mainly for local development.
 
 ## How It Works
 
@@ -120,10 +124,9 @@ Disabled-skill routing:
 - `metadata` is the primary router. It searches only disabled skill metadata
   (`id`, `name`, `description`, aliases, tags, tools, domains, intents, and examples),
   returns field-level evidence, and does not use embeddings or free-form bash.
-- `lexical` is the legacy fast description/name matcher.
+- `lexical` is the fast description/name matcher.
 - `body` searches disabled skill instruction bodies and selects only a confident top candidate.
-- `dci` is a legacy alias for body search / body verification commands. It is not a
-  full autonomous DCI research agent.
+- `dci` is the compatibility command group for bounded body search and verification.
 - `auto` is the default: run metadata first, then use bounded body verification when
   metadata is low confidence, ambiguous, or points at a broad umbrella skill.
 - A confident route returns `action: "read-skill-file"` and `selected.skillMdPath`.

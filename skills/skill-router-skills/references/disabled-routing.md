@@ -3,8 +3,10 @@
 Skill Router can route a request to disabled skill instructions when no enabled
 skill clearly matches.
 
+Use the `skill_router` helper from `SKILL.md`.
+
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills route --query "<current user request>" --json
+skill_router skills route --query "<current user request>" --json
 ```
 
 If the route result has `action: "read-skill-file"` and a non-null `selected`,
@@ -14,11 +16,11 @@ may end in `SKILL.md.skill-router-disabled`.
 Use explicit modes only for audits or debugging:
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills route --mode=metadata --query "<query>" --json
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills route --mode=body --query "<query>" --json
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills route --mode=lexical --query "<query>" --json
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills route --mode=dci --query "<query>" --json
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills route --mode=auto --query "<query>" --json
+skill_router skills route --mode=metadata --query "<query>" --json
+skill_router skills route --mode=body --query "<query>" --json
+skill_router skills route --mode=lexical --query "<query>" --json
+skill_router skills route --mode=dci --query "<query>" --json
+skill_router skills route --mode=auto --query "<query>" --json
 ```
 
 When `auto` cannot select confidently, keep body verification bounded:
@@ -33,34 +35,34 @@ When `auto` cannot select confidently, keep body verification bounded:
 Check the active budget:
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills dci budget --json
+skill_router skills dci budget --json
 ```
 
 Search with the raw request plus up to two short derived queries:
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills dci search --query "<current user request>" --query "<derived query>" --json
+skill_router skills dci search --query "<current user request>" --query "<derived query>" --json
 ```
 
 Use returned `ref` values for follow-up commands:
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills dci inspect "<skill-id-or-ref>" --json
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills dci find "<skill-id-or-ref>" --pattern "<distinctive phrase>" --json
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills dci open "<skill-id-or-ref>" --line <line> --window 80 --json
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills dci read "<skill-id-or-ref>" --json
+skill_router skills dci inspect "<skill-id-or-ref>" --json
+skill_router skills dci find "<skill-id-or-ref>" --pattern "<distinctive phrase>" --json
+skill_router skills dci open "<skill-id-or-ref>" --line <line> --window 80 --json
+skill_router skills dci read "<skill-id-or-ref>" --json
 ```
 
 Use literal grep for visible product, API, or command names:
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills dci grep --pattern "<distinctive phrase>" --json
+skill_router skills dci grep --pattern "<distinctive phrase>" --json
 ```
 
 Record a clearly supported selection before reading the selected file:
 
 ```bash
-"<abs-path-to-skill-router>" --host=<claude-code|codex> skills dci select "<skill-id-or-ref>" --query "<current user request>" --confidence=high --reason "<brief evidence>" --json
+skill_router skills dci select "<skill-id-or-ref>" --query "<current user request>" --confidence=high --reason "<brief evidence>" --json
 ```
 
 If evidence stays weak or ambiguous, stop the router path and continue normally.

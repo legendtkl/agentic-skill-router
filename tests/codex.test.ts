@@ -223,6 +223,41 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
   }
 });
 
+test("CLI rejects removed --host flag anywhere in the command", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    delete env.SKILL_ROUTER_HOST;
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    await assert.rejects(
+      execFileAsync(
+        process.execPath,
+        ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--host=codex"],
+        { env },
+      ),
+      (err: unknown) => {
+        const e = err as { code?: number; stderr?: string };
+        assert.equal(e.code, 2);
+        assert.match(e.stderr ?? "", /--host has been removed/);
+        assert.doesNotMatch(e.stderr ?? "", /SKILL_ROUTER_HOST=codex/);
+        return true;
+      },
+    );
+    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
+    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled")), false);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("CLI enable cleans disabled state even when skill files disappeared", async () => {
   const fake = await makeFakeCodexUser();
   try {

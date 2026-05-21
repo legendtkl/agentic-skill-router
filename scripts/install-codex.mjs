@@ -47,7 +47,7 @@ async function main() {
   log("Next: restart Codex, then run:");
   log("  /skill-router:skills");
   log("Manual CLI:");
-  log(`  ${installPath}/bin/skill-router --host=codex skills suggest`);
+  log(`  ${installPath}/bin/skill-router skills suggest`);
 }
 
 async function ensureBuild() {

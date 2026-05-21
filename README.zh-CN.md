@@ -2,7 +2,7 @@
 
 [English](README.md) | 简体中文
 
-`skill-router` 是面向受支持宿主的 Agent Skills 管理 CLI 与安装资产。当前范围是从 `~/github/agent-cleaner` 迁移出来的 skill-only 核心：枚举已安装 skills、读取本地会话记录中的使用情况、建议过期或长期未使用的 skills，并通过重命名 `SKILL.md` 的方式安全禁用或恢复指定 skill。
+`skill-router` 是面向受支持宿主的 Agent Skills 管理 CLI 与安装资产。它会枚举已安装 skills、读取本地会话记录中的使用情况、建议过期或长期未使用的 skills，并通过重命名 `SKILL.md` 的方式安全禁用或恢复指定 skill。
 
 Subagent 管理不属于本仓库范围。
 
@@ -32,9 +32,9 @@ npm run install:codex-plugin
 
 ## CLI
 
-同一份顶层 bundle 也可以直接作为 CLI 使用。
+已安装的插件 bundle 也会提供 `bin/skill-router`。在已安装插件根目录下运行以下命令，或使用安装脚本输出的绝对路径。
 
-Claude Code：
+已安装的 Claude Code 插件：
 
 ```bash
 bin/skill-router skills list
@@ -44,19 +44,19 @@ bin/skill-router skills enable user:lark-mail
 bin/skill-router skills status
 ```
 
-Codex：
+已安装的 Codex 插件：
 
 ```bash
-bin/skill-router --host=codex skills list
-bin/skill-router --host=codex skills suggest --json
-bin/skill-router --host=codex skills route --query "draft a Lark mail reply" --json
-bin/skill-router --host=codex skills route --mode=metadata --query "draft a Lark mail reply" --json
-bin/skill-router --host=codex skills route --mode=body --query "draft a Lark mail reply" --json
-bin/skill-router --host=codex skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
-bin/skill-router --host=codex skills dci open dci-abc123def0 --line=20 --window=80 --json
-bin/skill-router --host=codex skills disable user:codex:lark-mail --yes
-bin/skill-router --host=codex skills enable user:codex:lark-mail
-bin/skill-router --host=codex skills status
+bin/skill-router skills list
+bin/skill-router skills suggest --json
+bin/skill-router skills route --query "draft a Lark mail reply" --json
+bin/skill-router skills route --mode=metadata --query "draft a Lark mail reply" --json
+bin/skill-router skills route --mode=body --query "draft a Lark mail reply" --json
+bin/skill-router skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
+bin/skill-router skills dci open dci-abc123def0 --line=20 --window=80 --json
+bin/skill-router skills disable user:codex:lark-mail --yes
+bin/skill-router skills enable user:codex:lark-mail
+bin/skill-router skills status
 ```
 
 `--unused-for=<duration>` 支持 `30`、`30d`、`2w`、`3m` 和 `1y`。持久化默认配置位于 `~/.skill-router/config.json`：
@@ -64,6 +64,8 @@ bin/skill-router --host=codex skills status
 ```json
 { "unusedForDays": 60, "routeMode": "auto" }
 ```
+
+已安装的插件 CLI 会自动识别宿主；从仓库 checkout 直接运行 CLI 时默认目标是 Claude Code，主要用于本地开发。
 
 ## 工作原理
 
@@ -105,9 +107,9 @@ Skill 来源：
 - `skills route --query "<request>" --json` 只搜索已禁用 skills。
 - 路由模式可通过 `--mode=auto|metadata|body|lexical|dci`、`SKILL_ROUTER_ROUTE_MODE` 或 `~/.skill-router/config.json` 的 `"routeMode": "auto"` 设置。
 - `metadata` 是主路由器。它只搜索已禁用 skill 元数据（`id`、`name`、`description`、aliases、tags、tools、domains、intents、examples），返回字段级证据，不使用 embeddings 或 free-form bash。
-- `lexical` 是旧版快速 description / name 匹配器。
+- `lexical` 是快速 description / name 匹配器。
 - `body` 搜索已禁用 skill 正文，并只选择置信度足够高的 top candidate。
-- `dci` 是 body search / body verification 命令的旧别名，不是完整 autonomous DCI research agent。
+- `dci` 是有界 body search / body verification 的兼容命令组。
 - `auto` 是默认模式：先运行 metadata；当 metadata 低置信、歧义或指向宽泛 umbrella skill 时，再使用有界正文验证。
 - 高置信路由会返回 `action: "read-skill-file"` 和 `selected.skillMdPath`。
 - 返回路径可能以 `SKILL.md.skill-router-disabled` 结尾；它仍然可以作为指令安全读取。
