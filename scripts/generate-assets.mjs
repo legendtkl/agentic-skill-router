@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,7 +37,7 @@ async function syncDir(sourceDir, targetDir) {
   if (check) {
     const sourceFiles = await listFiles(sourceDir);
     const targetFiles = await listFiles(targetDir);
-    const generated = await expectedFilesForTarget(targetDir, sourceFiles);
+    const generated = await expectedFilesForTarget(targetDir);
     const expected = new Set([...sourceFiles.map((file) => file.relative), ...generated]);
     for (const file of targetFiles) {
       if (!expected.has(file.relative)) {
@@ -51,13 +51,16 @@ async function syncDir(sourceDir, targetDir) {
     return;
   }
 
-  await rm(targetDir, { recursive: true, force: true });
+  const tmpDir = `${targetDir}._tmp`;
+  await rm(tmpDir, { recursive: true, force: true });
   for (const file of await listFiles(sourceDir)) {
-    await writeGeneratedFile(join(targetDir, file.relative), await readFile(file.absolute, "utf8"));
+    await writeGeneratedFile(join(tmpDir, file.relative), await readFile(file.absolute, "utf8"));
   }
+  await rm(targetDir, { recursive: true, force: true });
+  await rename(tmpDir, targetDir);
 }
 
-async function expectedFilesForTarget(targetDir, sourceFiles) {
+async function expectedFilesForTarget(targetDir) {
   const out = new Set();
   for (const overlay of overlays) {
     const skillDir = resolve(root, expectString(overlay.skillDir, "skillDir"));
