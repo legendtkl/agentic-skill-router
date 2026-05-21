@@ -176,6 +176,20 @@ npm run build
 env -u HTTP_PROXY -u HTTPS_PROXY npm test
 ```
 
+本地复现 CI（与 `.github/workflows/ci.yml` 一致）：
+
+```bash
+npm ci
+npm run generate:assets -- --check
+npm run typecheck
+npm test
+npm run build
+npm pack --dry-run
+```
+
+需要联网的端到端套件（`npm run test:e2e`、`npm run test:e2e:codex`、
+`npm run test:e2e:claude`）不会在 CI 中运行；需要时在本地手动执行。
+
 目录结构：
 
 ```text
