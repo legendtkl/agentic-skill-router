@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { ClaudeCodeHost } from "../src/hosts/claude-code.ts";
+import { disableSkill, enableSkill } from "../src/apply.ts";
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -191,19 +192,20 @@ test("plugin disabled in enabledPlugins surfaces as isPluginDisabled", async () 
 
 test("disable + enable round-trip on a user skill", async () => {
   const { home, cleanup } = await makeFakeClaudeHome();
+  const statePath = join(home, "skill-router-state.json");
   try {
     const host = new ClaudeCodeHost({ claudeHome: home });
     const skills = await host.listSkills();
     const foo = skills.find((s) => s.id === "user:foo");
     assert.ok(foo);
-    await host.disable(foo!, "test");
+    await disableSkill(foo!, "test", { statePath, host: host.name });
 
     const after = await host.listSkills();
     const fooAfter = after.find((s) => s.id === "user:foo");
     assert.ok(fooAfter);
     assert.equal(fooAfter!.isDisabled, true);
 
-    await host.enable(fooAfter!);
+    await enableSkill(fooAfter!, { statePath, host: host.name });
     const final = await host.listSkills();
     const fooFinal = final.find((s) => s.id === "user:foo");
     assert.equal(fooFinal!.isDisabled, false);
@@ -214,12 +216,16 @@ test("disable + enable round-trip on a user skill", async () => {
 
 test("disable on builtin skill throws", async () => {
   const { home, cleanup } = await makeFakeClaudeHome();
+  const statePath = join(home, "skill-router-state.json");
   try {
     const host = new ClaudeCodeHost({ claudeHome: home });
     const skills = await host.listSkills();
     const init = skills.find((s) => s.id === "builtin:init");
     assert.ok(init);
-    await assert.rejects(() => host.disable(init!, "x"), /BuiltinSkillCannotDisable/);
+    await assert.rejects(
+      () => disableSkill(init!, "x", { statePath, host: host.name }),
+      /Cannot disable builtin/,
+    );
   } finally {
     await cleanup();
   }
@@ -253,14 +259,15 @@ test("symlink skill whose target is outside the skills root is marked outOfRoot 
     // that the host would reject mid-batch.
     assert.equal(external!.canDisable, false, "out-of-root symlink must report canDisable=false");
 
-    // host-level disable refuses with a clear error
+    const statePath = join(home, "skill-router-state.json");
+    // apply.ts disable refuses with a clear error
     await assert.rejects(
-      () => host.disable(external!, "test"),
+      () => disableSkill(external!, "test", { statePath, host: host.name }),
       /resolves outside the skills root/i,
     );
-    // host-level enable also refuses
+    // apply.ts enable also refuses
     await assert.rejects(
-      () => host.enable(external!),
+      () => enableSkill(external!, { statePath, host: host.name }),
       /resolves outside the skills root/i,
     );
 
@@ -274,6 +281,7 @@ test("symlink skill whose target is outside the skills root is marked outOfRoot 
 
 test("symlink skill whose target is inside the same skills root remains disable-able", async () => {
   const { home, cleanup } = await makeFakeClaudeHome();
+  const statePath = join(home, "skill-router-state.json");
   try {
     // Create a real skill directory under the user skills root, then symlink
     // it under a second name. The symlink target IS inside the skills root,
@@ -292,10 +300,35 @@ test("symlink skill whose target is inside the same skills root remains disable-
     assert.notEqual(linked!.outOfRoot, true, "in-root symlink should NOT be flagged out-of-root");
     assert.equal(linked!.canDisable, true, "in-root symlink should remain disable-able");
 
-    // The host can still disable a regular in-root skill the normal way.
+    // apply.ts can still disable a regular in-root skill the normal way.
     const real = skills.find((s) => s.id === "user:inside-real");
     assert.ok(real);
-    await host.disable(real!, "test");
+    await disableSkill(real!, "test", { statePath, host: host.name });
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Host interface does not expose disable/enable", async () => {
+  // Guard against accidentally re-introducing a host-level rename path that
+  // bypasses apply.ts's state machine (journal, lock, conflict/reapply).
+  // Disable/enable must funnel through src/apply.ts so the state file stays
+  // the single source of truth and safety checks cannot be sidestepped.
+  const { home, cleanup } = await makeFakeClaudeHome();
+  try {
+    const host = new ClaudeCodeHost({ claudeHome: home });
+    assert.equal("disable" in host, false, "Host must not expose `disable`");
+    assert.equal("enable" in host, false, "Host must not expose `enable`");
+    assert.equal(
+      typeof (host as unknown as { disable?: unknown }).disable,
+      "undefined",
+      "Host.disable must not be a function",
+    );
+    assert.equal(
+      typeof (host as unknown as { enable?: unknown }).enable,
+      "undefined",
+      "Host.enable must not be a function",
+    );
   } finally {
     await cleanup();
   }

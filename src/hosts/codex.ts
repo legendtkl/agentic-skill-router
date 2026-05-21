@@ -1,13 +1,11 @@
-import { readdir, readFile, rename } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Host } from "./base.ts";
 import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageStat } from "../types.ts";
-import { BuiltinSkillCannotDisableError, SkillOutOfRootError } from "../types.ts";
 import {
   compareVersions,
-  DISABLED_SUFFIX,
   readCodexPluginSettings,
   readSkillFrontmatterDetailed,
   walkSkillsDir,
@@ -131,24 +129,6 @@ export class CodexHost implements Host {
     for (const projectRoot of await projectSkillRoots(this.cwd, ".agents/skills")) roots.push(projectRoot.root);
     for (const plugin of await this.installedPlugins()) roots.push(plugin.skillsRoot);
     return roots;
-  }
-
-  async disable(skill: Skill, _reason: string): Promise<void> {
-    // Check outOfRoot before canDisable so that the more specific
-    // "resolves outside the skills root" error wins for symlink escapes,
-    // even though out-of-root skills now also report canDisable=false.
-    if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
-    if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
-    if (skill.isDisabled) return;
-    await rename(skill.skillMdPath, skill.skillMdPath + DISABLED_SUFFIX);
-  }
-
-  async enable(skill: Skill): Promise<void> {
-    if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
-    if (!skill.canDisable) return;
-    if (!skill.isDisabled) return;
-    if (!skill.skillMdPath.endsWith(DISABLED_SUFFIX)) return;
-    await rename(skill.skillMdPath, skill.skillMdPath.slice(0, -DISABLED_SUFFIX.length));
   }
 
   private async listRootSkills(opts: {
