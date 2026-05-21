@@ -14,17 +14,19 @@ export function parseFrontmatter(content: string): Frontmatter {
   const out: Frontmatter = {};
   const lines = content.split(/\r?\n/);
 
-  let inBlock = false;
+  let closed = false;
   let i = 0;
   // Skip leading blank lines, then expect `---`
   while (i < lines.length && lines[i]?.trim() === "") i++;
   if (lines[i]?.trim() !== "---") return out;
   i++;
-  inBlock = true;
 
   for (; i < lines.length; i++) {
     const line = lines[i] ?? "";
-    if (line.trim() === "---") break;
+    if (line.trim() === "---") {
+      closed = true;
+      break;
+    }
 
     // Indented line at top level: part of a block we chose to skip.
     if (/^\s+\S/.test(line)) continue;
@@ -85,8 +87,7 @@ export function parseFrontmatter(content: string): Frontmatter {
     out[key] = unquote(rawValue);
   }
 
-  if (!inBlock) return {};
-  return out;
+  return closed ? out : {};
 }
 
 function normalizeLiteralBlock(lines: string[]): string {

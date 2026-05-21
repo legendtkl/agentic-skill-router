@@ -1,24 +1,20 @@
 {
   "name": "skill-router",
   "version": "0.1.0",
-  "description": "Manage installed Claude Code and Codex skills based on usage",
+  "description": "Manage installed Agent Skills across supported hosts based on usage",
   "type": "module",
   "private": true,
   "bin": {
-    "skill-router": "./plugins/codex/bin/skill-router"
+    "skill-router": "./bin/skill-router"
   },
   "files": [
     "README.md",
+    "bin/",
+    "lib/",
+    "skills/",
     "plugins/claude-code/.claude-plugin/plugin.json",
-    "plugins/claude-code/bin/",
-    "plugins/claude-code/lib/",
-    "plugins/claude-code/skills/",
     "plugins/codex/.codex-plugin/plugin.json",
-    "plugins/codex/bin/",
-    "plugins/codex/lib/",
-    "plugins/codex/prompts/",
-    "plugins/codex/skills/",
-    "shared/"
+    "plugins/codex/prompts/"
   ],
   "scripts": {
     "generate:assets": "node scripts/generate-assets.mjs",
@@ -26,6 +22,8 @@
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "node --test --import tsx tests/*.test.ts",
+    "test:e2e": "node --test --import tsx --test-name-pattern=skill-router-cli tests/codex-openai.e2e.ts",
+    "test:e2e:codex": "node --test --import tsx --test-name-pattern=codex-cli tests/codex-openai.e2e.ts",
     "cli": "tsx src/cli.ts",
     "install:plugin": "node scripts/install.mjs",
     "uninstall:plugin": "node scripts/uninstall.mjs",
