@@ -53,6 +53,24 @@ async function makeFakeClaudeHome(): Promise<{ home: string; cleanup: () => Prom
   return { home, cleanup: () => rm(home, { recursive: true, force: true }) };
 }
 
+async function makeFakeProject(): Promise<{ root: string; cwd: string; cleanup: () => Promise<void> }> {
+  const root = await mkdtemp(join(tmpdir(), "skill-router-project-"));
+  const cwd = join(root, "packages", "app");
+  await mkdir(join(root, ".git"), { recursive: true });
+  await mkdir(cwd, { recursive: true });
+  await mkdir(join(root, ".claude", "skills", "root-skill"), { recursive: true });
+  await writeFile(
+    join(root, ".claude", "skills", "root-skill", "SKILL.md"),
+    "---\nname: root-skill\ndescription: root project skill\n---\n",
+  );
+  await mkdir(join(root, "packages", ".claude", "skills", "package-skill"), { recursive: true });
+  await writeFile(
+    join(root, "packages", ".claude", "skills", "package-skill", "SKILL.md"),
+    "---\nname: package-skill\ndescription: nested project skill\n---\n",
+  );
+  return { root, cwd, cleanup: () => rm(root, { recursive: true, force: true }) };
+}
+
 test("listSkills enumerates user, plugin, and builtin sources", async () => {
   const { home, cleanup } = await makeFakeClaudeHome();
   try {
@@ -88,6 +106,25 @@ test("listSkills enumerates user, plugin, and builtin sources", async () => {
     assert.equal(init!.source, "builtin");
   } finally {
     await cleanup();
+  }
+});
+
+test("listSkills enumerates Claude project skill roots from cwd to repo root", async () => {
+  const { home, cleanup: cleanupHome } = await makeFakeClaudeHome();
+  const { cwd, cleanup: cleanupProject } = await makeFakeProject();
+  try {
+    const host = new ClaudeCodeHost({ claudeHome: home, cwd });
+    const skills = await host.listSkills();
+    const byId = new Map(skills.map((s) => [s.id, s]));
+
+    assert.equal(byId.get("project:claude:.:root-skill")?.description, "root project skill");
+    assert.equal(byId.get("project:claude:packages:package-skill")?.description, "nested project skill");
+
+    const roots = await host.skillRoots();
+    assert.ok(roots.some((root) => root.endsWith(".claude/skills")));
+  } finally {
+    await cleanupProject();
+    await cleanupHome();
   }
 });
 

@@ -2,45 +2,68 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { parseFrontmatter } from "../src/frontmatter.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(__dirname);
 const execFileAsync = promisify(execFile);
 
-test("Codex router assets document the CLI file path consistently", async () => {
-  const skill = await readFile(join(REPO_ROOT, "plugins", "codex", "skills", "skill-router-skills", "SKILL.md"), "utf8");
-  const prompt = await readFile(join(REPO_ROOT, "plugins", "codex", "prompts", "skill-router-skills.md"), "utf8");
+test("shared router skill uses Agent Skills frontmatter as the source of truth", async () => {
+  const shared = await readFile(join(REPO_ROOT, "shared", "skills", "skill-router-skills", "SKILL.md"), "utf8");
+  const fm = parseFrontmatter(shared);
+  const frontmatter = shared.slice(0, shared.indexOf("---", 4));
+  const topLevelKeys = [...frontmatter.matchAll(/^([A-Za-z0-9_-]+):/gm)].map((match) => match[1]);
 
-  for (const content of [skill, prompt]) {
-    assert.match(content, /printf '%s\\n' "\$PWD\/plugins\/codex\/bin\/skill-router"/);
-    assert.match(content, /"<abs-path-to-skill-router>" --host=codex skills/);
-    assert.match(content, /--mode=.*metadata.*body.*lexical.*dci.*auto|--mode=auto\|metadata\|body\|lexical\|dci/);
-    assert.match(content, /skills dci search/);
-    assert.match(content, /skills dci find/);
-    assert.match(content, /skills dci open/);
-    assert.match(content, /skills dci read/);
-    assert.match(content, /skills dci select/);
-    assert.match(content, /max selections/i);
-    assert.doesNotMatch(content, /node "<abs-path-to-skill-router/);
-    assert.doesNotMatch(content, /node "<abs-path>\/skill-router\.mjs"/);
-  }
+  assert.equal(fm.name, "skill-router-skills");
+  const description = fm.description;
+  assert.ok(typeof description === "string");
+  assert.match(description, /audit, slim, disable, restore, or route/);
+  assert.deepEqual(topLevelKeys, ["name", "description", "metadata"]);
+  assert.match(frontmatter, /metadata:\n  skill-router\.version: "1"\n  skill-router\.hosts: "claude-code,codex"/);
 });
 
-test("Codex router skill description is a closed last-resort resolver", async () => {
-  const skill = await readFile(join(REPO_ROOT, "plugins", "codex", "skills", "skill-router-skills", "SKILL.md"), "utf8");
+test("Claude and Codex plugin skills are generated from the shared skill", async () => {
+  const sharedDir = join(REPO_ROOT, "shared", "skills", "skill-router-skills");
+  const shared = await readFile(join(sharedDir, "SKILL.md"), "utf8");
+  const sharedRefs = await readdir(join(sharedDir, "references"));
 
-  assert.match(skill, /Last-resort resolver/);
-  assert.match(skill, /no available skill clearly matches/);
-  assert.match(skill, /general knowledge or web search/);
-  assert.match(skill, /looks skill-shaped/);
-  assert.match(skill, /close the router path/);
-  assert.match(skill, /Do not hard-code a product list/);
-  assert.doesNotMatch(skill, /Kibana Console API/);
-  assert.doesNotMatch(skill, /Elasticsearch\/ES DSL\/index mapping/);
+  for (const host of ["claude-code", "codex"]) {
+    const generatedDir = join(REPO_ROOT, "plugins", host, "skills", "skill-router-skills");
+    assert.equal(await readFile(join(generatedDir, "SKILL.md"), "utf8"), shared);
+    for (const ref of sharedRefs) {
+      assert.equal(
+        await readFile(join(generatedDir, "references", ref), "utf8"),
+        await readFile(join(sharedDir, "references", ref), "utf8"),
+      );
+    }
+  }
+
+  const codexAgent = await readFile(
+    join(REPO_ROOT, "plugins", "codex", "skills", "skill-router-skills", "agents", "openai.yaml"),
+    "utf8",
+  );
+  assert.match(codexAgent, /display_name: "Skill Router"/);
+  assert.match(codexAgent, /default_prompt: "Use \$skill-router-skills/);
+
+  await execFileAsync(process.execPath, ["scripts/generate-assets.mjs", "--check"], { cwd: REPO_ROOT });
+});
+
+test("Codex slash command is a thin compatibility shim", async () => {
+  const prompt = await readFile(join(REPO_ROOT, "plugins", "codex", "prompts", "skill-router-skills.md"), "utf8");
+  const fm = parseFrontmatter(prompt);
+
+  assert.equal(fm.description, "Use the skill-router-skills skill with optional arguments.");
+  assert.equal(fm["argument-hint"], "[route <query>|list|suggest|status|enable <id...>|disable <id...>]");
+  assert.match(prompt, /Invoke\/use the installed `skill-router-skills` skill/);
+  assert.ok(prompt.length < 500);
+  assert.doesNotMatch(prompt, /Locate CLI/);
+  assert.doesNotMatch(prompt, /skills dci search/);
+  assert.doesNotMatch(prompt, /printf '%s\\n'/);
+  assert.doesNotMatch(prompt, /Never disable/);
 });
 
 test("package bin wrapper resolves npm-style symlinks", async () => {

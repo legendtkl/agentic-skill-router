@@ -16,18 +16,28 @@ async function makeFakeCodexUser(): Promise<{
   root: string;
   codexHome: string;
   agentsHome: string;
+  cwd: string;
+  adminSkillsRoot: string;
   stateDir: string;
   cleanup: () => Promise<void>;
 }> {
   const root = await mkdtemp(join(tmpdir(), "skill-router-codex-"));
   const codexHome = join(root, ".codex");
   const agentsHome = join(root, ".agents");
+  const projectRoot = join(root, "project");
+  const cwd = join(projectRoot, "packages", "app");
+  const adminSkillsRoot = join(root, "etc", "codex", "skills");
   const stateDir = join(root, ".skill-router");
 
   await writeSkill(join(codexHome, "skills", "brand"), "ckm:brand", "Brand voice and identity");
   await writeSkill(join(codexHome, "skills", "unused-local"), "unused-local", "Never called");
   await writeSkill(join(codexHome, "skills", ".system", "openai-docs"), "openai-docs", "Official OpenAI docs");
   await writeSkill(join(agentsHome, "skills", "lark-mail"), "lark-mail", "Lark mail workflows");
+  await mkdir(join(projectRoot, ".git"), { recursive: true });
+  await mkdir(cwd, { recursive: true });
+  await writeSkill(join(projectRoot, ".agents", "skills", "project-root"), "project-root", "Project root skill");
+  await writeSkill(join(projectRoot, "packages", ".agents", "skills", "project-package"), "project-package", "Project package skill");
+  await writeSkill(join(adminSkillsRoot, "admin-policy"), "admin-policy", "Admin-managed Codex policy");
 
   const pluginRoot = join(codexHome, "plugins", "cache", "openai-curated", "gmail", "3c463363");
   await mkdir(join(pluginRoot, ".codex-plugin"), { recursive: true });
@@ -93,6 +103,8 @@ async function makeFakeCodexUser(): Promise<{
     root,
     codexHome,
     agentsHome,
+    cwd,
+    adminSkillsRoot,
     stateDir,
     cleanup: () => rm(root, { recursive: true, force: true }),
   };
@@ -110,15 +122,28 @@ async function fileExists(path: string): Promise<boolean> {
 test("CodexHost enumerates codex, agents, system, and plugin skills", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    const host = new CodexHost({ codexHome: fake.codexHome, agentsHome: fake.agentsHome });
+    const host = new CodexHost({
+      codexHome: fake.codexHome,
+      agentsHome: fake.agentsHome,
+      cwd: fake.cwd,
+      adminSkillsRoot: fake.adminSkillsRoot,
+    });
     const skills = await host.listSkills();
     const byId = new Map(skills.map((s) => [s.id, s]));
 
     assert.equal(byId.get("user:codex:brand")?.name, "ckm:brand");
     assert.equal(byId.get("user:agents:lark-mail")?.description, "Lark mail workflows");
     assert.equal(byId.get("builtin:codex-system:openai-docs")?.canDisable, false);
+    assert.equal(byId.get("builtin:codex-admin:admin-policy")?.canDisable, false);
+    assert.equal(byId.get("project:codex:.:project-root")?.description, "Project root skill");
+    assert.equal(byId.get("project:codex:packages:project-package")?.description, "Project package skill");
     assert.equal(byId.get("plugin:gmail@openai-curated:gmail")?.isPluginDisabled, false);
     assert.equal(byId.get("plugin:browser-use@openai-bundled:browser")?.isPluginDisabled, true);
+
+    const roots = await host.skillRoots();
+    assert.ok(roots.includes(fake.adminSkillsRoot));
+    assert.ok(roots.some((root) => root.endsWith("project/.agents/skills")));
+    assert.ok(roots.some((root) => root.endsWith("project/packages/.agents/skills")));
   } finally {
     await fake.cleanup();
   }
@@ -165,6 +190,8 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
       ...process.env,
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
       SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
@@ -202,6 +229,8 @@ test("CLI enable cleans disabled state even when skill files disappeared", async
       ...process.env,
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
       SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
@@ -233,6 +262,8 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
       ...process.env,
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
       SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
@@ -283,6 +314,8 @@ test("CLI JSON route reports weak matches without failing or read actions", asyn
       ...process.env,
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
       SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
@@ -326,6 +359,8 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
       ...process.env,
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
       SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
@@ -394,6 +429,8 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
       ...process.env,
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
       SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");

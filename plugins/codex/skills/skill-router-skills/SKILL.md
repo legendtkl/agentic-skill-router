@@ -1,151 +1,103 @@
 ---
 name: skill-router-skills
-description: "Last-resort resolver for locally disabled Codex skill instruction files. Use when no available skill clearly matches and you would otherwise answer from general knowledge or web search for a skill-shaped request: operating, querying, configuring, deploying, inspecting, or troubleshooting a named tool, API, service, dashboard, datastore, CLI, DSL, URL, or platform workflow. The router searches disabled skills once; if none match, close the router path and continue normally. Also use to clean up / slim / 瘦身 installed Codex skills, audit unused skills, or recover context budget."
+description: Use when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills for Claude Code or Codex. For Codex, also use as a last-resort resolver for locally disabled skills before falling back to general knowledge.
+metadata:
+  skill-router.version: "1"
+  skill-router.hosts: "claude-code,codex"
 ---
 
-# skill-router — Codex disabled-skill routing and slimming
+# skill-router - Agent Skills routing and slimming
 
-Use this skill in two cases:
+Use this skill when the user wants to inspect installed Agent Skills, identify
+unused or stale skills, disable or restore skills, or route a Codex request to a
+locally disabled skill. Keep the workflow host-aware: Claude Code uses skill
+management by default, while Codex also uses disabled-skill routing as a
+last-resort fallback.
 
-- No available skill clearly matches the current request, and you would otherwise answer from general knowledge or web search, but the request looks skill-shaped: it asks to operate, query, configure, deploy, inspect, or troubleshoot a named tool, API, service, dashboard, datastore, CLI, DSL, URL, or platform workflow. Check this router once before using general knowledge or web search.
-- The user wants to slim, audit, disable, restore, or inspect Codex skills.
+## Locate the CLI
 
-Do not hard-code a product list in your decision. Use this as a closed fallback: if an enabled visible skill clearly matches, use that skill instead; if metadata route plus bounded body verification finds no confident disabled-skill match, stop the router path for this request and continue normally.
+Prefer `${SKILL_ROUTER_CLI}` when it is set. Otherwise locate the bundled
+`skill-router` executable for the active host:
 
-## 1. Locate the bundled CLI
+- Claude Code: use `${CLAUDE_PLUGIN_ROOT}/bin/skill-router`. If
+  `${CLAUDE_PLUGIN_ROOT}` is unset, compute it as the directory two levels above
+  this `SKILL.md`.
+- Codex: find the newest installed local plugin bundle under
+  `${CODEX_HOME:-$HOME/.codex}/plugins/cache/local/skill-router/*/bin/skill-router`.
+  If that is not available and the current working directory is this repository,
+  use `plugins/codex/bin/skill-router`.
 
-Prefer `${SKILL_ROUTER_CLI}` if set. Otherwise locate the newest installed bundle:
+Always invoke the CLI by absolute path. Pass `--host=codex` for Codex. Claude
+Code is the default host, but `--host=claude-code` is also accepted.
+
+## Manage skills
+
+For cleanup requests, run:
 
 ```bash
-find "${CODEX_HOME:-$HOME/.codex}/plugins/cache/local/skill-router" -path '*/bin/skill-router' -type f 2>/dev/null | sort | tail -1
+"<abs-path-to-skill-router>" --host=<claude-code|codex> skills suggest --json
 ```
 
-If that finds nothing, check the current repository path:
+Show suggestions as a compact table with id, reason, confidence, and details.
+Never disable without explicit user confirmation. After confirmation, disable
+specific ids or all current suggestions:
 
 ```bash
-test -x plugins/codex/bin/skill-router && printf '%s\n' "$PWD/plugins/codex/bin/skill-router"
+"<abs-path-to-skill-router>" --host=<claude-code|codex> skills disable <id...> --yes
+"<abs-path-to-skill-router>" --host=<claude-code|codex> skills disable --all-suggested --yes
 ```
 
-Always invoke via `"<abs-path-to-skill-router>"` and always pass `--host=codex`.
+Use `skills list --json` for a full inventory, `skills status --json` for
+disabled records and repair status, and `skills enable <id...>` to restore
+previously disabled skills.
 
-## 2. Route a request to disabled skills
+If the user wants to adjust the staleness threshold, mention
+`--unused-for=60d` (or `2w`, `3m`, `1y`) or the persistent config at
+`~/.skill-router/config.json`:
 
-When selected as a disabled-skill fallback, do not solve the task directly first. Run the default route command. It uses `auto` mode: metadata routing first, with bounded body verification when metadata is low-confidence, ambiguous, or points at a broad umbrella skill.
+```json
+{ "unusedForDays": 60, "routeMode": "auto" }
+```
+
+## Route disabled Codex skills
+
+In Codex only, use this as a closed last-resort fallback when no enabled skill
+clearly matches and the request looks skill-shaped: operating, querying,
+configuring, deploying, inspecting, or troubleshooting a named tool, API,
+service, dashboard, datastore, CLI, DSL, URL, or platform workflow.
+
+Run the route command before solving from general knowledge:
 
 ```bash
 "<abs-path-to-skill-router>" --host=codex skills route --query "<current user request>" --json
 ```
 
-If the result has `action: "read-skill-file"` and a non-null `selected`, read the returned `selected.skillMdPath` even when it ends in `SKILL.md.skill-router-disabled`. Then follow that disabled skill's instructions as if it were enabled.
+If the result has `action: "read-skill-file"` and a non-null `selected`, read
+`selected.skillMdPath` even when it ends in `SKILL.md.skill-router-disabled`,
+then follow that disabled skill's instructions as if it were enabled.
 
-For audits or comparisons, force route mode with `--mode=metadata`, `--mode=body`, `--mode=lexical`, `--mode=dci`, or `--mode=auto`. The persistent default is `routeMode` in `~/.skill-router/config.json`; default is `auto`. `dci` is a legacy alias for body search / body verification; it is not a full autonomous DCI research agent.
+If route mode needs to be evaluated or debugged, use
+`--mode=metadata|body|lexical|dci|auto`. `dci` is a legacy alias for bounded
+body search and verification; it is not an autonomous research agent.
 
-If the auto route result still has `action: "no-confident-match"`, use the bounded body-verification corpus tools before giving up. Stay within this prompt budget:
+If `auto` returns `action: "no-confident-match"`, use the bounded body tools in
+`references/disabled-routing.md`. Stop the router path if the evidence still
+does not identify a confident disabled-skill match.
 
-- Max queries: 3
-- Max candidates to consider from search: 8
-- Max `find` / `open` calls total: 3
-- Max full `read` calls: 2
-- Max selections: 3
-- Max `open` output: 24,000 characters
+## Safety
 
-You can check the current limits with:
+- Built-in and system skills are protected and cannot be disabled.
+- The disable mechanism is a rename: `SKILL.md` to
+  `SKILL.md.skill-router-disabled`. Never delete skill files.
+- Never disable a skill without explicit user confirmation.
+- Do not disable a whole plugin when a disabled skill still depends on that
+  plugin's MCP tools or app tools.
+- State is stored under `~/.skill-router/state-claude-code.json` or
+  `~/.skill-router/state-codex.json`.
 
-```bash
-"<abs-path-to-skill-router>" --host=codex skills dci budget --json
-```
+## References
 
-Start with a multi-query search: include the raw request plus up to two short derived queries containing distinctive APIs, product names, or intent words.
-
-```bash
-"<abs-path-to-skill-router>" --host=codex skills dci search --query "<current user request>" --query "<derived query>" --json
-```
-
-Search results include stable candidate `ref` values such as `dci-abc123def0`. Use refs for follow-up commands when present. Inspect, find inside, or open windows only for plausible disabled candidates:
-
-```bash
-"<abs-path-to-skill-router>" --host=codex skills dci inspect "<skill-id-or-ref>" --json
-"<abs-path-to-skill-router>" --host=codex skills dci find "<skill-id-or-ref>" --pattern "<distinctive phrase>" --json
-"<abs-path-to-skill-router>" --host=codex skills dci open "<skill-id-or-ref>" --line <line> --window 80 --json
-```
-
-You may also run a narrow literal direct-corpus search when a distinctive phrase or API name is visible:
-
-```bash
-"<abs-path-to-skill-router>" --host=codex skills dci grep --pattern "<distinctive phrase>" --json
-```
-
-If the body-verification evidence clearly identifies one disabled skill, record the selection and then read the returned path:
-
-```bash
-"<abs-path-to-skill-router>" --host=codex skills dci select "<skill-id-or-ref>" --query "<current user request>" --confidence=high --reason "<brief evidence>" --json
-```
-
-If the evidence clearly identifies multiple complementary disabled skills, select at most 3 refs/ids in one command:
-
-```bash
-"<abs-path-to-skill-router>" --host=codex skills dci select "<ref-a>" "<ref-b>" --query "<current user request>" --confidence=medium --reason "<brief evidence>" --json
-```
-
-After selection, read only the returned `selected[*].skillMdPath` files needed to perform the task. If body search/grep/find/open still leaves multiple plausible skills or no evidence, continue normally without forcing a disabled skill.
-
-The route and body/DCI select commands record routed usage automatically. Use `--no-record` only for audits or dry runs.
-
-## 3. Listing and suggesting
-
-```bash
-"<abs-path-to-skill-router>" --host=codex skills suggest --json
-```
-
-The output is a JSON array of suggestions, each with `id`, `name`, `source`, `reason` (`never-used` | `stale`), `confidence` (`high` | `medium` | `low`), `details`.
-
-If the user wants to see all skills, use `skills list --json`.
-
-## 4. Confirm with the user
-
-Show the suggestion list as a compact table with id, reason, and confidence. Never disable without explicit user confirmation.
-
-If the user wants to adjust the staleness threshold, mention `--unused-for=60d` (or `2w`, `3m`, `1y`) or persist a default in `~/.skill-router/config.json`:
-
-```json
-{ "unusedForDays": 60 }
-```
-
-## 5. Disable
-
-Either pass specific ids:
-
-```bash
-"<abs-path-to-skill-router>" --host=codex skills disable user:codex:lark-mail plugin:gmail@openai-curated:gmail --yes
-```
-
-Or apply all current suggestions in one shot:
-
-```bash
-"<abs-path-to-skill-router>" --host=codex skills disable --all-suggested --yes
-```
-
-After disable succeeds, tell the user: "Disabled N skills. Restart Codex or start a new Codex session for the change to take effect."
-
-## 6. Other operations
-
-- `skills route --query "<text>" [--mode=auto|metadata|body|lexical|dci] --json` — choose a disabled skill for the current request and return the file to read. Default `auto` runs metadata first and upgrades to body verification when needed.
-- `skills body ...` — alias for `skills dci ...`.
-- `skills dci budget --json` — show the bounded retrieval limits.
-- `skills dci search --query "<text>" [--query "<text>"] --json` — multi-query search over disabled skill instruction bodies and return candidate refs plus bounded snippets.
-- `skills dci grep --pattern "<text>" --json` — literal grep over disabled skill instruction bodies. Use `--regex` only when a regular expression is intentionally required.
-- `skills dci find <id-or-ref> --pattern "<text>" --json` — search inside one disabled skill body.
-- `skills dci open <id-or-ref> --line N --window N --json` — open a bounded line window from one disabled skill body.
-- `skills dci inspect <id-or-ref> --json` — show metadata and path for one disabled skill.
-- `skills dci read <id-or-ref> --json` — read a disabled skill body with truncation.
-- `skills dci select <id-or-ref...> --query "<text>" --confidence=high|medium --reason "<why>" --json` — record one or more body-verification routes, with max selections capped by the budget.
-- `skills enable <id...>` — undo a disable.
-- `skills status [--json]` — list currently-disabled skills and detect/auto-reapply any that an upstream plugin or skill update may have restored.
-- `skills list --json` — full inventory with `lastUsed` and `callCount`.
-
-## Constraints
-
-- Codex system skills under `~/.codex/skills/.system` cannot be disabled.
-- The disable mechanism is `mv SKILL.md SKILL.md.skill-router-disabled`, not deletion.
-- State is kept at `~/.skill-router/state-codex.json`.
-- Routing only proxies disabled skill instruction files. Do not disable a whole plugin if the disabled skill depends on that plugin's MCP tools or app tools.
+- `references/cli-location.md` - host-specific CLI lookup details.
+- `references/slimming.md` - listing, suggestions, disable, enable, and status.
+- `references/disabled-routing.md` - Codex route/body verification workflow.
+- `references/safety.md` - confirmation, protection, and repair rules.
