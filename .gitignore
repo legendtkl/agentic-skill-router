@@ -1,5 +1,6 @@
 node_modules/
-lib/
+/lib/
+plugins/*/lib/
 *.log
 .DS_Store
 *.tmp

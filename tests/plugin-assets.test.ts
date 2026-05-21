@@ -245,13 +245,17 @@ test("install scripts assemble self-contained plugin caches from unified assets"
 test("install scripts always rebuild before copying plugin assets", async () => {
   const codexInstall = await readFile(join(REPO_ROOT, "scripts", "install-codex.mjs"), "utf8");
   const claudeInstall = await readFile(join(REPO_ROOT, "scripts", "install.mjs"), "utf8");
+  const sharedLib = await readFile(join(REPO_ROOT, "scripts", "lib", "plugin-install.mjs"), "utf8");
+  const commonLib = await readFile(join(REPO_ROOT, "scripts", "lib", "common.mjs"), "utf8");
   for (const content of [codexInstall, claudeInstall]) {
-    assert.match(content, /building bundle \(npm run build\)/);
-    assert.match(content, /sharedAssetDirs = \["bin", "lib", "skills"\]/);
+    assert.match(content, /ensureBuild\(/);
+    assert.match(content, /copyPluginAssets\(/);
     assert.match(content, /normalizeManifestSkills/);
     assert.doesNotMatch(content, /skipping build/);
     assert.doesNotMatch(content, /existsSync/);
   }
+  assert.match(commonLib, /building bundle \(npm run build\)/);
+  assert.match(sharedLib, /SHARED_ASSET_DIRS = \["bin", "lib", "skills"\]/);
 });
 
 async function assertInstalledPlugin(pluginRoot: string, manifestRelativePath: string): Promise<void> {

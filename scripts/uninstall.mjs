@@ -15,13 +15,14 @@
  *   node <bundle> skills enable <id...>
  * BEFORE uninstalling. We print a warning if state has disabled records.
  */
-import { readFile, rename, rm, writeFile, mkdir } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
-const PLUGIN_NAME = "skill-router";
-const MARKETPLACE = "local";
-const PLUGIN_KEY = `${PLUGIN_NAME}@${MARKETPLACE}`;
+import { atomicWrite } from "./lib/atomic-write.mjs";
+import { PLUGIN_KEY, PLUGIN_NAME, MARKETPLACE, isPlainObject, log } from "./lib/common.mjs";
+import { warnAboutDisabledSkills } from "./lib/plugin-install.mjs";
+
 const claudeHome = process.env["CLAUDE_HOME"] || join(homedir(), ".claude");
 const cacheDir = join(claudeHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME);
 const installedJsonPath = join(claudeHome, "plugins/installed_plugins.json");
@@ -34,7 +35,22 @@ const purge = process.argv.includes("--purge");
 async function main() {
   log(`uninstalling ${PLUGIN_KEY}`);
 
-  await warnAboutDisabledSkills();
+  await warnAboutDisabledSkills({
+    statePath,
+    warnPrefix: "⚠",
+    reportMalformed: true,
+    formatRestoreHint: (records) => {
+      const lines = [`  To restore them BEFORE uninstalling, run:`];
+      for (const r of records.slice(0, 5)) {
+        lines.push(`    (use the bundled CLI) skills enable ${r.id}`);
+      }
+      if (records.length > 5) {
+        lines.push(`  …and ${records.length - 5} more.`);
+      }
+      return lines;
+    },
+    log,
+  });
   await removeCache();
   await unregister();
   await disable();
@@ -45,35 +61,6 @@ async function main() {
   log("Restart Claude Code for the change to take full effect.");
   if (!purge) {
     log(`State preserved at ${stateDir}/. Pass --purge to remove it.`);
-  }
-}
-
-function isPlainObject(x) {
-  return x !== null && typeof x === "object" && !Array.isArray(x);
-}
-
-async function warnAboutDisabledSkills() {
-  let state;
-  try {
-    state = JSON.parse(await readFile(statePath, "utf8"));
-  } catch { return; }
-  if (!isPlainObject(state) || !Array.isArray(state.disabledSkills)) return;
-  const validRecords = state.disabledSkills.filter(
-    (r) => isPlainObject(r) && typeof r.id === "string" && r.id.length > 0,
-  );
-  const malformed = state.disabledSkills.length - validRecords.length;
-  if (malformed > 0) {
-    log(`⚠ ${malformed} malformed disable record(s) ignored in ${statePath}.`);
-  }
-  if (validRecords.length > 0) {
-    log(`⚠ ${validRecords.length} skill(s) are still disabled by skill-router.`);
-    log(`  Their SKILL.md files remain renamed even after uninstall.`);
-    log(`  To restore them BEFORE uninstalling, run:`);
-    for (const r of validRecords.slice(0, 5)) {
-      log(`    (use the bundled CLI) skills enable ${r.id}`);
-    }
-    if (validRecords.length > 5) log(`  …and ${validRecords.length - 5} more.`);
-    log("");
   }
 }
 
@@ -118,15 +105,6 @@ async function purgeState() {
   await rm(stateDir, { recursive: true, force: true });
   log(`  purged ${stateDir}`);
 }
-
-async function atomicWrite(path, content) {
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
-  await writeFile(tmp, content);
-  await rename(tmp, path);
-}
-
-function log(msg) { process.stdout.write(msg + "\n"); }
 
 main().catch((err) => {
   console.error("uninstall failed:", err.message);
