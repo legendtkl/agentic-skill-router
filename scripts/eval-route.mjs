@@ -6,6 +6,14 @@
 // covering top1 accuracy, top3 recall, no-select precision, ambiguous-reject
 // rate, and metadata-hit / dci-escalation ratios.
 //
+// `metadataHitRate` is reported in `auto` and `metadata` modes only (in
+// `lexical` and `dci` every hit is from that mode by definition, so the rate
+// is `n/a`). `dciEscalationRate` is meaningful only in `auto` mode, where
+// metadata can escalate to DCI; it is `n/a` in every other mode. The
+// per-case `routedSource` column attributes hits to the mode that produced
+// them, using `diagnostics.auto.selectedSource` for `auto` and the mode name
+// itself for `metadata` / `lexical` / `dci`.
+//
 // Exit code is 0 unless the script itself errors (e.g. bad fixture or unknown
 // mode). Failing metrics do not fail the command — the eval is informational,
 // not a CI gate (see issue #34 acceptance criteria).
@@ -117,6 +125,30 @@ async function routeOnce(mode, skills, query, opts) {
   throw new Error(`unreachable mode ${mode}`);
 }
 
+// Each non-auto mode is, by definition, the source of any hit it produces.
+// Auto mode is the only one that picks between sources at runtime, so it is
+// the only mode that exposes `escalated` (metadata escalated to DCI).
+//
+// Returns:
+//   routedSource: which source produced the selection ("metadata" | "lexical" |
+//                 "dci" | "body" | null when nothing was selected)
+//   escalated:    boolean for auto mode (did metadata escalate to DCI); null
+//                 for the other modes because the concept doesn't apply.
+function attributeSource(mode, result) {
+  const selected = result.selected ?? null;
+  if (mode === "auto") {
+    return {
+      routedSource: result.diagnostics?.auto?.selectedSource ?? null,
+      escalated: result.diagnostics?.auto?.escalated === true,
+    };
+  }
+  // Non-auto modes always attribute hits to themselves; misses have no source.
+  return {
+    routedSource: selected ? mode : null,
+    escalated: null,
+  };
+}
+
 function classify(testCase, result) {
   const selectedId = result.selected?.skill.id ?? null;
   const topIds = result.matches.map((m) => m.skill.id);
@@ -163,7 +195,7 @@ function pct(numerator, denominator) {
   return Number(((numerator / denominator) * 100).toFixed(1));
 }
 
-function summarize(rows) {
+function summarize(mode, rows) {
   const positive = rows.filter((r) => r.expectsSelect);
   const negative = rows.filter((r) => !r.expectsSelect);
 
@@ -172,8 +204,23 @@ function summarize(rows) {
   const ambiguousRejects = rows.filter((r) => r.ambiguousReject).length;
   const noSelectCorrect = negative.filter((r) => r.noSelectCorrect).length;
   const noSelectFalsePositives = negative.filter((r) => r.noSelectFalsePositive).length;
-  const metadataHits = rows.filter((r) => r.routedSource === "metadata").length;
-  const dciEscalations = rows.filter((r) => r.escalated).length;
+
+  // metadataHitRate is only meaningful in modes where some hits can come from
+  // metadata and others can come from a different source. That is true in
+  // `auto` (metadata vs escalated DCI) and trivially true in `metadata`
+  // (every hit is a metadata hit). For `lexical` and `dci`, every hit is from
+  // that mode by definition, so the rate carries no information — report n/a.
+  const metadataExposed = mode === "auto" || mode === "metadata";
+  const metadataHits = metadataExposed
+    ? rows.filter((r) => r.routedSource === "metadata").length
+    : 0;
+
+  // dciEscalationRate only applies to `auto`, where metadata can escalate to
+  // DCI. The other modes have no escalation concept — report n/a.
+  const dciEscalationExposed = mode === "auto";
+  const dciEscalations = dciEscalationExposed
+    ? rows.filter((r) => r.escalated === true).length
+    : 0;
 
   return {
     cases: rows.length,
@@ -184,8 +231,8 @@ function summarize(rows) {
     noSelectPrecision: pct(noSelectCorrect, negative.length),
     noSelectFalsePositiveRate: pct(noSelectFalsePositives, negative.length),
     ambiguousRejectRate: pct(ambiguousRejects, positive.length),
-    metadataHitRate: pct(metadataHits, rows.length),
-    dciEscalationRate: pct(dciEscalations, rows.length),
+    metadataHitRate: metadataExposed ? pct(metadataHits, rows.length) : null,
+    dciEscalationRate: dciEscalationExposed ? pct(dciEscalations, rows.length) : null,
   };
 }
 
@@ -215,7 +262,7 @@ function renderMarkdown(mode, fixtureRelPath, rows, summary) {
   rows.forEach((row, idx) => {
     const outcome = outcomeLabel(row);
     lines.push(
-      `| ${idx + 1} | ${row.name} | ${row.category} | ${outcome} | ${formatId(row.expected)} | ${formatId(row.selectedId)} | ${formatBool(row.top1Hit)} | ${formatTriBool(row.top3Hit)} | ${row.routedSource ?? "-"} | ${row.escalated ? "yes" : "no"} |`,
+      `| ${idx + 1} | ${row.name} | ${row.category} | ${outcome} | ${formatId(row.expected)} | ${formatId(row.selectedId)} | ${formatBool(row.top1Hit)} | ${formatTriBool(row.top3Hit)} | ${row.routedSource ?? "-"} | ${formatEscalated(row.escalated)} |`,
     );
   });
   lines.push("");
@@ -241,6 +288,11 @@ function formatBool(value) {
 function formatTriBool(value) {
   if (value === null) return "-";
   return formatBool(value);
+}
+
+function formatEscalated(value) {
+  if (value === null) return "n/a";
+  return value ? "yes" : "no";
 }
 
 function outcomeLabel(row) {
@@ -278,8 +330,7 @@ async function main() {
     for (const testCase of fixture.cases) {
       const result = await routeOnce(opts.mode, skills, testCase.query, { topK: opts.topK });
       const classification = classify(testCase, result);
-      const routedSource = result.diagnostics?.auto?.selectedSource ?? null;
-      const escalated = result.diagnostics?.auto?.escalated === true;
+      const { routedSource, escalated } = attributeSource(opts.mode, result);
       rows.push({
         name: testCase.name ?? testCase.query,
         query: testCase.query,
@@ -295,7 +346,7 @@ async function main() {
     await rm(workDir, { recursive: true, force: true });
   }
 
-  const summary = summarize(rows);
+  const summary = summarize(opts.mode, rows);
   const payload = {
     mode: opts.mode,
     fixture: fixtureRelPath,

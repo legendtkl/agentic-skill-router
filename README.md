@@ -242,6 +242,13 @@ names, product names, umbrella vs specific skills, and multi-domain keyword
 piles. The script is informational — failing metrics do not fail the command,
 and `eval:route` is intentionally not wired into `npm test`.
 
+`routedSource` reports which source produced each hit. In `--mode=auto` it
+reflects `diagnostics.auto.selectedSource` (metadata vs DCI-after-escalation);
+in `--mode=metadata|lexical|dci` every hit is attributed to that mode by
+definition. `metadataHitRate` is reported in `auto` and `metadata` modes; it
+is `n/a` in `lexical` and `dci`. `dciEscalationRate` is meaningful only in
+`auto` mode and is `n/a` elsewhere.
+
 Layout:
 
 ```text
