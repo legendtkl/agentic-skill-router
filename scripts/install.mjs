@@ -13,22 +13,25 @@
  *
  * Idempotent: re-running upgrades the install in place.
  */
-import { chmod, cp, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+
+import { atomicWrite } from "./lib/atomic-write.mjs";
+import { PLUGIN_KEY, PLUGIN_NAME, MARKETPLACE, ensureBuild, isPlainObject, log } from "./lib/common.mjs";
+import {
+  cleanupOldVersions,
+  copyPluginAssets,
+  normalizeManifestSkills,
+} from "./lib/plugin-install.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
 const pluginSrc = join(repoRoot, "plugins/claude-code");
 const pluginManifest = JSON.parse(await readFile(join(pluginSrc, ".claude-plugin/plugin.json"), "utf8"));
 const version = pluginManifest.version;
-const sharedAssetDirs = ["bin", "lib", "skills"];
 
-const PLUGIN_NAME = "skill-router";
-const MARKETPLACE = "local";
-const PLUGIN_KEY = `${PLUGIN_NAME}@${MARKETPLACE}`;
 const claudeHome = process.env["CLAUDE_HOME"] || join(homedir(), ".claude");
 const cacheRoot = join(claudeHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME);
 const installPath = join(cacheRoot, version);
@@ -40,11 +43,13 @@ async function main() {
   log(`installing ${PLUGIN_KEY} v${version}`);
   log(`  target: ${installPath}`);
 
-  await ensureBuild();
-  await copyPlugin();
+  ensureBuild({ repoRoot, log });
+  await copyPluginAssets({ pluginSrc, repoRoot, installPath });
+  await normalizeManifestSkills(join(installPath, ".claude-plugin/plugin.json"));
+  log(`  copied → ${installPath}`);
   await registerPlugin();
   await enablePlugin();
-  await cleanupOldVersions(cacheRoot, version, { keepOld });
+  await cleanupOldVersions(cacheRoot, version, { keepOld, log });
 
   log("");
   log("✓ installed.");
@@ -52,38 +57,6 @@ async function main() {
   log("Next: restart Claude Code, then in a new session ask the model to slim your skills.");
   log("Manual CLI:");
   log(`  ${installPath}/bin/skill-router skills suggest`);
-}
-
-async function ensureBuild() {
-  log("  building bundle (npm run build)...");
-  const r = spawnSync("npm", ["run", "build"], {
-    cwd: repoRoot, stdio: "inherit",
-    env: stripProxy(process.env),
-  });
-  if (r.status !== 0) throw new Error(`npm run build failed (exit ${r.status})`);
-}
-
-async function copyPlugin() {
-  // Wipe target version dir first to make this idempotent across upgrades
-  await rm(installPath, { recursive: true, force: true });
-  await mkdir(dirname(installPath), { recursive: true });
-  await cp(pluginSrc, installPath, { recursive: true });
-  await normalizeManifestSkills(join(installPath, ".claude-plugin/plugin.json"));
-  for (const dir of sharedAssetDirs) {
-    await cp(join(repoRoot, dir), join(installPath, dir), { recursive: true });
-  }
-  await chmod(join(installPath, "bin/skill-router"), 0o755);
-  log(`  copied → ${installPath}`);
-}
-
-async function normalizeManifestSkills(path) {
-  const manifest = JSON.parse(await readFile(path, "utf8"));
-  manifest.skills = "./skills/";
-  await writeFile(path, JSON.stringify(manifest, null, 2) + "\n");
-}
-
-function isPlainObject(x) {
-  return x !== null && typeof x === "object" && !Array.isArray(x);
 }
 
 async function registerPlugin() {
@@ -133,63 +106,6 @@ async function enablePlugin() {
   await atomicWrite(settingsPath, JSON.stringify(settings, null, 2) + "\n");
   log(`  enabled in settings.json`);
 }
-
-async function cleanupOldVersions(cacheRoot, currentVersion, { keepOld }) {
-  let entries;
-  try {
-    entries = await readdir(cacheRoot, { withFileTypes: true });
-  } catch (err) {
-    if (err && /** @type {NodeJS.ErrnoException} */(err).code === "ENOENT") return;
-    throw err;
-  }
-  const siblings = entries
-    .map((entry) => entry.name)
-    .filter((name) => name !== currentVersion);
-  if (siblings.length === 0) {
-    log("  no old versions to clean");
-    return;
-  }
-  if (keepOld) {
-    log(`  kept old versions: ${siblings.sort().join(", ")}`);
-    return;
-  }
-
-  // Containment guard: anchor every delete under the canonical cache root.
-  // We realpath the *cache root* (not the sibling entry) so a sibling that
-  // happens to be a symlink pointing outside the cache root removes only the
-  // symlink itself, not its target tree (`fs.rm` does not follow symlinks).
-  const canonicalCacheRoot = await realpath(cacheRoot);
-  const safeParent = canonicalCacheRoot.endsWith(sep) ? canonicalCacheRoot : canonicalCacheRoot + sep;
-  const removed = [];
-  for (const name of siblings) {
-    if (name === "" || name === "." || name === "..") continue;
-    if (name.includes(sep) || name.includes("/")) continue;
-    const target = join(canonicalCacheRoot, name);
-    if (!(target + sep).startsWith(safeParent) || target === canonicalCacheRoot) {
-      log(`  skipped (outside cache root): ${target}`);
-      continue;
-    }
-    await rm(target, { recursive: true, force: true });
-    removed.push(name);
-  }
-  if (removed.length === 0) log("  no old versions to clean");
-  else log(`  cleaned cache: ${removed.sort().join(", ")}`);
-}
-
-async function atomicWrite(path, content) {
-  await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
-  await writeFile(tmp, content);
-  await rename(tmp, path);
-}
-
-function stripProxy(env) {
-  const out = { ...env };
-  for (const k of ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]) delete out[k];
-  return out;
-}
-
-function log(msg) { process.stdout.write(msg + "\n"); }
 
 main().catch((err) => {
   console.error("install failed:", err.message);
