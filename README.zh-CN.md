@@ -182,7 +182,7 @@ env -u HTTP_PROXY -u HTTPS_PROXY npm test
 
 ```bash
 npm ci
-npm run generate:assets -- --check
+npm run check:assets
 npm run typecheck
 npm test
 npm run build

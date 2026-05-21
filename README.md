@@ -209,7 +209,7 @@ Local CI reproduction (mirrors `.github/workflows/ci.yml`):
 
 ```bash
 npm ci
-npm run generate:assets -- --check
+npm run check:assets
 npm run typecheck
 npm test
 npm run build
