@@ -1,10 +1,28 @@
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { Confidence, DisableRecord, HostName, RoutedSkillRecord, SkillSource, State } from "./types.ts";
 
 export const STATE_DIR = process.env["SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".skill-router");
 export const STATE_PATH = join(STATE_DIR, "state-claude-code.json");
+const STATE_LOCK_METADATA = "owner.json";
+const DEFAULT_STATE_LOCK_TIMEOUT_MS = 5_000;
+const DEFAULT_STATE_LOCK_STALE_MS = 60_000;
+
+interface ParsedLockMetadata {
+  pid: number | null;
+  createdAtMs: number | null;
+  token: string | null;
+}
+
+interface StateLockInfo {
+  isDirectory: boolean;
+  dev: number;
+  ino: number;
+  mtimeMs: number;
+  metadata: ParsedLockMetadata | null;
+}
 
 function emptyState(host: HostName): State {
   return {
@@ -162,26 +180,197 @@ export async function withStateLock<T>(
 ): Promise<T> {
   await mkdir(dirname(path), { recursive: true });
   const lockPath = `${path}.lock`;
-  const timeoutMs = opts.timeoutMs ?? 5_000;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_STATE_LOCK_TIMEOUT_MS;
+  const staleMs = opts.staleMs ?? DEFAULT_STATE_LOCK_STALE_MS;
   const started = Date.now();
+  let lockToken: string | null = null;
   while (true) {
-    try {
-      await mkdir(lockPath, { mode: 0o700 });
+    const token = await tryAcquireStateLock(lockPath, path);
+    if (token) {
+      lockToken = token;
       break;
-    } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-      if (Date.now() - started > timeoutMs) {
-        throw new Error(`timed out waiting for state lock: ${lockPath}`);
-      }
-      await sleep(25);
     }
+
+    await recoverStaleStateLock(lockPath, staleMs);
+    if (Date.now() - started > timeoutMs) {
+      throw new Error(`timed out waiting for state lock: ${lockPath}`);
+    }
+    await sleep(25);
   }
 
   try {
     return await fn();
   } finally {
-    await rm(lockPath, { recursive: true, force: true });
+    await releaseStateLock(lockPath, lockToken);
   }
+}
+
+async function tryAcquireStateLock(lockPath: string, statePath: string): Promise<string | null> {
+  return tryAcquireLockDirectory(lockPath, stateHostFromPath(statePath));
+}
+
+async function tryAcquireLockDirectory(lockPath: string, host: string): Promise<string | null> {
+  const token = randomUUID();
+  try {
+    await mkdir(lockPath, { mode: 0o700 });
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") return null;
+    throw err;
+  }
+
+  try {
+    await writeFile(
+      join(lockPath, STATE_LOCK_METADATA),
+      JSON.stringify({
+        pid: process.pid,
+        createdAt: new Date().toISOString(),
+        host,
+        token,
+      }, null, 2) + "\n",
+      { mode: 0o600 },
+    );
+  } catch (err) {
+    await rm(lockPath, { recursive: true, force: true });
+    throw err;
+  }
+  return token;
+}
+
+async function recoverStaleStateLock(lockPath: string, staleMs: number): Promise<void> {
+  const info = await readStateLockInfo(lockPath);
+  if (!info || !isRecoverableStaleLock(info, staleMs)) return;
+
+  const recoveryLockPath = `${lockPath}.recovering`;
+  const recoveryToken = await tryAcquireRecoveryLock(recoveryLockPath, staleMs);
+  if (!recoveryToken) return;
+  try {
+    const latest = await readStateLockInfo(lockPath);
+    if (!latest || !isSameLockDirectory(info, latest) || !isRecoverableStaleLock(latest, staleMs)) return;
+
+    await renameAndRemoveLockDirectory(lockPath);
+  } finally {
+    await releaseStateLock(recoveryLockPath, recoveryToken);
+  }
+}
+
+async function tryAcquireRecoveryLock(lockPath: string, staleMs: number): Promise<string | null> {
+  let token = await tryAcquireLockDirectory(lockPath, "state-lock-recovery");
+  if (token) return token;
+
+  await recoverStaleRecoveryLock(lockPath, staleMs);
+  token = await tryAcquireLockDirectory(lockPath, "state-lock-recovery");
+  return token;
+}
+
+async function recoverStaleRecoveryLock(lockPath: string, staleMs: number): Promise<void> {
+  const info = await readStateLockInfo(lockPath);
+  if (!info || !isRecoverableStaleLock(info, staleMs)) return;
+
+  const latest = await readStateLockInfo(lockPath);
+  if (!latest || !isSameLockDirectory(info, latest) || !isRecoverableStaleLock(latest, staleMs)) return;
+
+  await renameAndRemoveLockDirectory(lockPath);
+}
+
+async function renameAndRemoveLockDirectory(lockPath: string): Promise<void> {
+  const reapPath = `${lockPath}.reaped.${process.pid}.${Date.now()}.${randomUUID()}`;
+  try {
+    await rename(lockPath, reapPath);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw err;
+  }
+  await rm(reapPath, { recursive: true, force: true });
+}
+
+async function releaseStateLock(lockPath: string, token: string | null): Promise<void> {
+  if (!token) return;
+  const metadata = await readStateLockMetadata(lockPath);
+  if (metadata?.token !== token) return;
+  await rm(lockPath, { recursive: true, force: true });
+}
+
+async function readStateLockInfo(lockPath: string): Promise<StateLockInfo | null> {
+  let s;
+  try {
+    s = await stat(lockPath);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+  return {
+    isDirectory: s.isDirectory(),
+    dev: s.dev,
+    ino: s.ino,
+    mtimeMs: s.mtimeMs,
+    metadata: s.isDirectory() ? await readStateLockMetadata(lockPath) : null,
+  };
+}
+
+async function readStateLockMetadata(lockPath: string): Promise<ParsedLockMetadata | null> {
+  let raw: string;
+  try {
+    raw = await readFile(join(lockPath, STATE_LOCK_METADATA), "utf8");
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return null;
+    throw err;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isPlainObject(parsed)) return null;
+  const createdAtRaw = parsed["createdAt"];
+  const createdAtMs = typeof createdAtRaw === "string" ? Date.parse(createdAtRaw) : NaN;
+  const pid = parsed["pid"];
+  const token = parsed["token"];
+  return {
+    pid: typeof pid === "number" && Number.isSafeInteger(pid) && pid > 0 ? pid : null,
+    createdAtMs: Number.isFinite(createdAtMs) ? createdAtMs : null,
+    token: typeof token === "string" && token !== "" ? token : null,
+  };
+}
+
+function isRecoverableStaleLock(info: StateLockInfo, staleMs: number): boolean {
+  if (!info.isDirectory || !Number.isFinite(staleMs) || staleMs < 0) return false;
+  const pid = info.metadata?.pid ?? null;
+  if (pid !== null) return !pidIsRunning(pid);
+
+  const createdAtMs = info.metadata?.createdAtMs ?? info.mtimeMs;
+  return Date.now() - createdAtMs > staleMs;
+}
+
+function isSameLockDirectory(a: StateLockInfo, b: StateLockInfo): boolean {
+  if (!a.isDirectory || !b.isDirectory) return false;
+
+  const aToken = a.metadata?.token ?? null;
+  const bToken = b.metadata?.token ?? null;
+  if (aToken !== null || bToken !== null) return aToken !== null && aToken === bToken;
+
+  return hasReliableInode(a) && hasReliableInode(b) && a.dev === b.dev && a.ino === b.ino;
+}
+
+function hasReliableInode(info: StateLockInfo): boolean {
+  return Number.isFinite(info.dev) && Number.isFinite(info.ino) && info.ino !== 0;
+}
+
+function pidIsRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ESRCH") return false;
+    return true;
+  }
+}
+
+function stateHostFromPath(path: string): string {
+  const match = /^state-(.+)\.json$/.exec(basename(path));
+  return match?.[1] ?? "unknown";
 }
 
 function sleep(ms: number): Promise<void> {

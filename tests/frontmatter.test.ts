@@ -17,6 +17,15 @@ test("returns empty object when no frontmatter delimiters", () => {
   assert.deepEqual(parseFrontmatter("# just a heading\nnothing here"), {});
 });
 
+test("returns empty object when opening frontmatter delimiter is not closed", () => {
+  const src = `---
+# Notes
+
+name: body-text
+description: this line looks like metadata but is not closed frontmatter`;
+  assert.deepEqual(parseFrontmatter(src), {});
+});
+
 test("strips quotes and preserves Chinese description", () => {
   const src = `---
 name: lark-im
