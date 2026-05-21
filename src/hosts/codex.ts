@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import type { Host } from "./base.ts";
 import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageStat } from "../types.ts";
-import { BuiltinSkillCannotDisableError } from "../types.ts";
+import { BuiltinSkillCannotDisableError, SkillOutOfRootError } from "../types.ts";
 import {
   compareVersions,
   DISABLED_SUFFIX,
@@ -93,7 +93,7 @@ export class CodexHost implements Host {
     const enabledPlugins = (await readCodexPluginSettings(join(this.codexHome, "config.toml"))).enabledPlugins ?? {};
     for (const plugin of await this.installedPlugins()) {
       const isPluginDisabled = enabledPlugins[plugin.pluginKey] === false;
-      const pluginSkills = await walkSkillsDir(plugin.skillsRoot, async (skillName, skillMdPath, isDisabled, conflict) => {
+      const pluginSkills = await walkSkillsDir(plugin.skillsRoot, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
         const fm = await readSkillFrontmatter(skillMdPath);
         return {
           id: `plugin:${plugin.pluginKey}:${skillName}`,
@@ -105,8 +105,9 @@ export class CodexHost implements Host {
           skillMdPath,
           isDisabled,
           isPluginDisabled,
-          canDisable: true,
+          canDisable: !outOfRoot,
           conflict,
+          outOfRoot,
         };
       });
       out.push(...pluginSkills);
@@ -132,12 +133,17 @@ export class CodexHost implements Host {
   }
 
   async disable(skill: Skill, _reason: string): Promise<void> {
+    // Check outOfRoot before canDisable so that the more specific
+    // "resolves outside the skills root" error wins for symlink escapes,
+    // even though out-of-root skills now also report canDisable=false.
+    if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
     if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
     if (skill.isDisabled) return;
     await rename(skill.skillMdPath, skill.skillMdPath + DISABLED_SUFFIX);
   }
 
   async enable(skill: Skill): Promise<void> {
+    if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
     if (!skill.canDisable) return;
     if (!skill.isDisabled) return;
     if (!skill.skillMdPath.endsWith(DISABLED_SUFFIX)) return;
@@ -150,7 +156,7 @@ export class CodexHost implements Host {
     source: "user" | "builtin";
     canDisable: boolean;
   }): Promise<Skill[]> {
-    return walkSkillsDir(opts.root, async (skillName, skillMdPath, isDisabled, conflict) => {
+    return walkSkillsDir(opts.root, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
       const fm = await readSkillFrontmatter(skillMdPath);
       return {
         id: `${opts.idPrefix}:${skillName}`,
@@ -162,8 +168,9 @@ export class CodexHost implements Host {
         skillMdPath,
         isDisabled,
         isPluginDisabled: false,
-        canDisable: opts.canDisable,
+        canDisable: opts.canDisable && !outOfRoot,
         conflict,
+        outOfRoot,
       };
     });
   }

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Host } from "./base.ts";
 import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageStat } from "../types.ts";
-import { BuiltinSkillCannotDisableError } from "../types.ts";
+import { BuiltinSkillCannotDisableError, SkillOutOfRootError } from "../types.ts";
 import {
   DISABLED_SUFFIX,
   readClaudeSettings,
@@ -57,7 +57,7 @@ export class ClaudeCodeHost implements Host {
 
     // 1. User-level skills (npx skills add ... -g): ~/.claude/skills/
     const userSkillsRoot = join(this.claudeHome, "skills");
-    const userSkills = await walkSkillsDir(userSkillsRoot, async (skillName, skillMdPath, isDisabled, conflict) => {
+    const userSkills = await walkSkillsDir(userSkillsRoot, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
       const fm = await readSkillFrontmatter(skillMdPath);
       return {
         id: `user:${skillName}`,
@@ -69,8 +69,9 @@ export class ClaudeCodeHost implements Host {
         skillMdPath,
         isDisabled,
         isPluginDisabled: false,
-        canDisable: true,
+        canDisable: !outOfRoot,
         conflict,
+        outOfRoot,
       };
     });
     out.push(...userSkills);
@@ -78,7 +79,7 @@ export class ClaudeCodeHost implements Host {
     // 2. Project-level skills from CWD up to the repository root:
     // <repo>/.claude/skills and nested <repo>/<subdir>/.claude/skills.
     for (const projectRoot of await projectSkillRoots(this.cwd, ".claude/skills")) {
-      const projectSkills = await walkSkillsDir(projectRoot.root, async (skillName, skillMdPath, isDisabled, conflict) => {
+      const projectSkills = await walkSkillsDir(projectRoot.root, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
         const fm = await readSkillFrontmatter(skillMdPath);
         return {
           id: `project:claude:${projectRoot.relativeDir}:${skillName}`,
@@ -90,8 +91,9 @@ export class ClaudeCodeHost implements Host {
           skillMdPath,
           isDisabled,
           isPluginDisabled: false,
-          canDisable: true,
+          canDisable: !outOfRoot,
           conflict,
+          outOfRoot,
         };
       });
       out.push(...projectSkills);
@@ -106,7 +108,7 @@ export class ClaudeCodeHost implements Host {
     for (const plugin of installed) {
       const isPluginDisabled = enabledPlugins[plugin.pluginKey] === false;
       const skillsRoot = join(plugin.installPath, "skills");
-      const pluginSkills = await walkSkillsDir(skillsRoot, async (skillName, skillMdPath, isDisabled, conflict) => {
+      const pluginSkills = await walkSkillsDir(skillsRoot, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
         const fm = await readSkillFrontmatter(skillMdPath);
         return {
           id: `plugin:${plugin.pluginKey}:${skillName}`,
@@ -118,8 +120,9 @@ export class ClaudeCodeHost implements Host {
           skillMdPath,
           isDisabled,
           isPluginDisabled,
-          canDisable: true,
+          canDisable: !outOfRoot,
           conflict,
+          outOfRoot,
         };
       });
       out.push(...pluginSkills);
@@ -159,6 +162,10 @@ export class ClaudeCodeHost implements Host {
   }
 
   async disable(skill: Skill, _reason: string): Promise<void> {
+    // Check outOfRoot before canDisable so that the more specific
+    // "resolves outside the skills root" error wins for symlink escapes,
+    // even though out-of-root skills now also report canDisable=false.
+    if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
     if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
     if (skill.isDisabled) return; // idempotent
     const target = skill.skillMdPath + DISABLED_SUFFIX;
@@ -166,6 +173,7 @@ export class ClaudeCodeHost implements Host {
   }
 
   async enable(skill: Skill): Promise<void> {
+    if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
     if (!skill.canDisable) return; // builtins are never disabled
     if (!skill.isDisabled) return; // idempotent
     if (!skill.skillMdPath.endsWith(DISABLED_SUFFIX)) return;

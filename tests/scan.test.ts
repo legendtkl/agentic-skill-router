@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm, cp } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, cp, symlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -209,6 +209,82 @@ test("disable on builtin skill throws", async () => {
     const init = skills.find((s) => s.id === "builtin:init");
     assert.ok(init);
     await assert.rejects(() => host.disable(init!, "x"), /BuiltinSkillCannotDisable/);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("symlink skill whose target is outside the skills root is marked outOfRoot and cannot be disabled", async () => {
+  const { home, cleanup } = await makeFakeClaudeHome();
+  // Build a directory entirely outside the skills root to host the link
+  // target. The skill directory under the link target is a fully valid
+  // skill, but it lives outside the user's ~/.claude/skills tree, so
+  // skill-router must refuse to rename SKILL.md through it.
+  const outside = await mkdtemp(join(tmpdir(), "skill-router-outside-"));
+  try {
+    const externalSkill = join(outside, "external-skill");
+    await mkdir(externalSkill, { recursive: true });
+    const externalMd = join(externalSkill, "SKILL.md");
+    await writeFile(externalMd, "---\nname: external\ndescription: outside the root\n---\n");
+
+    // Place a symlink inside the user skills root that points to the
+    // external skill directory.
+    await symlink(externalSkill, join(home, "skills", "external"));
+
+    const host = new ClaudeCodeHost({ claudeHome: home });
+    const skills = await host.listSkills();
+    const external = skills.find((s) => s.id === "user:external");
+    assert.ok(external, "external symlink skill should still be listed for visibility");
+    assert.equal(external!.outOfRoot, true, "out-of-root symlink should be flagged");
+    assert.equal(external!.isDisabled, false);
+    // Out-of-root symlinks must also report canDisable === false so that
+    // policy/suggestion bulk paths skip them instead of attempting a rename
+    // that the host would reject mid-batch.
+    assert.equal(external!.canDisable, false, "out-of-root symlink must report canDisable=false");
+
+    // host-level disable refuses with a clear error
+    await assert.rejects(
+      () => host.disable(external!, "test"),
+      /resolves outside the skills root/i,
+    );
+    // host-level enable also refuses
+    await assert.rejects(
+      () => host.enable(external!),
+      /resolves outside the skills root/i,
+    );
+
+    // The external SKILL.md is still untouched on disk.
+    assert.equal((await readFile(externalMd, "utf8")).startsWith("---"), true);
+  } finally {
+    await rm(outside, { recursive: true, force: true });
+    await cleanup();
+  }
+});
+
+test("symlink skill whose target is inside the same skills root remains disable-able", async () => {
+  const { home, cleanup } = await makeFakeClaudeHome();
+  try {
+    // Create a real skill directory under the user skills root, then symlink
+    // it under a second name. The symlink target IS inside the skills root,
+    // so disable should be allowed (renaming the underlying SKILL.md is a
+    // user-scoped mutation, not an escape).
+    const realDir = join(home, "skills", "inside-real");
+    await mkdir(realDir, { recursive: true });
+    const realMd = join(realDir, "SKILL.md");
+    await writeFile(realMd, "---\nname: inside-real\ndescription: inside the root\n---\n");
+    await symlink(realDir, join(home, "skills", "inside-link"));
+
+    const host = new ClaudeCodeHost({ claudeHome: home });
+    const skills = await host.listSkills();
+    const linked = skills.find((s) => s.id === "user:inside-link");
+    assert.ok(linked, "in-root symlink skill should be listed");
+    assert.notEqual(linked!.outOfRoot, true, "in-root symlink should NOT be flagged out-of-root");
+    assert.equal(linked!.canDisable, true, "in-root symlink should remain disable-able");
+
+    // The host can still disable a regular in-root skill the normal way.
+    const real = skills.find((s) => s.id === "user:inside-real");
+    assert.ok(real);
+    await host.disable(real!, "test");
   } finally {
     await cleanup();
   }

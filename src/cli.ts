@@ -879,6 +879,8 @@ function projectSkill(s: Skill, usage: Map<string, UsageStat>, inventory?: Skill
     isPluginDisabled: s.isPluginDisabled,
     canDisable: s.canDisable,
     conflict: s.conflict,
+    outOfRoot: s.outOfRoot ?? false,
+    skipped: s.outOfRoot ? "out-of-root" as const : null,
     description: s.description,
     lastUsed: u?.lastUsed?.toISOString() ?? null,
     callCount: u?.callCount ?? 0,
@@ -996,6 +998,7 @@ function printSkillTable(skills: Skill[], usage: Map<string, UsageStat>): void {
       id: s.id,
       source: s.source,
       disabled: s.conflict ? "CONFLICT"
+        : s.outOfRoot ? "out-of-root"
         : s.isDisabled ? "yes"
         : s.isPluginDisabled ? "plugin-off"
         : !s.canDisable ? "builtin"
@@ -1008,7 +1011,7 @@ function printSkillTable(skills: Skill[], usage: Map<string, UsageStat>): void {
   const widths = {
     id: Math.max(2, ...rows.map((r) => r.id.length)),
     source: 7,
-    disabled: 10,
+    disabled: Math.max(10, ...rows.map((r) => r.disabled.length)),
     last: 10,
     calls: 5,
   };

@@ -634,3 +634,59 @@ test("disable on builtin throws BuiltinSkillCannotDisableError", async () => {
     await cleanup();
   }
 });
+
+test("disableSkill refuses skills flagged outOfRoot and leaves SKILL.md alone", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const outOfRoot: Skill = { ...skill, outOfRoot: true };
+    await assert.rejects(
+      () => disableSkill(outOfRoot, "x", { statePath }),
+      /resolves outside the skills root/i,
+    );
+    // The original SKILL.md must still be live; nothing was renamed.
+    assert.equal(await fileExists(skill.skillMdPath), true);
+    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), false);
+    // No state record should have been written.
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("disableSkill checks outOfRoot before canDisable so symlink-escape reports the specific error", async () => {
+  // Regression guard: host-level listSkills() now marks out-of-root symlink
+  // skills with canDisable=false, so if disableSkill checked canDisable first
+  // it would surface a misleading "builtin" error and hide the real
+  // remediation path. The outOfRoot guard must fire first to match the
+  // host-level disable() ordering.
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const outOfRootAndNotDisableable: Skill = {
+      ...skill,
+      outOfRoot: true,
+      canDisable: false,
+    };
+    await assert.rejects(
+      () => disableSkill(outOfRootAndNotDisableable, "x", { statePath }),
+      (err: Error) =>
+        err.name === "SkillOutOfRootError" &&
+        /resolves outside the skills root/i.test(err.message),
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test("enableSkill refuses skills flagged outOfRoot", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const outOfRoot: Skill = { ...skill, outOfRoot: true, isDisabled: true };
+    await assert.rejects(
+      () => enableSkill(outOfRoot, { statePath }),
+      /resolves outside the skills root/i,
+    );
+  } finally {
+    await cleanup();
+  }
+});

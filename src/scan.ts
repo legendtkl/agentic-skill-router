@@ -1,5 +1,5 @@
-import { readdir, readFile, stat } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { parseFrontmatter } from "./frontmatter.ts";
 import type { Skill, SkillMetadata } from "./types.ts";
 
@@ -142,10 +142,22 @@ export async function readCodexPluginSettings(path: string): Promise<ClaudeSetti
  * skipped. If a child has BOTH files (split-brain after a crash or manual
  * edit), the live `SKILL.md` wins and we mark the skill via the `conflict`
  * channel passed to `build` so callers can surface it for repair.
+ *
+ * When a child is a symlink whose realpath escapes `skillsRoot`, the skill is
+ * still surfaced (so the user can see and act on it manually), but `outOfRoot`
+ * is true so callers can mark it un-disable-able. Renaming via the symlink
+ * would otherwise mutate a directory the user never put under their skills
+ * root.
  */
 export async function walkSkillsDir(
   skillsRoot: string,
-  build: (skillName: string, skillMdPath: string, isDisabled: boolean, conflict: boolean) => Promise<Skill | null>,
+  build: (
+    skillName: string,
+    skillMdPath: string,
+    isDisabled: boolean,
+    conflict: boolean,
+    outOfRoot: boolean,
+  ) => Promise<Skill | null>,
 ): Promise<Skill[]> {
   let entries;
   try {
@@ -154,19 +166,29 @@ export async function walkSkillsDir(
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
   }
+  const canonicalRoot = await canonicalizeRoot(skillsRoot);
   const out: Skill[] = [];
   for (const ent of entries) {
     if (ent.name.startsWith(".")) continue;
     const skillDir = join(skillsRoot, ent.name);
     // Accept directories AND symlinks-to-directories
     let isDir = ent.isDirectory();
-    if (!isDir && ent.isSymbolicLink()) {
+    const isSymlink = ent.isSymbolicLink();
+    if (!isDir && isSymlink) {
       try {
         const s = await stat(skillDir);
         isDir = s.isDirectory();
       } catch { /* dangling symlink */ }
     }
     if (!isDir) continue;
+
+    // For symlinks, canonicalize and verify the target lives inside the same
+    // skills root. We deliberately only enforce this for symlinks: a real
+    // subdirectory of skillsRoot is in-root by construction, and walking
+    // every regular directory's realpath would add useless syscalls.
+    const outOfRoot = isSymlink
+      ? !(await isInsideCanonicalRoot(skillDir, canonicalRoot))
+      : false;
 
     const livePath = join(skillDir, "SKILL.md");
     const disabledPath = livePath + DISABLED_SUFFIX;
@@ -187,10 +209,60 @@ export async function walkSkillsDir(
       isDisabled = true;
     }
     if (!resolvedPath) continue;
-    const skill = await build(ent.name, resolvedPath, isDisabled, conflict);
+    const skill = await build(ent.name, resolvedPath, isDisabled, conflict, outOfRoot);
     if (skill) out.push(skill);
   }
   return out;
+}
+
+async function canonicalizeRoot(root: string): Promise<string | null> {
+  try {
+    return await realpath(root);
+  } catch {
+    // Root may not exist (caller handled ENOENT above), or be a broken
+    // symlink. Fall back to the resolved input path so containment is still
+    // a structural comparison.
+    return resolve(root);
+  }
+}
+
+async function canonicalizePath(path: string): Promise<string | null> {
+  try {
+    return await realpath(path);
+  } catch {
+    return null;
+  }
+}
+
+function pathStartsWith(child: string, parent: string): boolean {
+  if (child === parent) return true;
+  const withSep = parent.endsWith(sep) ? parent : parent + sep;
+  return child.startsWith(withSep);
+}
+
+async function isInsideCanonicalRoot(skillDir: string, canonicalRoot: string | null): Promise<boolean> {
+  if (!canonicalRoot) return false;
+  const canonicalSkill = await canonicalizePath(skillDir);
+  if (!canonicalSkill) return false;
+  return pathStartsWith(canonicalSkill, canonicalRoot);
+}
+
+/**
+ * Shared path-safety helper: returns true if `path` (after `realpath`) lives
+ * inside any of `roots` (each `realpath`'d). Disable/enable use the per-skill
+ * `outOfRoot` flag computed by `walkSkillsDir`; this helper is exposed for
+ * future callers that want to revalidate a path against the current skill
+ * roots without re-scanning the whole tree.
+ */
+export async function isPathInsideAnyRoot(path: string, roots: string[]): Promise<boolean> {
+  const canonicalPath = await canonicalizePath(path);
+  if (!canonicalPath) return false;
+  for (const root of roots) {
+    const canonicalRoot = await canonicalizeRoot(root);
+    if (!canonicalRoot) continue;
+    if (pathStartsWith(canonicalPath, canonicalRoot)) return true;
+  }
+  return false;
 }
 
 async function fileExists(path: string): Promise<boolean> {
