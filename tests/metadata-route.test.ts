@@ -79,6 +79,22 @@ test("metadata route keeps exact short alias queries high confidence", () => {
   assert.ok(result.selected?.reason.includes("matched alias"));
 });
 
+test("metadata route keeps standalone short aliases selectable in longer queries", () => {
+  const ai = skill("ai-helper", "AI workflow helper", {
+    metadata: {
+      name: "ai-helper",
+      description: "AI workflow helper",
+      aliases: ["ai"],
+    },
+  });
+
+  const result = routeDisabledSkillsMetadata([ai], "use ai", { topK: 3 });
+
+  assert.equal(result.selected?.skill.id, "user:codex:ai-helper");
+  assert.equal(result.selected?.confidence, "high");
+  assert.ok(result.selected?.reason.includes("matched alias phrase"));
+});
+
 test("metadata route does not select generic-only requests", () => {
   const generic = skill("platform-helper", "API tool query helper for managing platform workflows");
   const result = routeDisabledSkillsMetadata([generic], "查询 API 工具", { topK: 3 });

@@ -331,7 +331,7 @@ function fieldAppearsInQuery(item: MetadataField, query: QueryPlan): boolean {
 
   // Short Latin aliases such as "ai" and "es" are handled by term matching,
   // which preserves token boundaries and avoids OpenAI/daily-style substrings.
-  if (item.compact.length < 5) return false;
+  if (item.compact.length < 5) return query.boundaryTerms.has(item.compact);
 
   const parts = latinBoundaryParts(item.text);
   return query.boundaryTerms.has(item.compact) ||
