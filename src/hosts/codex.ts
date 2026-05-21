@@ -9,7 +9,7 @@ import {
   compareVersions,
   DISABLED_SUFFIX,
   readCodexPluginSettings,
-  readSkillFrontmatter,
+  readSkillFrontmatterDetailed,
   walkSkillsDir,
 } from "../scan.ts";
 import { collectUsageStats } from "../usage.ts";
@@ -94,7 +94,7 @@ export class CodexHost implements Host {
     for (const plugin of await this.installedPlugins()) {
       const isPluginDisabled = enabledPlugins[plugin.pluginKey] === false;
       const pluginSkills = await walkSkillsDir(plugin.skillsRoot, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
-        const fm = await readSkillFrontmatter(skillMdPath);
+        const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
         return {
           id: `plugin:${plugin.pluginKey}:${skillName}`,
           name: fm.name || skillName,
@@ -108,6 +108,7 @@ export class CodexHost implements Host {
           canDisable: !outOfRoot,
           conflict,
           outOfRoot,
+          ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
         };
       });
       out.push(...pluginSkills);
@@ -157,7 +158,7 @@ export class CodexHost implements Host {
     canDisable: boolean;
   }): Promise<Skill[]> {
     return walkSkillsDir(opts.root, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
-      const fm = await readSkillFrontmatter(skillMdPath);
+      const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
       return {
         id: `${opts.idPrefix}:${skillName}`,
         name: fm.name || skillName,
@@ -171,6 +172,7 @@ export class CodexHost implements Host {
         canDisable: opts.canDisable && !outOfRoot,
         conflict,
         outOfRoot,
+        ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
       };
     });
   }

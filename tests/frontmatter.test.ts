@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseFrontmatter } from "../src/frontmatter.ts";
+import { parseFrontmatter, parseFrontmatterWithWarnings } from "../src/frontmatter.ts";
 
 test("parses simple key:value pairs", () => {
   const src = `---
@@ -108,4 +108,76 @@ license: https://example.com/license
 ---`;
   const fm = parseFrontmatter(src);
   assert.equal(fm["license"], "https://example.com/license");
+});
+
+test("parseFrontmatterWithWarnings reports nested mappings", () => {
+  const src = `---
+name: lark-cli
+description: A CLI
+metadata:
+  requires:
+    bins: ["lark-cli"]
+  cliHelp: "lark-cli mail --help"
+license: MIT
+---`;
+  const { data, warnings } = parseFrontmatterWithWarnings(src);
+  assert.equal(data["name"], "lark-cli");
+  assert.equal(data["description"], "A CLI");
+  assert.equal(data["license"], "MIT");
+  assert.equal(data["metadata"], undefined);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /skipped nested mapping under `metadata`/);
+  assert.match(warnings[0]!, /line 5/);
+});
+
+test("parseFrontmatterWithWarnings warns on snake_case key with nested mapping", () => {
+  // Regression: snake_case top-level keys with an indented mapping below them
+  // used to be silently dropped. Now they must produce a warning so authors
+  // can spot the missing routing metadata.
+  const src = `---
+name: lark-mail
+description: A CLI
+routing_metadata:
+  aliases:
+    - 飞书邮箱
+tags: [feishu]
+---`;
+  const { data, warnings } = parseFrontmatterWithWarnings(src);
+  assert.equal(data["name"], "lark-mail");
+  assert.equal(data["routing_metadata"], undefined);
+  assert.deepEqual(data["tags"], ["feishu"]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /routing_metadata/);
+  assert.match(warnings[0]!, /line 5/);
+});
+
+test("parseFrontmatterWithWarnings emits no warnings for supported forms", () => {
+  const src = `---
+name: lark-mail
+description: |
+  发送、回复、搜索飞书邮件
+  支持附件和草稿。
+aliases:
+  - 飞书邮箱
+  - lark mail
+tags: [feishu, email]
+license: "MIT"
+---`;
+  const { data, warnings } = parseFrontmatterWithWarnings(src);
+  assert.deepEqual(warnings, []);
+  assert.equal(data["name"], "lark-mail");
+  assert.equal(data["description"], "发送、回复、搜索飞书邮件\n支持附件和草稿。");
+  assert.deepEqual(data["aliases"], ["飞书邮箱", "lark mail"]);
+  assert.deepEqual(data["tags"], ["feishu", "email"]);
+  assert.equal(data["license"], "MIT");
+});
+
+test("parseFrontmatterWithWarnings returns empty when frontmatter is not closed", () => {
+  const src = `---
+name: unclosed
+metadata:
+  nested: value`;
+  const { data, warnings } = parseFrontmatterWithWarnings(src);
+  assert.deepEqual(data, {});
+  assert.deepEqual(warnings, []);
 });

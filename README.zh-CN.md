@@ -160,6 +160,28 @@ examples:
 ---
 ```
 
+### SKILL.md frontmatter 支持范围
+
+`skill-router` 内置一个零依赖的最小 YAML parser，只处理 Claude Code / Codex
+SKILL.md 实际使用的子集。支持的写法：
+
+- 顶层标量 `key: value`，可加引号 (`"..."`/`'...'`)；未加引号的标量会去除行尾
+  ` # comment`。
+- 顶层 key 的字面量 (`|`) 与折叠 (`>`) block 字符串（如多行 `description`）。
+- 顶层数组：内联 `tags: [feishu, email]` 或 block list `- item`。
+
+**不支持**：嵌套 mapping（例如 `metadata.routing.aliases`）、anchors/aliases、
+tags、flow mappings、多文档流。遇到嵌套 mapping 时该 key 会被丢弃，并产生如下
+警告：
+
+```
+frontmatter: skipped nested mapping under `metadata` (line 7)
+```
+
+警告会附加在 skill 记录的可选字段 `frontmatterWarnings` 上，并在
+`skills list --json` 输出中体现，便于发现被静默跳过的字段。请把所有路由相关
+metadata 放在顶层（参考上面的 `lark-mail` 示例）。
+
 ## 故障排查
 
 参见 [`docs/troubleshooting.md`](docs/troubleshooting.md)（暂为英文，中文版后续补齐），

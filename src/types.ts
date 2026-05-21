@@ -40,6 +40,13 @@ export interface Skill {
    * files in user directories the agent was never granted access to.
    */
   outOfRoot?: boolean;
+  /**
+   * Human-readable warnings emitted while parsing this skill's SKILL.md
+   * frontmatter (e.g. nested mappings that the minimal parser dropped).
+   * Omitted when empty so callers can keep the existing shape unchanged for
+   * well-formed skills.
+   */
+  frontmatterWarnings?: string[];
 }
 
 export interface UsageStat {
