@@ -54,6 +54,25 @@ export interface RouteDiagnostics {
   dci?: {
     selectedId: string | null;
     action: "read-skill-file" | "no-confident-match";
+    corpus?: {
+      mode: "disabled-only";
+      scanned: number;
+      matched: number;
+      loaded: number;
+      bytesRead: number;
+      truncated: number;
+      skipped: number;
+    };
+    warnings?: Array<{
+      code: string;
+      message: string;
+      id?: string;
+      skillMdPath?: string;
+      bytesRead?: number;
+      fileBytes?: number;
+      limitBytes?: number;
+      skipped?: number;
+    }>;
     matches: Array<{ id: string; ref?: string; confidence: Confidence; score: number; reason: string }>;
   };
   auto?: {

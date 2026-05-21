@@ -25,10 +25,15 @@ When `auto` cannot select confidently, keep body verification bounded:
 
 - Max queries: 3
 - Max candidates to consider from search: 8
+- Max bytes per disabled skill body read by search: 64,000
+- Max bytes across one disabled-skill corpus search: 1,000,000
 - Max `find` / `open` calls total: 3
 - Max full `read` calls: 2
 - Max selections: 3
 - Max `open` output: 24,000 characters
+
+Search and route JSON include `warnings` when a skill body is truncated or when
+the corpus byte budget is exhausted before all disabled skills are read.
 
 Check the active budget:
 
