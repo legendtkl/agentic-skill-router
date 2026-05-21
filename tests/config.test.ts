@@ -236,6 +236,54 @@ test("setConfigValue serializes concurrent writes so neither key is dropped", as
   }
 });
 
+test("setConfigValue reaps stale lock from a dead PID and succeeds", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "skill-router-stale-lock-"));
+  const path = join(dir, "config.json");
+  const lockPath = `${path}.lock`;
+  try {
+    await writeFile(path, JSON.stringify({ unusedForDays: 30 }) + "\n");
+    // Pick a PID that is overwhelmingly unlikely to exist on this host so
+    // process.kill(pid, 0) reports ESRCH. Pair it with a fresh `startedAt`
+    // so success proves the PID-liveness branch (not the age fallback).
+    const fakePid = process.pid + 100000;
+    await writeFile(
+      lockPath,
+      JSON.stringify({ pid: fakePid, startedAt: Date.now() }),
+    );
+    await setConfigValue("routeMode", "metadata", path);
+    const cfg = await loadConfig(path);
+    assert.equal(cfg.routeMode, "metadata");
+    // Lock is cleaned up after a successful write.
+    const lockExists = await (await import("node:fs/promises"))
+      .stat(lockPath)
+      .then(() => true)
+      .catch(() => false);
+    assert.equal(lockExists, false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("setConfigValue reaps stale lock older than the age threshold and succeeds", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "skill-router-stale-age-"));
+  const path = join(dir, "config.json");
+  const lockPath = `${path}.lock`;
+  try {
+    await writeFile(path, JSON.stringify({ unusedForDays: 30 }) + "\n");
+    // Use the live test process PID so the liveness check passes; rely on
+    // the age fallback (startedAt > 60s ago) to declare the lock stale.
+    await writeFile(
+      lockPath,
+      JSON.stringify({ pid: process.pid, startedAt: Date.now() - 120_000 }),
+    );
+    await setConfigValue("routeMode", "body", path);
+    const cfg = await loadConfig(path);
+    assert.equal(cfg.routeMode, "body");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("saveRawConfigObject creates parent directory and writes JSON", async () => {
   const dir = await mkdtemp(join(tmpdir(), "skill-router-save-"));
   const path = join(dir, "nested", "config.json");

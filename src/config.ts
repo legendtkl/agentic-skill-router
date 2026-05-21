@@ -213,6 +213,19 @@ export async function setConfigValue(
 
 const CONFIG_LOCK_TIMEOUT_MS = 5_000;
 const CONFIG_LOCK_RETRY_MS = 25;
+/**
+ * Maximum age before a lock file is considered stale and reaped, even if
+ * its recorded PID happens to still be alive. 60 seconds is far longer than
+ * any normal `skills config set` read-modify-write should take, so this is
+ * a safe upper bound that also defends against PID recycling (where a dead
+ * writer's PID was reassigned to an unrelated long-running process).
+ */
+const CONFIG_LOCK_MAX_AGE_MS = 60_000;
+
+interface LockOwner {
+  pid: number;
+  startedAt: number;
+}
 
 /**
  * Serialize a read-modify-write on the config file via a sibling `.lock`
@@ -221,6 +234,13 @@ const CONFIG_LOCK_RETRY_MS = 25;
  * in flight, and deletes the lock file on completion. Times out so a
  * crashed previous run on the same path eventually surfaces as an error
  * rather than hanging the CLI forever.
+ *
+ * To recover from abrupt termination (SIGKILL, power loss) that leaves a
+ * stale lock behind, the lock file records the owner's PID and start time.
+ * On `EEXIST`, the contender reads that record and reaps the lock when the
+ * recorded PID is dead OR the lock is older than {@link CONFIG_LOCK_MAX_AGE_MS}.
+ * The age fallback covers the PID-recycling case where the original owner
+ * died but its PID was reassigned to an unrelated live process.
  *
  * This is a same-machine guard; it is not a multi-host concurrency primitive.
  */
@@ -234,10 +254,18 @@ export async function withLockedConfigUpdate<T>(
   while (true) {
     try {
       const handle = await open(lockPath, "wx", 0o600);
+      const owner: LockOwner = { pid: process.pid, startedAt: Date.now() };
+      await handle.writeFile(JSON.stringify(owner));
       await handle.close();
       break;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      if (await tryReapStaleLock(lockPath)) {
+        // Loop immediately to re-attempt acquisition; another contender may
+        // win the race after our unlink, in which case we fall back to the
+        // normal retry path below.
+        continue;
+      }
       if (Date.now() - started > CONFIG_LOCK_TIMEOUT_MS) {
         throw new Error(`timed out waiting for config lock: ${lockPath}`);
       }
@@ -252,6 +280,79 @@ export async function withLockedConfigUpdate<T>(
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     }
+  }
+}
+
+/**
+ * Decide whether the lock at `lockPath` is stale and, if so, unlink it.
+ * Returns `true` when the caller should retry acquisition immediately.
+ *
+ * A lock is considered stale when either:
+ *   - the recorded `pid` is not a live process (`process.kill(pid, 0)`
+ *     throws `ESRCH`), or
+ *   - the recorded `startedAt` is older than {@link CONFIG_LOCK_MAX_AGE_MS}.
+ *
+ * The age check protects against PID recycling: even if the OS reassigned
+ * the dead writer's PID to an unrelated live process, the lock will still
+ * be reaped after the timeout.
+ *
+ * Reads that fail (missing file, malformed JSON, missing fields) are also
+ * treated as stale so a corrupt lock cannot block the CLI forever.
+ *
+ * The unlink itself is best-effort: a concurrent reaper may have already
+ * removed the file. The caller retries via the normal acquisition loop, so
+ * losing a reap race is harmless.
+ */
+async function tryReapStaleLock(lockPath: string): Promise<boolean> {
+  let raw: string;
+  try {
+    raw = await readFile(lockPath, "utf8");
+  } catch (err: unknown) {
+    // File vanished between EEXIST and our read; the previous holder
+    // already cleaned up. Tell the caller to retry acquisition.
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return true;
+    return false;
+  }
+  const owner = parseLockOwner(raw);
+  const stale = owner === null || !isPidAlive(owner.pid) || Date.now() - owner.startedAt > CONFIG_LOCK_MAX_AGE_MS;
+  if (!stale) return false;
+  try {
+    await unlink(lockPath);
+  } catch (err: unknown) {
+    // Another contender already reaped it; fine, just retry.
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") return false;
+  }
+  return true;
+}
+
+function parseLockOwner(raw: string): LockOwner | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const obj = parsed as Record<string, unknown>;
+  const pid = obj["pid"];
+  const startedAt = obj["startedAt"];
+  if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return null;
+  if (typeof startedAt !== "number" || !Number.isFinite(startedAt)) return null;
+  return { pid, startedAt };
+}
+
+function isPidAlive(pid: number): boolean {
+  try {
+    // Signal 0 performs no signal but still does the existence and
+    // permission checks. ESRCH means no such process; EPERM means the
+    // process exists but we can't signal it (treat as alive).
+    process.kill(pid, 0);
+    return true;
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ESRCH") return false;
+    // EPERM (or anything else): assume alive to avoid reaping a live owner.
+    return true;
   }
 }
 
