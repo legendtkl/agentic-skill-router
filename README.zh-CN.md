@@ -162,6 +162,8 @@ examples:
 
 ## 开发
 
+需要 Node.js >= 20（与 CI 保持一致）。
+
 ```bash
 npm install
 npm run generate:assets

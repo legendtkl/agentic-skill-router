@@ -189,6 +189,8 @@ examples:
 
 ## Development
 
+Requires Node.js >= 20 (matches CI).
+
 ```bash
 npm install
 npm run generate:assets

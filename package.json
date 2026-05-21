@@ -2,6 +2,10 @@
   "name": "skill-router",
   "version": "0.1.0",
   "description": "Manage installed Agent Skills across supported hosts based on usage",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "private": true,
   "bin": {
