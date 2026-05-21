@@ -4,8 +4,8 @@ import { mkdir, mkdtemp, rm, stat, writeFile, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { disableSkill, enableSkill, enableSkillFromState, findOrphanMarkers, reapplyMissing } from "../src/apply.ts";
-import { loadState } from "../src/state.ts";
-import type { Skill } from "../src/types.ts";
+import { addPendingOp, loadState, saveState } from "../src/state.ts";
+import type { PendingOp, Skill, State } from "../src/types.ts";
 
 async function setup(): Promise<{
   workdir: string;
@@ -236,6 +236,241 @@ test("findOrphanMarkers detects disabled SKILL.md without state record", async (
 
     const orphans = await findOrphanMarkers([join(workdir, "skills")], { statePath });
     assert.deepEqual(orphans, [orphanPath]);
+  } finally {
+    await cleanup();
+  }
+});
+
+// ────────────────── journal / partial-failure recovery ──────────────────
+
+test("disable commits the journal entry on success (no pendingOps left behind)", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const result = await disableSkill(skill, "manual", { statePath });
+    assert.equal(result.state.pendingOps?.length ?? 0, 0);
+    const loaded = await loadState(statePath);
+    assert.equal(loaded.pendingOps?.length ?? 0, 0);
+    assert.equal(loaded.disabledSkills.length, 1);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("enable commits the journal entry on success (no pendingOps left behind)", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    await disableSkill(skill, "manual", { statePath });
+    const disabledSkill = { ...skill, isDisabled: true, skillMdPath: skill.skillMdPath + ".skill-router-disabled" };
+    const result = await enableSkill(disabledSkill, { statePath });
+    assert.equal(result.state.pendingOps?.length ?? 0, 0);
+    const loaded = await loadState(statePath);
+    assert.equal(loaded.pendingOps?.length ?? 0, 0);
+    assert.equal(loaded.disabledSkills.length, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("status recovers a disable where rename completed but state save crashed", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    // Simulate phase 1 (intent written) followed by a successful rename, but
+    // the phase-2 commit never reached disk: the live file is gone, the
+    // disabled marker exists, the state has an enable-style journal entry
+    // pointing at a disable intent, and disabledSkills is still empty.
+    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    await rename(skill.skillMdPath, disabledPath);
+
+    const pending: PendingOp = {
+      op: "disable",
+      id: skill.id,
+      livePath: skill.skillMdPath,
+      disabledPath,
+      startedAt: "2026-05-22T00:00:00.000Z",
+      record: {
+        id: skill.id,
+        pluginKey: skill.pluginKey,
+        skillMdPath: disabledPath,
+        skillName: skill.name,
+        source: skill.source,
+        disabledAt: "2026-05-22T00:00:00.000Z",
+        reason: "manual",
+      },
+    };
+    const initial: State = addPendingOp(
+      { schema: 1, host: "claude-code", disabledSkills: [] },
+      pending,
+    );
+    await saveState(initial, statePath);
+
+    const result = await reapplyMissing({ statePath });
+    assert.deepEqual(result.recoveredCommits, [skill.id]);
+    assert.deepEqual(result.recoveredRollbacks, []);
+    assert.deepEqual(result.reapplied, []);
+
+    const after = await loadState(statePath);
+    assert.equal(after.pendingOps?.length ?? 0, 0);
+    assert.equal(after.disabledSkills.length, 1);
+    assert.equal(after.disabledSkills[0]!.reason, "manual");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("status rolls back a disable where rename never happened", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    // Intent written, but the rename never completed: live file still present,
+    // no disabled marker, no disable record.
+    const pending: PendingOp = {
+      op: "disable",
+      id: skill.id,
+      livePath: skill.skillMdPath,
+      disabledPath: skill.skillMdPath + ".skill-router-disabled",
+      startedAt: "2026-05-22T00:00:00.000Z",
+    };
+    const initial: State = addPendingOp(
+      { schema: 1, host: "claude-code", disabledSkills: [] },
+      pending,
+    );
+    await saveState(initial, statePath);
+
+    const result = await reapplyMissing({ statePath });
+    assert.deepEqual(result.recoveredRollbacks, [skill.id]);
+    assert.deepEqual(result.recoveredCommits, []);
+
+    const after = await loadState(statePath);
+    assert.equal(after.pendingOps?.length ?? 0, 0);
+    assert.equal(after.disabledSkills.length, 0);
+    assert.equal(await fileExists(skill.skillMdPath), true);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("status does NOT re-disable an enabled skill when the post-rename state save failed", async () => {
+  // Regression guard for issue #26: enable succeeded on disk (live file is
+  // back) but the final state save was interrupted. The journal must finish
+  // removing the disable record so that the next status doesn't reapply
+  // disable and undo the user's enable.
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    await disableSkill(skill, "manual", { statePath });
+    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+
+    // Manually rebuild the "post-rename, pre-final-save" state: disable
+    // record still present, pending enable intent recorded, live SKILL.md
+    // restored on disk, disabled marker removed.
+    await rename(disabledPath, skill.skillMdPath);
+    const stateAfterCrash = await loadState(statePath);
+    assert.equal(stateAfterCrash.disabledSkills.length, 1);
+    const pending: PendingOp = {
+      op: "enable",
+      id: skill.id,
+      livePath: skill.skillMdPath,
+      disabledPath,
+      startedAt: "2026-05-22T00:00:00.000Z",
+    };
+    await saveState(addPendingOp(stateAfterCrash, pending), statePath);
+
+    const result = await reapplyMissing({ statePath, skills: [skill] });
+    assert.deepEqual(result.recoveredCommits, [skill.id]);
+    assert.deepEqual(result.reapplied, [], "must NOT re-disable a successfully enabled skill");
+
+    const after = await loadState(statePath);
+    assert.equal(after.pendingOps?.length ?? 0, 0);
+    assert.equal(after.disabledSkills.length, 0);
+    assert.equal(await fileExists(skill.skillMdPath), true);
+    assert.equal(await fileExists(disabledPath), false);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("status rolls back an enable where rename never happened (disable record stays)", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    await disableSkill(skill, "manual", { statePath });
+    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+
+    // Enable intent was journaled, but the rename never ran: disabled marker
+    // still present, live file still absent, disable record still present.
+    const stateAfterCrash = await loadState(statePath);
+    const pending: PendingOp = {
+      op: "enable",
+      id: skill.id,
+      livePath: skill.skillMdPath,
+      disabledPath,
+      startedAt: "2026-05-22T00:00:00.000Z",
+    };
+    await saveState(addPendingOp(stateAfterCrash, pending), statePath);
+
+    const result = await reapplyMissing({ statePath, skills: [skill] });
+    assert.deepEqual(result.recoveredRollbacks, [skill.id]);
+    assert.deepEqual(result.recoveredCommits, []);
+
+    const after = await loadState(statePath);
+    assert.equal(after.pendingOps?.length ?? 0, 0);
+    assert.equal(after.disabledSkills.length, 1, "disable record preserved when enable rollback fires");
+    assert.equal(await fileExists(disabledPath), true);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("status leaves a split-brain pending op alone for manual repair", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    await writeFile(disabledPath, "stale\n");
+    const pending: PendingOp = {
+      op: "disable",
+      id: skill.id,
+      livePath: skill.skillMdPath,
+      disabledPath,
+      startedAt: "2026-05-22T00:00:00.000Z",
+      record: {
+        id: skill.id,
+        pluginKey: skill.pluginKey,
+        skillMdPath: disabledPath,
+        skillName: skill.name,
+        source: skill.source,
+        disabledAt: "2026-05-22T00:00:00.000Z",
+        reason: "manual",
+      },
+    };
+    const initial: State = addPendingOp(
+      { schema: 1, host: "claude-code", disabledSkills: [] },
+      pending,
+    );
+    await saveState(initial, statePath);
+
+    const result = await reapplyMissing({ statePath });
+    // Both files exist on disk → leave it alone for the user to resolve.
+    assert.deepEqual(result.recoveredCommits, []);
+    assert.deepEqual(result.recoveredRollbacks, []);
+
+    const after = await loadState(statePath);
+    assert.equal(after.pendingOps?.length, 1);
+    assert.equal(after.pendingOps?.[0]?.op, "disable");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("loadState ignores pendingOps from older state files (back-compat)", async () => {
+  const { statePath, cleanup } = await setup();
+  try {
+    // Older state files written before this change have no pendingOps key.
+    const legacy = {
+      schema: 1,
+      host: "claude-code",
+      disabledSkills: [],
+    };
+    await writeFile(statePath, JSON.stringify(legacy));
+    const loaded = await loadState(statePath);
+    assert.deepEqual(loaded.pendingOps, []);
+    assert.equal(loaded.disabledSkills.length, 0);
   } finally {
     await cleanup();
   }

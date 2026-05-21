@@ -62,6 +62,23 @@ export interface DisableRecord {
   reason: string;
 }
 
+/**
+ * Two-phase intent journal entry. Written to state BEFORE the disk rename so
+ * that a crash between the rename and the final state save can be reconciled
+ * deterministically: the live + disabled file presence reveals whether the
+ * rename completed, and the pending op tells us which final state the user
+ * intended.
+ */
+export interface PendingOp {
+  op: "disable" | "enable";
+  id: string;
+  livePath: string;
+  disabledPath: string;
+  startedAt: string;
+  /** Snapshot of the disable record the caller intends to commit on success. */
+  record?: DisableRecord;
+}
+
 export interface RoutedSkillRecord {
   id: string;
   pluginKey: string | null;
@@ -79,6 +96,13 @@ export interface State {
   host: HostName;
   disabledSkills: DisableRecord[];
   routedSkills?: RoutedSkillRecord[];
+  /**
+   * In-flight disable/enable intents that have not yet been committed. The
+   * presence of an entry means a rename was either in progress or completed
+   * but the final state save was interrupted. `status` reconciles these on
+   * the next run.
+   */
+  pendingOps?: PendingOp[];
 }
 
 export interface Config {
