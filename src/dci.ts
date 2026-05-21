@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { open as openFile, readFile } from "node:fs/promises";
+import { compact, isGenericTerm, termsFor } from "./text-match.ts";
 import type { Confidence, Skill } from "./types.ts";
 import { isRoutableDisabledSkill, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
 
@@ -757,37 +758,6 @@ function scoreSearchMatch(hitCount: number, queryTermCount: number, phraseMatche
   return Math.min(1, termScore + (phraseMatched ? 0.35 : 0));
 }
 
-// Minimal generic-term heuristic for snippet scoring. Kept local to dci.ts so
-// the snippet selector stays self-contained: a richer notion of generic terms
-// lives in metadata-route.ts but is not exported. Short Latin tokens (<=2
-// chars) plus a few common English/Chinese stop terms count as generic; every
-// other matched query term is treated as distinctive.
-const SNIPPET_GENERIC_TERMS: ReadonlySet<string> = new Set([
-  "api",
-  "tool",
-  "tools",
-  "helper",
-  "use",
-  "get",
-  "the",
-  "and",
-  "for",
-  "with",
-  "工具",
-  "查询",
-  "搜索",
-  "管理",
-  "操作",
-  "平台",
-  "任务",
-  "服务",
-]);
-
-function isGenericSnippetTerm(term: string): boolean {
-  if (term.length <= 2 && /^[a-z0-9]+$/.test(term)) return true;
-  return SNIPPET_GENERIC_TERMS.has(term);
-}
-
 // Score per matched line, then return the top N by score (desc) with stable
 // tie-break by original line number (asc). Previously this returned the first
 // N matching lines top-to-bottom, which let earlier generic-only matches
@@ -809,7 +779,11 @@ function snippetsForTerms(lines: string[], terms: Set<string>, phrase: string, m
     const onMetadataLine = isMetadataLine(i, line, metadataRange);
     for (const term of terms) {
       if (!(lineTerms.has(term) || linePhrase.includes(term))) continue;
-      if (isGenericSnippetTerm(term)) score += 0.3;
+      // DCI snippet scoring uses the broader stop set (metadata list +
+      // common English + short Latin) so substring-matched fragments like
+      // `the`/`for`/`ai`/`es` do not push irrelevant lines ahead of real
+      // evidence lines. See `isGenericTerm`'s `'dci'` mode for the union.
+      if (isGenericTerm(term, "dci")) score += 0.3;
       else score += 2;
       if (onMetadataLine) score += 1;
     }
@@ -901,39 +875,6 @@ function normalizeQueries(input: string | string[], maxQueries: number): string[
     if (queries.length >= maxQueries) break;
   }
   return queries;
-}
-
-function termsFor(input: string): Set<string> {
-  const normalized = input.normalize("NFKC").toLowerCase();
-  const terms = new Set<string>();
-
-  for (const match of normalized.matchAll(/[a-z0-9][a-z0-9_:+.-]*/g)) {
-    const token = match[0];
-    if (token.length >= 2) terms.add(token);
-    for (const part of token.split(/[-_:+.]+/)) {
-      if (part.length >= 2) terms.add(part);
-    }
-  }
-
-  for (const match of normalized.matchAll(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu)) {
-    const chars = Array.from(match[0]);
-    if (chars.length === 1) {
-      terms.add(chars[0]!);
-      continue;
-    }
-    if (chars.length <= 8) terms.add(chars.join(""));
-    for (let size = 2; size <= 3; size++) {
-      for (let i = 0; i <= chars.length - size; i++) {
-        terms.add(chars.slice(i, i + size).join(""));
-      }
-    }
-  }
-
-  return terms;
-}
-
-function compact(input: string): string {
-  return input.normalize("NFKC").toLowerCase().replace(/[^\p{Letter}\p{Number}]+/gu, "");
 }
 
 function normalizeLiteral(input: string): string {

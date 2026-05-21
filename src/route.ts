@@ -1,3 +1,4 @@
+import { compact, termsFor } from "./text-match.ts";
 import type { Confidence, RouteMode, Skill } from "./types.ts";
 
 export interface RouteOptions {
@@ -256,35 +257,6 @@ function normalizeTopK(topK: number | undefined): number {
   return Math.min(Math.floor(topK), 20);
 }
 
-function termsFor(input: string): Set<string> {
-  const normalized = input.normalize("NFKC").toLowerCase();
-  const terms = new Set<string>();
-
-  for (const match of normalized.matchAll(/[a-z0-9][a-z0-9_:+.-]*/g)) {
-    const token = match[0];
-    if (token.length >= 2) terms.add(token);
-    for (const part of token.split(/[-_:+.]+/)) {
-      if (part.length >= 2) terms.add(part);
-    }
-  }
-
-  for (const match of normalized.matchAll(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu)) {
-    const chars = Array.from(match[0]);
-    if (chars.length === 1) {
-      terms.add(chars[0]!);
-      continue;
-    }
-    if (chars.length <= 8) terms.add(chars.join(""));
-    for (let size = 2; size <= 3; size++) {
-      for (let i = 0; i <= chars.length - size; i++) {
-        terms.add(chars.slice(i, i + size).join(""));
-      }
-    }
-  }
-
-  return terms;
-}
-
 function isHighSignalCue(term: string): boolean {
   if (/^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+$/u.test(term)) {
     const chars = Array.from(term);
@@ -293,8 +265,4 @@ function isHighSignalCue(term: string): boolean {
     return true;
   }
   return false;
-}
-
-function compact(input: string): string {
-  return input.normalize("NFKC").toLowerCase().replace(/[^\p{Letter}\p{Number}]+/gu, "");
 }

@@ -1,3 +1,11 @@
+import {
+  boundaryTermsFor,
+  compact,
+  isCjk,
+  isGenericTerm,
+  isShortLatinTerm,
+  termsFor,
+} from "./text-match.ts";
 import type { Confidence, Skill } from "./types.ts";
 import { isRoutableDisabledSkill, type MatchEvidence, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
 
@@ -61,41 +69,6 @@ const FIELD_WEIGHTS: Record<MetadataField["field"], number> = {
   description: 1.0,
   example: 0.8,
 };
-
-const GENERIC_TERMS = new Set([
-  "api",
-  "tool",
-  "tools",
-  "helper",
-  "workflow",
-  "query",
-  "search",
-  "manage",
-  "management",
-  "operation",
-  "operate",
-  "platform",
-  "task",
-  "service",
-  "config",
-  "data",
-  "use",
-  "get",
-  "list",
-  "工具",
-  "查询",
-  "搜索",
-  "管理",
-  "操作",
-  "平台",
-  "流程",
-  "任务",
-  "服务",
-  "配置",
-  "数据",
-  "查看",
-  "获取",
-]);
 
 export function routeDisabledSkillsMetadata(
   skills: Skill[],
@@ -179,7 +152,7 @@ function field(fieldName: MetadataField["field"], text: string): MetadataField {
     field: fieldName,
     text,
     weight: FIELD_WEIGHTS[fieldName],
-    terms: termsFor(text),
+    terms: termsFor(text, "metadata"),
     compact: compact(text),
   };
 }
@@ -189,7 +162,7 @@ function manyFields(fieldName: MetadataField["field"], values: string[] | undefi
 }
 
 function analyzeQuery(raw: string): QueryPlan {
-  const terms = termsFor(raw);
+  const terms = termsFor(raw, "metadata");
   const boundaryTerms = boundaryTermsFor(raw);
   const distinctiveTerms = new Set<string>();
   const genericTerms = new Set<string>();
@@ -425,64 +398,6 @@ function normalizeTopK(topK: number | undefined): number {
   return Math.min(Math.floor(topK), MAX_TOP_K);
 }
 
-function termsFor(input: string): Set<string> {
-  const prepared = input.normalize("NFKC").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
-  const terms = new Set<string>();
-
-  for (const match of prepared.matchAll(/https?:\/\/[^\s"'<>]+|[a-z0-9][a-z0-9_:+./-]*/g)) {
-    const token = match[0];
-    if (token.length >= 2) terms.add(token);
-    for (const part of token.split(/[-_:+./]+/)) {
-      if (part.length >= 2) terms.add(part);
-    }
-  }
-
-  for (const match of prepared.matchAll(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu)) {
-    const chars = Array.from(match[0]);
-    if (chars.length === 1) {
-      terms.add(chars[0]!);
-      continue;
-    }
-    if (chars.length <= 8) terms.add(chars.join(""));
-    for (let size = 2; size <= 3; size++) {
-      for (let i = 0; i <= chars.length - size; i++) {
-        terms.add(chars.slice(i, i + size).join(""));
-      }
-    }
-  }
-
-  return terms;
-}
-
-function boundaryTermsFor(input: string): Set<string> {
-  const prepared = input.normalize("NFKC").toLowerCase();
-  const terms = new Set<string>();
-
-  for (const match of prepared.matchAll(/https?:\/\/[^\s"'<>]+|[a-z0-9][a-z0-9_:+./-]*/g)) {
-    const token = match[0];
-    if (token.length >= 2) terms.add(token);
-    for (const part of token.split(/[-_:+./]+/)) {
-      if (part.length >= 2) terms.add(part);
-    }
-  }
-
-  for (const match of prepared.matchAll(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+/gu)) {
-    const chars = Array.from(match[0]);
-    if (chars.length === 1) {
-      terms.add(chars[0]!);
-      continue;
-    }
-    if (chars.length <= 8) terms.add(chars.join(""));
-    for (let size = 2; size <= 3; size++) {
-      for (let i = 0; i <= chars.length - size; i++) {
-        terms.add(chars.slice(i, i + size).join(""));
-      }
-    }
-  }
-
-  return terms;
-}
-
 function latinBoundaryParts(input: string): string[] {
   const prepared = input.normalize("NFKC").toLowerCase();
   const parts = new Set<string>();
@@ -496,22 +411,6 @@ function latinBoundaryParts(input: string): string[] {
     }
   }
   return [...parts];
-}
-
-function compact(input: string): string {
-  return input.normalize("NFKC").toLowerCase().replace(/[^\p{Letter}\p{Number}]+/gu, "");
-}
-
-function isShortLatinTerm(term: string): boolean {
-  return /^[a-z0-9]+$/.test(term) && term.length <= 3;
-}
-
-function isCjk(term: string): boolean {
-  return /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+$/u.test(term);
-}
-
-function isGenericTerm(term: string): boolean {
-  return GENERIC_TERMS.has(term);
 }
 
 function clamp(input: string): string {
