@@ -93,8 +93,11 @@ skill-router skills enable <id>
 ```
 
 This removes the orphan record from state without touching the file system
-(because there is no file to rename). The CLI exits with `cleanedStateOnly`
-set on the result.
+(because there is no file to rename). The CLI's `--json` output for each id
+is shaped `{ "id": "...", "alreadyEnabled": <boolean> }`; there is no
+dedicated "cleaned state only" flag, so automation should treat a successful
+exit (code `0`) together with the id appearing in the result array as
+confirmation that the orphan record was cleaned.
 
 ### `⚠ CONFLICTED — both SKILL.md and SKILL.md.skill-router-disabled present:`
 
@@ -247,8 +250,17 @@ There are three flavors:
 
    In this case Skill Router has already snapshotted the original file for
    you. The snapshot sits next to the live state file with a timestamped
-   `.malformed.<iso-ts>.bak` suffix. The live file then contains only the
-   valid records.
+   `.malformed.<iso-ts>.bak` suffix.
+
+   The live state file on disk is **not** rewritten by `loadState`; only the
+   in-memory copy drops the malformed records. The file is only overwritten
+   the next time a state-mutating command (such as
+   `skill-router skills disable`, `enable`, or `reset`) runs and calls
+   `saveState`. Until then, the bad records remain on disk. If you do not
+   plan to run a mutating command soon, treat this as a manual repair: edit
+   the live state file to remove the bad records (using the
+   `.malformed.<iso-ts>.bak` snapshot as a reference), or follow the
+   recovery procedure below.
 
 **Recovery procedure (for cases 1 and 2):**
 
