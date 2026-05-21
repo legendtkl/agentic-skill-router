@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
-import type { Confidence, DisableRecord, HostName, RoutedSkillRecord, SkillSource, State } from "./types.ts";
+import type { Confidence, DisableRecord, HostName, PendingOp, RoutedSkillRecord, SkillSource, State } from "./types.ts";
 
 export const STATE_DIR = process.env["SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".skill-router");
 export const STATE_PATH = join(STATE_DIR, "state-claude-code.json");
@@ -58,6 +58,29 @@ function validateRecord(x: unknown): DisableRecord | null {
     disabledAt: x["disabledAt"],
     reason: x["reason"],
     pluginKey: x["pluginKey"] as string | null,
+  };
+}
+
+function validatePendingOp(x: unknown): PendingOp | null {
+  if (!isPlainObject(x)) return null;
+  const op = x["op"];
+  if (op !== "disable" && op !== "enable") return null;
+  if (typeof x["id"] !== "string" || x["id"] === "") return null;
+  if (typeof x["livePath"] !== "string" || x["livePath"] === "") return null;
+  if (typeof x["disabledPath"] !== "string" || x["disabledPath"] === "") return null;
+  if (typeof x["startedAt"] !== "string") return null;
+  const record = x["record"] === undefined ? undefined : validateRecord(x["record"]);
+  if (x["record"] !== undefined && !record) return null;
+  const priorRecord = x["priorRecord"] === undefined ? undefined : validateRecord(x["priorRecord"]);
+  if (x["priorRecord"] !== undefined && !priorRecord) return null;
+  return {
+    op,
+    id: x["id"],
+    livePath: x["livePath"],
+    disabledPath: x["disabledPath"],
+    startedAt: x["startedAt"],
+    ...(record ? { record } : {}),
+    ...(priorRecord ? { priorRecord } : {}),
   };
 }
 
@@ -159,7 +182,21 @@ export async function loadState(path: string = STATE_PATH, host: HostName = "cla
     }
   }
 
-  return { schema: 1, host, disabledSkills: validated, routedSkills };
+  const pendingOps: PendingOp[] = [];
+  const rawPending = parsed["pendingOps"];
+  if (Array.isArray(rawPending)) {
+    let droppedPending = 0;
+    for (const item of rawPending) {
+      const v = validatePendingOp(item);
+      if (v) pendingOps.push(v);
+      else droppedPending++;
+    }
+    if (droppedPending > 0) {
+      process.stderr.write(`warning: ${droppedPending} malformed pending op(s) in ${path} were ignored.\n`);
+    }
+  }
+
+  return { schema: 1, host, disabledSkills: validated, routedSkills, pendingOps };
 }
 
 export async function saveState(state: State, path: string = STATE_PATH): Promise<void> {
@@ -388,6 +425,20 @@ export function removeDisableRecord(state: State, id: string): State {
 
 export function findDisableRecord(state: State, id: string): DisableRecord | undefined {
   return state.disabledSkills.find((r) => r.id === id);
+}
+
+export function addPendingOp(state: State, op: PendingOp): State {
+  const filtered = (state.pendingOps ?? []).filter((p) => p.id !== op.id);
+  return { ...state, pendingOps: [...filtered, op] };
+}
+
+export function removePendingOp(state: State, id: string): State {
+  const remaining = (state.pendingOps ?? []).filter((p) => p.id !== id);
+  return { ...state, pendingOps: remaining };
+}
+
+export function findPendingOp(state: State, id: string): PendingOp | undefined {
+  return state.pendingOps?.find((p) => p.id === id);
 }
 
 export function recordRoutedSkill(
