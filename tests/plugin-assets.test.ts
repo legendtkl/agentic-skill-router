@@ -11,6 +11,7 @@ import { parseFrontmatter } from "../src/frontmatter.ts";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(__dirname);
 const execFileAsync = promisify(execFile);
+const NPM_TEST_CACHE = join(tmpdir(), `skill-router-npm-cache-${process.pid}`);
 
 test("shared router skill uses Agent Skills frontmatter as the source of truth", async () => {
   const shared = await readFile(join(REPO_ROOT, "skills", "skill-router-skills", "SKILL.md"), "utf8");
@@ -87,15 +88,15 @@ test("package bin wrapper resolves npm-style symlinks", async () => {
     );
     await symlink("../../pkg/bin/skill-router", join(npmBin, "skill-router"));
 
-    const { stdout } = await execFileAsync(join(npmBin, "skill-router"), ["--host=codex", "skills", "list"]);
-    assert.deepEqual(JSON.parse(stdout), { argv: ["--host=codex", "skills", "list"] });
+    const { stdout } = await execFileAsync(join(npmBin, "skill-router"), ["skills", "list"]);
+    assert.deepEqual(JSON.parse(stdout), { argv: ["skills", "list"] });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
 test("built bin runs when bundle lives under a realpath-normalized temp directory", async () => {
-  await execFileAsync("npm", ["run", "build"], { cwd: REPO_ROOT, maxBuffer: 1024 * 1024 });
+  await execFileAsync("npm", ["run", "build"], { cwd: REPO_ROOT, env: npmTestEnv(), maxBuffer: 1024 * 1024 });
 
   const root = await mkdtemp(join(tmpdir(), "skill-router-realpath-bin-"));
   try {
@@ -123,10 +124,11 @@ test("built bin runs when bundle lives under a realpath-normalized temp director
 
     const { stdout } = await execFileAsync(
       join(packageBin, "skill-router"),
-      ["--host=codex", "skills", "list", "--json"],
+      ["skills", "list", "--json"],
       {
         env: {
           ...process.env,
+          SKILL_ROUTER_HOST: "codex",
           CODEX_HOME: codexHome,
           AGENTS_HOME: agentsHome,
           SKILL_ROUTER_STATE_DIR: stateDir,
@@ -139,12 +141,55 @@ test("built bin runs when bundle lives under a realpath-normalized temp director
   }
 });
 
+test("built bin flushes large JSON output before exit", async () => {
+  await execFileAsync("npm", ["run", "build"], { cwd: REPO_ROOT, env: npmTestEnv(), maxBuffer: 1024 * 1024 });
+
+  const root = await mkdtemp(join(tmpdir(), "skill-router-large-json-"));
+  try {
+    const codexHome = join(root, "codex-home");
+    const agentsHome = join(root, "agents-home");
+    const stateDir = join(root, "state");
+    await mkdir(join(codexHome, "skills"), { recursive: true });
+    await mkdir(agentsHome, { recursive: true });
+    await mkdir(stateDir, { recursive: true });
+
+    const longDescription = "large output flush probe ".repeat(80);
+    for (let i = 0; i < 90; i++) {
+      const name = `large-json-${String(i).padStart(3, "0")}`;
+      await mkdir(join(codexHome, "skills", name), { recursive: true });
+      await writeFile(
+        join(codexHome, "skills", name, "SKILL.md"),
+        `---\nname: ${name}\ndescription: ${longDescription}${name}\n---\n\n# ${name}\n`,
+      );
+    }
+
+    const { stdout } = await execFileAsync(
+      join(REPO_ROOT, "bin", "skill-router"),
+      ["skills", "list", "--json"],
+      {
+        env: {
+          ...process.env,
+          SKILL_ROUTER_HOST: "codex",
+          CODEX_HOME: codexHome,
+          AGENTS_HOME: agentsHome,
+          SKILL_ROUTER_STATE_DIR: stateDir,
+        },
+        maxBuffer: 5 * 1024 * 1024,
+      },
+    );
+    const listed = JSON.parse(stdout) as Array<{ id: string }>;
+    assert.equal(listed.length, 90);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("npm package includes the bin runtime bundle", async () => {
-  await execFileAsync("npm", ["run", "build"], { cwd: REPO_ROOT, maxBuffer: 1024 * 1024 });
+  await execFileAsync("npm", ["run", "build"], { cwd: REPO_ROOT, env: npmTestEnv(), maxBuffer: 1024 * 1024 });
   const { stdout } = await execFileAsync(
     "npm",
     ["pack", "--dry-run", "--json", "--ignore-scripts"],
-    { cwd: REPO_ROOT, maxBuffer: 1024 * 1024 },
+    { cwd: REPO_ROOT, env: npmTestEnv(), maxBuffer: 1024 * 1024 },
   );
   const packed = JSON.parse(stdout) as Array<{ files: Array<{ path: string }> }>;
   const files = new Set(packed[0]?.files.map((f) => f.path) ?? []);
@@ -217,4 +262,11 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function npmTestEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    npm_config_cache: NPM_TEST_CACHE,
+  };
 }

@@ -22,6 +22,8 @@
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "node --test --import tsx tests/*.test.ts",
+    "test:e2e": "node --test --import tsx --test-name-pattern=skill-router-cli tests/codex-openai.e2e.ts",
+    "test:e2e:codex": "node --test --import tsx --test-name-pattern=codex-cli tests/codex-openai.e2e.ts",
     "cli": "tsx src/cli.ts",
     "install:plugin": "node scripts/install.mjs",
     "uninstall:plugin": "node scripts/uninstall.mjs",

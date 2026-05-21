@@ -962,5 +962,5 @@ function isMainModule(): boolean {
 
 if (isMainModule()) {
   const code = await run(process.argv.slice(2));
-  process.exit(code);
+  process.exitCode = code;
 }
