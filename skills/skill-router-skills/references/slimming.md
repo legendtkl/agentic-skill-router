@@ -11,7 +11,9 @@ skill_router skills suggest --json
 Each suggestion includes `id`, `name`, `source`, `reason`, `confidence`, and
 `details`.
 
-Show a compact table and ask for explicit confirmation before disabling.
+Show a compact table and ask for explicit confirmation before disabling. The
+CLI requires `--yes` for every disable command; without it no skill files are
+renamed.
 Supported disable forms:
 
 ```bash

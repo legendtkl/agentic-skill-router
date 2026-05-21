@@ -40,7 +40,8 @@ skill_router skills suggest --json
 
 Show suggestions as a compact table with id, reason, confidence, and details.
 Never disable without explicit user confirmation. After confirmation, disable
-specific ids or all current suggestions:
+specific ids or all current suggestions. The CLI requires `--yes` for every
+disable form; without it no skill files are renamed.
 
 ```bash
 skill_router skills disable <id...> --yes

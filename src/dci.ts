@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { open as openFile, readFile } from "node:fs/promises";
 import type { Confidence, Skill } from "./types.ts";
 import { isRoutableDisabledSkill, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
 
@@ -26,6 +26,8 @@ export interface DciOpenOptions {
 export interface DciBudget {
   maxQueries: number;
   maxCandidates: number;
+  maxSkillBytes: number;
+  maxCorpusBytes: number;
   maxFindsOrOpens: number;
   maxFullReads: number;
   maxSelections: number;
@@ -49,6 +51,27 @@ export interface DciSnippet {
   text: string;
 }
 
+export interface DciCorpusSummary {
+  mode: "disabled-only";
+  scanned: number;
+  matched: number;
+  loaded: number;
+  bytesRead: number;
+  truncated: number;
+  skipped: number;
+}
+
+export interface DciCorpusWarning {
+  code: "skill-body-truncated" | "corpus-budget-exhausted" | "skill-body-read-failed";
+  message: string;
+  id?: string;
+  skillMdPath?: string;
+  bytesRead?: number;
+  fileBytes?: number;
+  limitBytes?: number;
+  skipped?: number;
+}
+
 export interface DciSearchMatch extends DciSkillRef {
   score: number;
   reason: string;
@@ -61,11 +84,8 @@ export interface DciSearchResult {
   queries: string[];
   action: "inspect-or-read-candidates" | "no-candidates";
   budget: DciBudget;
-  corpus: {
-    mode: "disabled-only";
-    scanned: number;
-    matched: number;
-  };
+  corpus: DciCorpusSummary;
+  warnings: DciCorpusWarning[];
   matches: DciSearchMatch[];
 }
 
@@ -74,11 +94,8 @@ export interface DciGrepResult {
   mode: "literal" | "regex";
   action: "inspect-or-read-candidates" | "no-candidates";
   budget: DciBudget;
-  corpus: {
-    mode: "disabled-only";
-    scanned: number;
-    matched: number;
-  };
+  corpus: DciCorpusSummary;
+  warnings: DciCorpusWarning[];
   matches: DciSearchMatch[];
 }
 
@@ -138,6 +155,9 @@ interface LoadedSkill {
   skill: Skill;
   content: string;
   lines: string[];
+  bytesRead: number;
+  fileBytes: number;
+  truncated: boolean;
 }
 
 interface ScoredLoadedSkill extends LoadedSkill {
@@ -152,6 +172,8 @@ interface ScoredLoadedSkill extends LoadedSkill {
 export const DCI_BUDGET: DciBudget = {
   maxQueries: 3,
   maxCandidates: 8,
+  maxSkillBytes: 64_000,
+  maxCorpusBytes: 1_000_000,
   maxFindsOrOpens: 3,
   maxFullReads: 2,
   maxSelections: 3,
@@ -201,6 +223,8 @@ export async function dciRouteDisabledSkills(
       dci: {
         selectedId: selected?.skill.id ?? null,
         action: selected ? "read-skill-file" : "no-confident-match",
+        corpus: search.corpus,
+        warnings: search.warnings,
         matches: selectionMatches.map((match) => ({
           id: match.skill.id,
           ref: refForSkill(match.skill),
@@ -229,7 +253,7 @@ export async function dciSearchDisabledSkills(
   const scored: ScoredLoadedSkill[] = [];
   const maxSnippets = normalizePositiveInt(opts.maxSnippets, DEFAULT_MAX_SNIPPETS, MAX_SNIPPETS);
 
-  for (const item of loaded) {
+  for (const item of loaded.skills) {
     const haystack = `${item.skill.id}\n${item.skill.name}\n${item.skill.description}\n${item.content}`;
     const haystackTerms = termsFor(haystack);
     const haystackPhrase = compact(haystack);
@@ -268,7 +292,8 @@ export async function dciSearchDisabledSkills(
     queries,
     action: matches.length > 0 ? "inspect-or-read-candidates" : "no-candidates",
     budget: DCI_BUDGET,
-    corpus: { mode: "disabled-only", scanned: candidates.length, matched: scored.length },
+    corpus: corpusSummary(candidates.length, scored.length, loaded),
+    warnings: loaded.warnings,
     matches,
   };
 }
@@ -287,7 +312,8 @@ export async function dciGrepDisabledSkills(
       mode,
       action: "no-candidates",
       budget: DCI_BUDGET,
-      corpus: { mode: "disabled-only", scanned: candidates.length, matched: 0 },
+      corpus: emptyCorpusSummary(candidates.length),
+      warnings: [],
       matches: [],
     };
   }
@@ -297,7 +323,7 @@ export async function dciGrepDisabledSkills(
   const loaded = await loadSkills(candidates);
   const matches: DciSearchMatch[] = [];
 
-  for (const item of loaded) {
+  for (const item of loaded.skills) {
     const snippets: DciSnippet[] = [];
     for (let i = 0; i < item.lines.length && snippets.length < maxSnippets; i++) {
       if (matcher(item.lines[i]!)) {
@@ -322,7 +348,8 @@ export async function dciGrepDisabledSkills(
     mode,
     action: topMatches.length > 0 ? "inspect-or-read-candidates" : "no-candidates",
     budget: DCI_BUDGET,
-    corpus: { mode: "disabled-only", scanned: candidates.length, matched: matches.length },
+    corpus: corpusSummary(candidates.length, matches.length, loaded),
+    warnings: loaded.warnings,
     matches: topMatches,
   };
 }
@@ -479,22 +506,126 @@ function emptySearchResult(query: string, queries: string[], scanned: number): D
     queries,
     action: "no-candidates",
     budget: DCI_BUDGET,
-    corpus: { mode: "disabled-only", scanned, matched: 0 },
+    corpus: emptyCorpusSummary(scanned),
+    warnings: [],
     matches: [],
   };
 }
 
-async function loadSkills(skills: Skill[]): Promise<LoadedSkill[]> {
+interface LoadedSkillSet {
+  skills: LoadedSkill[];
+  bytesRead: number;
+  truncated: number;
+  skipped: number;
+  warnings: DciCorpusWarning[];
+}
+
+async function loadSkills(skills: Skill[]): Promise<LoadedSkillSet> {
   const out: LoadedSkill[] = [];
-  for (const skill of skills) {
+  const warnings: DciCorpusWarning[] = [];
+  let bytesRead = 0;
+  let truncated = 0;
+  let skipped = 0;
+
+  for (let i = 0; i < skills.length; i++) {
+    const skill = skills[i]!;
+    const remainingCorpusBytes = DCI_BUDGET.maxCorpusBytes - bytesRead;
+    if (remainingCorpusBytes <= 0) {
+      skipped = skills.length - i;
+      warnings.push({
+        code: "corpus-budget-exhausted",
+        message: `DCI corpus byte budget exhausted after reading ${bytesRead} bytes; skipped ${skipped} disabled skill bodies.`,
+        bytesRead,
+        limitBytes: DCI_BUDGET.maxCorpusBytes,
+        skipped,
+      });
+      break;
+    }
+
+    const limitBytes = Math.min(DCI_BUDGET.maxSkillBytes, remainingCorpusBytes);
     try {
-      const content = await readFile(skill.skillMdPath, "utf8");
-      out.push({ skill, content, lines: content.split(/\r?\n/) });
+      const loaded = await readSkillPrefix(skill.skillMdPath, limitBytes);
+      bytesRead += loaded.bytesRead;
+      if (loaded.truncated) {
+        truncated++;
+        warnings.push({
+          code: "skill-body-truncated",
+          message: `DCI read truncated ${skill.id} at ${loaded.bytesRead} of ${loaded.fileBytes} bytes.`,
+          id: skill.id,
+          skillMdPath: skill.skillMdPath,
+          bytesRead: loaded.bytesRead,
+          fileBytes: loaded.fileBytes,
+          limitBytes,
+        });
+      }
+      out.push({
+        skill,
+        content: loaded.content,
+        lines: loaded.content.split(/\r?\n/),
+        bytesRead: loaded.bytesRead,
+        fileBytes: loaded.fileBytes,
+        truncated: loaded.truncated,
+      });
     } catch (err) {
-      process.stderr.write(`warning: failed to read ${skill.skillMdPath}: ${(err as Error).message}\n`);
+      const message = `failed to read ${skill.skillMdPath}: ${(err as Error).message}`;
+      warnings.push({
+        code: "skill-body-read-failed",
+        message,
+        id: skill.id,
+        skillMdPath: skill.skillMdPath,
+      });
+      process.stderr.write(`warning: ${message}\n`);
     }
   }
-  return out;
+  return { skills: out, bytesRead, truncated, skipped, warnings };
+}
+
+async function readSkillPrefix(
+  path: string,
+  limitBytes: number,
+): Promise<{ content: string; bytesRead: number; fileBytes: number; truncated: boolean }> {
+  const handle = await openFile(path, "r");
+  try {
+    const stats = await handle.stat();
+    const bytesToRead = Math.min(limitBytes, stats.size);
+    const buffer = Buffer.allocUnsafe(bytesToRead);
+    const result = bytesToRead > 0
+      ? await handle.read(buffer, 0, bytesToRead, 0)
+      : { bytesRead: 0 };
+    const bytesRead = result.bytesRead;
+    return {
+      content: buffer.subarray(0, bytesRead).toString("utf8"),
+      bytesRead,
+      fileBytes: stats.size,
+      truncated: stats.size > bytesRead,
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+function emptyCorpusSummary(scanned: number): DciCorpusSummary {
+  return {
+    mode: "disabled-only",
+    scanned,
+    matched: 0,
+    loaded: 0,
+    bytesRead: 0,
+    truncated: 0,
+    skipped: 0,
+  };
+}
+
+function corpusSummary(scanned: number, matched: number, loaded: LoadedSkillSet): DciCorpusSummary {
+  return {
+    mode: "disabled-only",
+    scanned,
+    matched,
+    loaded: loaded.skills.length,
+    bytesRead: loaded.bytesRead,
+    truncated: loaded.truncated,
+    skipped: loaded.skipped,
+  };
 }
 
 function findRoutableSkillOrThrow(skills: Skill[], idOrRef: string): Skill {

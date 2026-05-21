@@ -113,6 +113,8 @@ Disable mechanism:
 - Disabled: `SKILL.md.skill-router-disabled`
 - State: `~/.skill-router/state-claude-code.json` or
   `~/.skill-router/state-codex.json`
+- Every `skills disable` form requires explicit `--yes`; without it the CLI
+  prints what would be disabled and exits without renaming files.
 
 Built-in and system skills are listed but cannot be disabled.
 
@@ -143,9 +145,11 @@ Disabled-skill routing:
   - `skills dci select <id-or-ref...> --query "<request>" --confidence=high --reason "<evidence>" --json`
 - DCI search returns stable candidate refs (`dci-...`) for follow-up `find`, `open`, `read`, and `select` calls.
 - `skills body ...` is accepted as an alias for `skills dci ...`.
-- Body tools search/read disabled skill instruction bodies with bounded snippets, max 8
-  candidates, bounded `open` windows, and a fixed prompt budget instead of loading every
-  `SKILL.md` into context.
+- Body search reads at most 64,000 bytes per disabled `SKILL.md` and at most
+  1,000,000 bytes across the corpus, reporting JSON warnings when a body is
+  truncated or the corpus budget is exhausted.
+- Body tools also use bounded snippets, max 8 candidates, bounded `open` windows,
+  and a fixed prompt budget instead of loading every `SKILL.md` into context.
 
 Skill metadata authoring:
 

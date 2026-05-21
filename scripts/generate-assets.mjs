@@ -11,7 +11,7 @@ await writeGeneratedFile(
   resolve(root, "plugins/codex/prompts/skill-router-skills.md"),
   renderSlashPrompt({
     description: "Use the skill-router-skills skill with optional arguments.",
-    argumentHint: "[route <query>|list|suggest|status|enable <id...>|disable <id...>]",
+    argumentHint: "[route <query>|list|suggest|status|enable <id...>|disable <id...> --yes]",
   }),
 );
 
