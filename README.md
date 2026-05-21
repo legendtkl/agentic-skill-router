@@ -52,7 +52,8 @@ Codex:
 plugins/codex/bin/skill-router --host=codex skills list
 plugins/codex/bin/skill-router --host=codex skills suggest --json
 plugins/codex/bin/skill-router --host=codex skills route --query "draft a Lark mail reply" --json
-plugins/codex/bin/skill-router --host=codex skills route --mode=dci --query "draft a Lark mail reply" --json
+plugins/codex/bin/skill-router --host=codex skills route --mode=metadata --query "draft a Lark mail reply" --json
+plugins/codex/bin/skill-router --host=codex skills route --mode=body --query "draft a Lark mail reply" --json
 plugins/codex/bin/skill-router --host=codex skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
 plugins/codex/bin/skill-router --host=codex skills dci open dci-abc123def0 --line=20 --window=80 --json
 plugins/codex/bin/skill-router --host=codex skills disable user:codex:lark-mail --yes
@@ -94,17 +95,21 @@ Built-in and system skills are listed but cannot be disabled.
 Disabled-skill routing:
 
 - `skills route --query "<request>" --json` searches disabled skills only.
-- Route mode can be set with `--mode=auto|lexical|dci`, `SKILL_ROUTER_ROUTE_MODE`,
+- Route mode can be set with `--mode=auto|metadata|body|lexical|dci`, `SKILL_ROUTER_ROUTE_MODE`,
   or `~/.skill-router/config.json` as `"routeMode": "auto"`.
-- `lexical` is the fast description/name matcher.
-- `dci` searches disabled skill instruction bodies and selects only a confident top candidate.
-- `auto` is the default: use lexical directly for stable exact matches, but upgrade to
-  DCI when lexical is ambiguous, selected an umbrella skill, or a runner-up matches
-  more of the request.
+- `metadata` is the primary router. It searches only disabled skill metadata
+  (`id`, `name`, `description`, aliases, tags, tools, domains, intents, and examples),
+  returns field-level evidence, and does not use embeddings or free-form bash.
+- `lexical` is the legacy fast description/name matcher.
+- `body` searches disabled skill instruction bodies and selects only a confident top candidate.
+- `dci` is a legacy alias for body search / body verification commands. It is not a
+  full autonomous DCI research agent.
+- `auto` is the default: run metadata first, then use bounded body verification when
+  metadata is low confidence, ambiguous, or points at a broad umbrella skill.
 - A confident route returns `action: "read-skill-file"` and `selected.skillMdPath`.
 - The returned path may end in `SKILL.md.skill-router-disabled`; it is still safe to read as instructions.
 - Routed use is recorded in state so frequently proxied disabled skills can be identified later.
-- If fast routing is not confident, Codex can use bounded DCI-style corpus tools:
+- If metadata routing is not confident, Codex can use bounded body-verification tools:
   - `skills dci budget --json`
   - `skills dci search --query "<request>" [--query "<derived query>"] --json`
   - `skills dci grep --pattern "<phrase>" --json` for literal phrase search; add `--regex` only when intentionally using a regular expression
@@ -114,7 +119,41 @@ Disabled-skill routing:
   - `skills dci read <id-or-ref> --json`
   - `skills dci select <id-or-ref...> --query "<request>" --confidence=high --reason "<evidence>" --json`
 - DCI search returns stable candidate refs (`dci-...`) for follow-up `find`, `open`, `read`, and `select` calls.
-- DCI tools search/read disabled skill instruction bodies with bounded snippets, max 8 candidates, bounded `open` windows, and a fixed prompt budget instead of loading every `SKILL.md` into context.
+- `skills body ...` is accepted as an alias for `skills dci ...`.
+- Body tools search/read disabled skill instruction bodies with bounded snippets, max 8
+  candidates, bounded `open` windows, and a fixed prompt budget instead of loading every
+  `SKILL.md` into context.
+
+Skill metadata authoring:
+
+- `name` and `description` remain required by host conventions; all extra routing
+  metadata is optional and backward-compatible.
+- Add `aliases`, `tags`, `tools`, `domains`, `intents`, and `examples` when a skill is
+  often referred to by product names, API names, Chinese names, CLI commands, or task
+  intents that do not appear in the short description.
+
+```yaml
+---
+name: lark-mail
+description: 发送、回复、搜索飞书邮件
+aliases:
+  - 飞书邮箱
+  - lark mail
+domains:
+  - lark
+  - feishu
+  - email
+tools:
+  - Lark Mail API
+intents:
+  - send_mail
+  - reply_mail
+  - search_mail
+examples:
+  - 给张三发一封飞书邮件
+  - 搜索最近的邮件
+---
+```
 
 ## Development
 
@@ -137,6 +176,8 @@ Layout:
 src/                         TypeScript source
   cli.ts                     skills command tree
   scan.ts                    SKILL.md enumeration
+  metadata-route.ts          metadata-first disabled-skill router
+  dci.ts                     bounded body search / verification tools
   usage.ts                   transcript usage parser
   policy.ts                  suggestion rules
   apply.ts                   disable / enable / reapply logic

@@ -7,6 +7,7 @@ import type { Host } from "./hosts/base.ts";
 import { lookupUsage } from "./usage.ts";
 import { suggest } from "./policy.ts";
 import { routeDisabledSkillsAuto } from "./auto-route.ts";
+import { routeDisabledSkillsMetadata } from "./metadata-route.ts";
 import { routeDisabledSkills, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
 import {
   DCI_BUDGET,
@@ -19,9 +20,9 @@ import {
   dciSearchDisabledSkills,
   dciSelectSkills,
 } from "./dci.ts";
-import { disableSkill, enableSkill, findOrphanMarkers, reapplyMissing } from "./apply.ts";
+import { disableSkill, enableSkill, enableSkillFromState, findOrphanMarkers, reapplyMissing } from "./apply.ts";
 import { loadConfig, parseRouteMode, resolveUnusedForDays } from "./config.ts";
-import { loadState, recordRoutedSkill, saveState, statePathForHost } from "./state.ts";
+import { loadState, recordRoutedSkill, saveState, statePathForHost, withStateLock } from "./state.ts";
 import type { Confidence, HostName, RouteMode, Skill, Suggestion, UsageStat } from "./types.ts";
 
 export async function run(argv: string[]): Promise<number> {
@@ -34,6 +35,7 @@ export async function run(argv: string[]): Promise<number> {
       case "suggest": return cmdSuggest(rest, hostName);
       case "route": return cmdRoute(rest, hostName);
       case "dci": return cmdDci(rest, hostName);
+      case "body": return cmdDci(rest, hostName);
       case "disable": return cmdDisable(rest, hostName);
       case "enable": return cmdEnable(rest, hostName);
       case "status": return cmdStatus(rest, hostName);
@@ -101,7 +103,7 @@ function usage(code = 0): number {
 USAGE
   skill-router [--host=claude-code|codex] skills list [--json]
   skill-router [--host=claude-code|codex] skills suggest [--unused-for=<dur>] [--json]
-  skill-router [--host=claude-code|codex] skills route --query=<text> [--mode=auto|lexical|dci] [--json] [--top-k=N] [--no-record]
+  skill-router [--host=claude-code|codex] skills route --query=<text> [--mode=auto|metadata|body|lexical|dci] [--json] [--top-k=N] [--no-record]
   skill-router [--host=claude-code|codex] skills dci search --query=<text> [--query=<text>...] [--json] [--top-k=N]
   skill-router [--host=claude-code|codex] skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
   skill-router [--host=claude-code|codex] skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]
@@ -110,6 +112,7 @@ USAGE
   skill-router [--host=claude-code|codex] skills dci read <id-or-ref> [--json] [--max-chars=N]
   skill-router [--host=claude-code|codex] skills dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
   skill-router [--host=claude-code|codex] skills dci budget [--json]
+  skill-router [--host=claude-code|codex] skills body <search|grep|find|open|inspect|read|select|budget> ...  (alias for dci)
   skill-router [--host=claude-code|codex] skills disable <id...> | --all-suggested [--unused-for=<dur>] [--yes] [--reason=<text>]
   skill-router [--host=claude-code|codex] skills enable <id...>
   skill-router [--host=claude-code|codex] skills status [--json]
@@ -183,7 +186,7 @@ async function cmdRoute(argv: string[], hostName: HostName): Promise<number> {
   const config = await loadConfig();
   const routeMode = resolveRouteMode(values.mode as string | undefined, config.routeMode);
   if (!routeMode) {
-    console.error("--mode must be one of: auto, lexical, dci");
+    console.error("--mode must be one of: auto, metadata, body, lexical, dci");
     return 2;
   }
 
@@ -197,16 +200,18 @@ async function cmdRoute(argv: string[], hostName: HostName): Promise<number> {
   if (selected && !values["no-record"]) {
     try {
       const statePath = statePathForHost(host.name);
-      const state = await loadState(statePath, host.name);
-      await saveState(recordRoutedSkill(state, {
-        id: selected.skill.id,
-        pluginKey: selected.skill.pluginKey,
-        skillMdPath: selected.skill.skillMdPath,
-        name: selected.skill.name,
-        query,
-        confidence: selected.confidence,
-        routedAt: new Date().toISOString(),
-      }), statePath);
+      await withStateLock(statePath, async () => {
+        const state = await loadState(statePath, host.name);
+        await saveState(recordRoutedSkill(state, {
+          id: selected.skill.id,
+          pluginKey: selected.skill.pluginKey,
+          skillMdPath: selected.skill.skillMdPath,
+          name: selected.skill.name,
+          query,
+          confidence: selected.confidence,
+          routedAt: new Date().toISOString(),
+        }), statePath);
+      });
       recorded = true;
     } catch (err) {
       const warning = `routed usage was not recorded: ${(err as Error).message}`;
@@ -247,6 +252,11 @@ async function routeByMode(
   opts: { topK?: number },
 ) {
   if (mode === "lexical") return routeDisabledSkills(skills, query, opts);
+  if (mode === "metadata") return routeDisabledSkillsMetadata(skills, query, opts);
+  if (mode === "body") {
+    const result = await dciRouteDisabledSkills(skills, query, opts);
+    return { ...result, routeMode: "body" as const };
+  }
   if (mode === "dci") return dciRouteDisabledSkills(skills, query, opts);
   return routeDisabledSkillsAuto(skills, query, opts);
 }
@@ -543,20 +553,22 @@ async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number>
     if (!values["no-record"]) {
       try {
         const statePath = statePathForHost(host.name);
-        let state = await loadState(statePath, host.name);
-        const routedAt = new Date().toISOString();
-        for (const item of selected.selected) {
-          state = recordRoutedSkill(state, {
-            id: item.id,
-            pluginKey: item.pluginKey,
-            skillMdPath: item.skillMdPath,
-            name: item.name,
-            query,
-            confidence,
-            routedAt,
-          });
-        }
-        await saveState(state, statePath);
+        await withStateLock(statePath, async () => {
+          let state = await loadState(statePath, host.name);
+          const routedAt = new Date().toISOString();
+          for (const item of selected.selected) {
+            state = recordRoutedSkill(state, {
+              id: item.id,
+              pluginKey: item.pluginKey,
+              skillMdPath: item.skillMdPath,
+              name: item.name,
+              query,
+              confidence,
+              routedAt,
+            });
+          }
+          await saveState(state, statePath);
+        });
         recorded = true;
       } catch (err) {
         const warning = `routed usage was not recorded: ${(err as Error).message}`;
@@ -693,12 +705,20 @@ async function cmdEnable(argv: string[], hostName: HostName): Promise<number> {
   const results: Array<{ id: string; alreadyEnabled: boolean }> = [];
   for (const id of positionals) {
     const s = byId.get(id);
-    if (!s) {
-      console.error(`unknown skill id: ${id}`);
-      return 2;
+    try {
+      const r = s
+        ? await enableSkill(s, { statePath, host: host.name })
+        : await enableSkillFromState(id, { statePath, host: host.name });
+      results.push({ id, alreadyEnabled: r.alreadyEnabled });
+    } catch (err) {
+      const message = (err as Error).message;
+      if (/unknown skill id/.test(message)) {
+        console.error(message);
+        return 2;
+      }
+      console.error(`failed to enable ${id}: ${message}`);
+      return 1;
     }
-    const r = await enableSkill(s, { statePath, host: host.name });
-    results.push({ id, alreadyEnabled: r.alreadyEnabled });
   }
   if (values.json) {
     process.stdout.write(JSON.stringify(results, null, 2) + "\n");
@@ -712,7 +732,8 @@ async function cmdStatus(argv: string[], hostName: HostName): Promise<number> {
   const { values } = parseArgs({ args: argv, options: { json: { type: "boolean" } }, strict: false });
   const host = createHost(hostName);
   const statePath = statePathForHost(host.name);
-  const reapplyResult = await reapplyMissing({ statePath, host: host.name });
+  const skills = await host.listSkills();
+  const reapplyResult = await reapplyMissing({ statePath, host: host.name, skills });
   const state = await loadState(statePath, host.name);
   const orphanMarkers = await findOrphanMarkers(await host.skillRoots(), { statePath, host: host.name });
 
@@ -799,6 +820,7 @@ function projectRoute(result: SkillRouteResult, recorded: boolean, warnings: str
     score: m.score,
     reason: m.reason,
     signals: m.signals,
+    evidence: m.evidence ?? [],
   });
   return {
     query: result.query,

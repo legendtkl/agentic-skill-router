@@ -1,7 +1,18 @@
 export type HostName = "claude-code" | "codex";
-export type RouteMode = "lexical" | "dci" | "auto";
+export type RouteMode = "lexical" | "metadata" | "body" | "dci" | "auto";
 
 export type SkillSource = "user" | "plugin" | "builtin";
+
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  aliases?: string[];
+  tags?: string[];
+  tools?: string[];
+  domains?: string[];
+  intents?: string[];
+  examples?: string[];
+}
 
 export interface Skill {
   /** stable global id, e.g. "user:lark-mail" or "plugin:codex@openai-codex:codex-cli-runtime" */
@@ -9,6 +20,7 @@ export interface Skill {
   /** display name from SKILL.md frontmatter */
   name: string;
   description: string;
+  metadata?: SkillMetadata;
   source: SkillSource;
   /** "<plugin>@<marketplace>" when source==="plugin", else null */
   pluginKey: string | null;
@@ -44,6 +56,8 @@ export interface DisableRecord {
   id: string;
   pluginKey: string | null;
   skillMdPath: string;
+  skillName?: string;
+  source?: SkillSource;
   disabledAt: string;
   reason: string;
 }

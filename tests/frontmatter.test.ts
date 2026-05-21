@@ -29,7 +29,7 @@ version: '1.0.0'
   assert.equal(fm["version"], "1.0.0");
 });
 
-test("ignores nested mappings (e.g. metadata: with indented children)", () => {
+test("ignores nested mappings and keeps adjacent scalars", () => {
   const src = `---
 name: lark-cli
 description: A CLI
@@ -44,6 +44,36 @@ license: MIT
   assert.equal(fm["description"], "A CLI");
   assert.equal(fm["license"], "MIT");
   assert.equal(fm["metadata"], undefined);
+});
+
+test("parses multiline description and top-level arrays", () => {
+  const src = `---
+name: lark-mail
+description: |
+  发送、回复、搜索飞书邮件
+  支持附件和草稿。
+aliases:
+  - 飞书邮箱
+  - lark mail
+tags: [feishu, email]
+---
+# body`;
+  const fm = parseFrontmatter(src);
+  assert.equal(fm["name"], "lark-mail");
+  assert.equal(fm["description"], "发送、回复、搜索飞书邮件\n支持附件和草稿。");
+  assert.deepEqual(fm["aliases"], ["飞书邮箱", "lark mail"]);
+  assert.deepEqual(fm["tags"], ["feishu", "email"]);
+});
+
+test("parses folded block scalars", () => {
+  const src = `---
+name: folded
+description: >
+  one line
+  two line
+---`;
+  const fm = parseFrontmatter(src);
+  assert.equal(fm["description"], "one line two line");
 });
 
 test("handles tolerable whitespace around colons and values", () => {

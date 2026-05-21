@@ -195,6 +195,37 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
   }
 });
 
+test("CLI enable cleans disabled state even when skill files disappeared", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local"], { env });
+    await rm(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled"));
+
+    const enabled = await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "--host=codex", "skills", "enable", "user:codex:unused-local", "--json"],
+      { env },
+    );
+    const parsed = JSON.parse(enabled.stdout) as Array<{ id: string }>;
+    assert.equal(parsed[0]?.id, "user:codex:unused-local");
+
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "status", "--json"], { env });
+    const parsedStatus = JSON.parse(status.stdout) as { disabledCount: number };
+    assert.equal(parsedStatus.disabledCount, 0);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+
 test("CLI e2e routes to a disabled Codex skill and records routed usage", async () => {
   const fake = await makeFakeCodexUser();
   try {
@@ -233,6 +264,7 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
     assert.equal(parsed.recorded, true);
     assert.equal(parsed.selected?.id, "user:agents:lark-mail");
     assert.match(parsed.selected?.skillMdPath ?? "", /SKILL\.md\.skill-router-disabled$/);
+    assert.ok(Array.isArray((parsed.selected as { evidence?: unknown[] } | null)?.evidence));
 
     const rawState = await readFile(join(fake.stateDir, "state-codex.json"), "utf8");
     const state = JSON.parse(rawState) as { routedSkills: Array<{ id: string; routeCount: number; lastQuery: string }> };
@@ -421,6 +453,32 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
     assert.equal(parsedEnvDciRoute.routeMode, "dci");
     assert.equal(parsedEnvDciRoute.selected?.id, "user:codex:dci-body-probe");
 
+    const metadataRoute = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "route",
+        "--mode=metadata",
+        "--query",
+        "generic disabled invoice helper",
+        "--no-record",
+        "--json",
+      ],
+      { env },
+    );
+    const parsedMetadataRoute = JSON.parse(metadataRoute.stdout) as {
+      action: string;
+      routeMode: string;
+      matches: Array<{ id: string; evidence: unknown[] }>;
+    };
+    assert.equal(parsedMetadataRoute.routeMode, "metadata");
+    assert.equal(parsedMetadataRoute.matches[0]?.id, "user:codex:dci-body-probe");
+    assert.ok(Array.isArray(parsedMetadataRoute.matches[0]?.evidence));
+
     const dciRoute = await execFileAsync(
       process.execPath,
       [
@@ -446,6 +504,32 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
     assert.equal(parsedDciRoute.action, "read-skill-file");
     assert.equal(parsedDciRoute.routeMode, "dci");
     assert.equal(parsedDciRoute.selected?.id, "user:codex:dci-body-probe");
+
+    const bodyRoute = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        cli,
+        "--host=codex",
+        "skills",
+        "route",
+        "--mode=body",
+        "--query",
+        "please handle dci-amber-invoice-cascade",
+        "--no-record",
+        "--json",
+      ],
+      { env },
+    );
+    const parsedBodyRoute = JSON.parse(bodyRoute.stdout) as {
+      action: string;
+      routeMode: string;
+      selected: { id: string } | null;
+    };
+    assert.equal(parsedBodyRoute.action, "read-skill-file");
+    assert.equal(parsedBodyRoute.routeMode, "body");
+    assert.equal(parsedBodyRoute.selected?.id, "user:codex:dci-body-probe");
 
     const search = await execFileAsync(
       process.execPath,

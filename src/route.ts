@@ -10,6 +10,15 @@ export interface SkillRouteMatch {
   score: number;
   reason: string;
   signals: SkillRouteSignals;
+  evidence?: MatchEvidence[];
+}
+
+export interface MatchEvidence {
+  field: string;
+  matched: string;
+  weight: number;
+  contribution: number;
+  text: string;
 }
 
 export interface SkillRouteSignals {
@@ -37,6 +46,11 @@ export interface RouteDiagnostics {
     action: "read-skill-file" | "no-confident-match";
     matches: Array<{ id: string; confidence: Confidence; score: number; reason: string }>;
   };
+  metadata?: {
+    selectedId: string | null;
+    action: "read-skill-file" | "no-confident-match";
+    matches: Array<{ id: string; confidence: Confidence; score: number; reason: string }>;
+  };
   dci?: {
     selectedId: string | null;
     action: "read-skill-file" | "no-confident-match";
@@ -45,7 +59,7 @@ export interface RouteDiagnostics {
   auto?: {
     escalated: boolean;
     reason: string | null;
-    selectedSource: "lexical" | "dci" | null;
+    selectedSource: "lexical" | "metadata" | "dci" | "body" | null;
   };
 }
 

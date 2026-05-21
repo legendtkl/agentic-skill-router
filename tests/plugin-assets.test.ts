@@ -18,7 +18,7 @@ test("Codex router assets document the CLI file path consistently", async () => 
   for (const content of [skill, prompt]) {
     assert.match(content, /printf '%s\\n' "\$PWD\/plugins\/codex\/bin\/skill-router"/);
     assert.match(content, /"<abs-path-to-skill-router>" --host=codex skills/);
-    assert.match(content, /--mode=(?:auto\|lexical\|dci|lexical\|dci\|auto)/);
+    assert.match(content, /--mode=.*metadata.*body.*lexical.*dci.*auto|--mode=auto\|metadata\|body\|lexical\|dci/);
     assert.match(content, /skills dci search/);
     assert.match(content, /skills dci find/);
     assert.match(content, /skills dci open/);

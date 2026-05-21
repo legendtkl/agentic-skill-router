@@ -1,7 +1,7 @@
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import type { Confidence, DisableRecord, HostName, RoutedSkillRecord, State } from "./types.ts";
+import type { Confidence, DisableRecord, HostName, RoutedSkillRecord, SkillSource, State } from "./types.ts";
 
 export const STATE_DIR = process.env["SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".skill-router");
 export const STATE_PATH = join(STATE_DIR, "state-claude-code.json");
@@ -30,9 +30,13 @@ function validateRecord(x: unknown): DisableRecord | null {
   if (typeof x["disabledAt"] !== "string") return null;
   if (typeof x["reason"] !== "string") return null;
   if (x["pluginKey"] !== null && typeof x["pluginKey"] !== "string") return null;
+  if (x["skillName"] !== undefined && typeof x["skillName"] !== "string") return null;
+  if (x["source"] !== undefined && !isSkillSource(x["source"])) return null;
   return {
     id: x["id"],
     skillMdPath: x["skillMdPath"],
+    ...(typeof x["skillName"] === "string" ? { skillName: x["skillName"] } : {}),
+    ...(isSkillSource(x["source"]) ? { source: x["source"] } : {}),
     disabledAt: x["disabledAt"],
     reason: x["reason"],
     pluginKey: x["pluginKey"] as string | null,
@@ -65,6 +69,10 @@ function validateRoutedRecord(x: unknown): RoutedSkillRecord | null {
 
 function isConfidence(x: unknown): x is Confidence {
   return x === "high" || x === "medium" || x === "low";
+}
+
+function isSkillSource(x: unknown): x is SkillSource {
+  return x === "user" || x === "plugin" || x === "builtin";
 }
 
 export async function loadState(path: string = STATE_PATH, host: HostName = "claude-code"): Promise<State> {
@@ -145,6 +153,39 @@ export async function saveState(state: State, path: string = STATE_PATH): Promis
   const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
   await writeFile(tmp, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 });
   await rename(tmp, path);
+}
+
+export async function withStateLock<T>(
+  path: string = STATE_PATH,
+  fn: () => Promise<T>,
+  opts: { timeoutMs?: number; staleMs?: number } = {},
+): Promise<T> {
+  await mkdir(dirname(path), { recursive: true });
+  const lockPath = `${path}.lock`;
+  const timeoutMs = opts.timeoutMs ?? 5_000;
+  const started = Date.now();
+  while (true) {
+    try {
+      await mkdir(lockPath, { mode: 0o700 });
+      break;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      if (Date.now() - started > timeoutMs) {
+        throw new Error(`timed out waiting for state lock: ${lockPath}`);
+      }
+      await sleep(25);
+    }
+  }
+
+  try {
+    return await fn();
+  } finally {
+    await rm(lockPath, { recursive: true, force: true });
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function addDisableRecord(state: State, record: DisableRecord): State {

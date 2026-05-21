@@ -70,6 +70,8 @@ test("loadConfig honours routeMode", async () => {
 
 test("parseRouteMode accepts only supported modes", () => {
   assert.equal(parseRouteMode("lexical"), "lexical");
+  assert.equal(parseRouteMode("metadata"), "metadata");
+  assert.equal(parseRouteMode("body"), "body");
   assert.equal(parseRouteMode("dci"), "dci");
   assert.equal(parseRouteMode("auto"), "auto");
   assert.equal(parseRouteMode("unknown"), null);

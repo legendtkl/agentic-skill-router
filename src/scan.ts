@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { parseFrontmatter } from "./frontmatter.ts";
-import type { Skill } from "./types.ts";
+import type { Skill, SkillMetadata } from "./types.ts";
 
 export const DISABLED_SUFFIX = ".skill-router-disabled";
 
@@ -204,11 +204,38 @@ async function fileExists(path: string): Promise<boolean> {
 
 export async function readSkillFrontmatter(
   skillMdPath: string,
-): Promise<{ name: string; description: string }> {
+): Promise<SkillMetadata> {
   const raw = await readFile(skillMdPath, "utf8");
   const fm = parseFrontmatter(raw);
+  const name = scalar(fm["name"]) ?? basename(dirname(skillMdPath)) ?? "";
+  const description = scalar(fm["description"]) ?? "";
   return {
-    name: fm["name"] ?? basename(dirname(skillMdPath)) ?? "",
-    description: fm["description"] ?? "",
+    name,
+    description,
+    ...optionalArray("aliases", fm["aliases"]),
+    ...optionalArray("tags", fm["tags"]),
+    ...optionalArray("tools", fm["tools"]),
+    ...optionalArray("domains", fm["domains"]),
+    ...optionalArray("intents", fm["intents"]),
+    ...optionalArray("examples", fm["examples"]),
   };
+}
+
+function scalar(value: string | string[] | undefined): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.join(", ");
+  return undefined;
+}
+
+function optionalArray<K extends keyof SkillMetadata>(
+  key: K,
+  value: string | string[] | undefined,
+): Partial<Pick<SkillMetadata, K>> {
+  const arr = Array.isArray(value)
+    ? value
+    : typeof value === "string" && value !== ""
+      ? [value]
+      : [];
+  if (arr.length === 0) return {};
+  return { [key]: arr } as Partial<Pick<SkillMetadata, K>>;
 }

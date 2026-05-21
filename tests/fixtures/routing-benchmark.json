@@ -1,0 +1,32 @@
+[
+  {
+    "query": "lark-mail",
+    "expected": ["user:codex:lark-mail"],
+    "shouldRoute": true,
+    "type": "exact-name"
+  },
+  {
+    "query": "飞书发邮件给张三",
+    "expected": ["user:codex:lark-mail"],
+    "shouldRoute": true,
+    "type": "alias-cjk"
+  },
+  {
+    "query": "通过 Kibana console API 执行 Elasticsearch DSL 查询并获取 index mapping",
+    "expected": ["user:codex:bytedance-es"],
+    "shouldRoute": true,
+    "type": "tool-api"
+  },
+  {
+    "query": "查询 API 工具",
+    "expected": [],
+    "shouldRoute": false,
+    "type": "negative-generic"
+  },
+  {
+    "query": "操作 bytedcli auth login status 获取 user info",
+    "expected": ["user:codex:bytedance-auth"],
+    "shouldRoute": true,
+    "type": "umbrella-specific"
+  }
+]

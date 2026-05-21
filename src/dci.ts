@@ -184,9 +184,8 @@ export async function dciRouteDisabledSkills(
     ...(opts.maxSnippets === undefined ? {} : { maxSnippets: opts.maxSnippets }),
     ...(opts.maxQueries === undefined ? {} : { maxQueries: opts.maxQueries }),
   });
-  const byId = new Map(skills.map((skill) => [skill.id, skill]));
   const selectionMatches = search.matches.flatMap((match): SkillRouteMatch[] => {
-    const skill = byId.get(match.id);
+    const skill = skills.find((candidate) => candidate.id === match.id && candidate.skillMdPath === match.skillMdPath);
     if (!skill) return [];
     return [toDciRouteMatch(skill, match)];
   });
@@ -499,7 +498,10 @@ async function loadSkills(skills: Skill[]): Promise<LoadedSkill[]> {
 }
 
 function findRoutableSkillOrThrow(skills: Skill[], idOrRef: string): Skill {
-  const skill = skills.find((s) => s.id === idOrRef) ?? resolveSkillRef(skills, idOrRef);
+  const idMatches = skills.filter((s) => s.id === idOrRef);
+  const routableIdMatches = idMatches.filter(isRoutableDisabledSkill);
+  if (routableIdMatches.length > 1) throw new Error(`ambiguous skill id: ${idOrRef}; use a DCI ref instead`);
+  const skill = routableIdMatches[0] ?? idMatches[0] ?? resolveSkillRef(skills, idOrRef);
   if (!skill) throw new Error(`unknown skill id/ref: ${idOrRef}`);
   if (!isRoutableDisabledSkill(skill)) {
     throw new Error(`skill is not a routable disabled skill: ${idOrRef}`);
@@ -574,7 +576,7 @@ function skillRef(skill: Skill): DciSkillRef {
 }
 
 function refForSkill(skill: Skill): string {
-  const hash = createHash("sha256").update(skill.id).digest("hex").slice(0, 10);
+  const hash = createHash("sha256").update(`${skill.id}\0${skill.skillMdPath}`).digest("hex").slice(0, 10);
   return `dci-${hash}`;
 }
 

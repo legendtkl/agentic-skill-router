@@ -36,7 +36,7 @@ export async function loadConfig(path: string = CONFIG_PATH): Promise<Config> {
 }
 
 export function parseRouteMode(value: unknown): RouteMode | null {
-  return value === "lexical" || value === "dci" || value === "auto" ? value : null;
+  return value === "lexical" || value === "metadata" || value === "body" || value === "dci" || value === "auto" ? value : null;
 }
 
 /**

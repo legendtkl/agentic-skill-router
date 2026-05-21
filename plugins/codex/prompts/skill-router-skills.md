@@ -1,14 +1,14 @@
 ---
-description: Route disabled Codex skills and audit/slim installed skills with skill-router
-argument-hint: "[route <query>|dci search <query>|dci open <ref>|list|suggest|status|enable <id...>|disable <id...>|--unused-for=60d]"
+description: Route locally disabled Codex skills and audit/slim installed skills with skill-router
+argument-hint: "[route <query>|body search <query>|body open <ref>|list|suggest|status|enable <id...>|disable <id...>|--unused-for=60d]"
 ---
 
 Use skill-router to route requests to disabled Codex skills, audit installed skills, suggest unused/stale skills, and safely disable or re-enable selected skills.
 
 Input after `/skill-router:skills` is optional:
 - `route <query>`: route the query to a disabled skill and return the `SKILL.md.skill-router-disabled` file to read. Default route mode is `auto`.
-- `route --mode=lexical|dci|auto <query>`: force a routing strategy for evaluation or debugging.
-- `dci search <query>`: run bounded multi-query search over disabled skill bodies when lexical routing is not confident.
+- `route --mode=metadata|body|lexical|dci|auto <query>`: force a routing strategy for evaluation or debugging.
+- `body search <query>` or `dci search <query>`: run bounded multi-query search over disabled skill bodies when metadata routing is not confident. `dci` is a legacy alias for body verification, not a full autonomous DCI agent.
 - No input or `suggest`: show cleanup suggestions.
 - `list`: show all Codex skills.
 - `status`: show disabled skills and repair/reapply status.
@@ -39,10 +39,10 @@ Always run commands as:
 ## Behavior
 
 1. Parse the user's slash-command arguments.
-2. For `route <query>`, run `skills route --query "<query>" --json`. This defaults to `auto`: lexical first, then DCI verification when the lexical result is ambiguous or too broad. If it returns `action: "read-skill-file"`, read `selected.skillMdPath` and follow that disabled skill's instructions.
+2. For `route <query>`, run `skills route --query "<query>" --json`. This defaults to `auto`: metadata first, then bounded body verification when metadata is low-confidence, ambiguous, or too broad. If it returns `action: "read-skill-file"`, read `selected.skillMdPath` and follow that disabled skill's instructions.
 3. If route returns `action: "no-confident-match"`, run `skills dci budget --json`, then run `skills dci search --query "<query>" --query "<derived query>" --json` with at most 3 queries total. Use candidate `ref` values for follow-up commands. Stay within the returned budget: max 8 candidates, max 3 `find`/`open` calls, max 2 full `read` calls, and max selections 3.
-4. Use literal `skills dci grep`, `skills dci find <ref> --pattern "<text>"`, `skills dci open <ref> --line N --window 80`, `skills dci inspect <ref>`, and at most 2 `skills dci read <ref> --json` calls only for plausible candidates. If one or more disabled skills are clearly supported by evidence, run `skills dci select <ref...> --query "<query>" --confidence=high|medium --reason "<brief evidence>" --json`, then read only the returned `selected[*].skillMdPath` files needed for the task.
-5. For `dci search <query>`, run bounded `skills dci search --query "<query>" --json` and show concise candidate refs, ids, and snippets; do not select unless evidence is clear.
+4. Use literal `skills dci grep`, `skills dci find <ref> --pattern "<text>"`, `skills dci open <ref> --line N --window 80`, `skills dci inspect <ref>`, and at most 2 `skills dci read <ref> --json` calls only for plausible candidates. `skills body ...` is accepted as an alias. If one or more disabled skills are clearly supported by evidence, run `skills dci select <ref...> --query "<query>" --confidence=high|medium --reason "<brief evidence>" --json`, then read only the returned `selected[*].skillMdPath` files needed for the task.
+5. For `body search <query>` or `dci search <query>`, run bounded `skills dci search --query "<query>" --json` and show concise candidate refs, ids, and snippets; do not select unless evidence is clear.
 6. For `list`, run `skills list --json` and show a compact table with id, source, disabled state, last used, and call count.
 7. For `status`, run `skills status --json` and summarize disabled records, routed usage, reapplied records, orphaned records, conflicts, and orphan markers.
 8. For no input or `suggest`, run `skills suggest --json` with any provided `--unused-for` value. Show id, reason, confidence, and details. Do not disable anything.

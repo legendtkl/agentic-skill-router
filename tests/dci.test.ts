@@ -177,6 +177,70 @@ test("DCI search supports bounded multi-query retrieval with stable candidate re
   }
 });
 
+test("DCI refs include skill path so duplicate logical ids stay addressable", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const first = await writeCorpusSkill(corpus.root, {
+      id: "plugin:dup@local:tool",
+      name: "dup-v1",
+      description: "duplicate logical skill",
+      body: "Use this skill for dci-duplicate-v1.",
+      isDisabled: true,
+      source: "plugin",
+      pluginKey: "dup@local",
+    });
+    const second = await writeCorpusSkill(corpus.root, {
+      id: "plugin:dup@local:tool",
+      name: "dup-v2",
+      description: "duplicate logical skill",
+      body: "Use this skill for dci-duplicate-v2.",
+      isDisabled: true,
+      source: "plugin",
+      pluginKey: "dup@local",
+    });
+    const skills = [first, second];
+
+    const result = await dciSearchDisabledSkills(skills, "dci-duplicate", { topK: 2 });
+    assert.equal(result.matches.length, 2);
+    assert.notEqual(result.matches[0]!.ref, result.matches[1]!.ref);
+    assert.equal(dciInspectSkill(skills, result.matches[0]!.ref).skillMdPath, result.matches[0]!.skillMdPath);
+    assert.equal(dciInspectSkill(skills, result.matches[1]!.ref).skillMdPath, result.matches[1]!.skillMdPath);
+    assert.throws(() => dciInspectSkill(skills, "plugin:dup@local:tool"), /ambiguous skill id/);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI id lookup prefers the single routable duplicate over enabled duplicates", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const enabled = await writeCorpusSkill(corpus.root, {
+      id: "plugin:dup@local:tool",
+      name: "dup-enabled",
+      description: "enabled duplicate logical skill",
+      body: "Enabled duplicate must not shadow a disabled candidate.",
+      isDisabled: false,
+      source: "plugin",
+      pluginKey: "dup@local",
+    });
+    const disabled = await writeCorpusSkill(corpus.root, {
+      id: "plugin:dup@local:tool",
+      name: "dup-disabled",
+      description: "disabled duplicate logical skill",
+      body: "Use this skill for dci-duplicate-disabled.",
+      isDisabled: true,
+      source: "plugin",
+      pluginKey: "dup@local",
+    });
+    const skills = [enabled, disabled];
+
+    const inspected = dciInspectSkill(skills, "plugin:dup@local:tool");
+    assert.equal(inspected.skillMdPath, disabled.skillMdPath);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI search and grep enforce the candidate budget even with large topK", async () => {
   const corpus = await makeCorpus();
   try {
@@ -410,7 +474,8 @@ test("auto route upgrades umbrella skills to DCI evidence", async () => {
     assert.equal(lexical.selected?.skill.id, "user:codex:bytedcli");
 
     const auto = await routeDisabledSkillsAuto(corpus.skills, query, { topK: 3 });
-    assert.equal(auto.diagnostics?.auto?.reason, "lexical-selected-umbrella-skill");
+    assert.equal(auto.diagnostics?.auto?.escalated, true);
+    assert.equal(auto.diagnostics?.auto?.reason, "metadata-no-confident-match");
     assert.equal(auto.selected?.skill.id, "user:codex:bytedance-auth");
   } finally {
     await corpus.cleanup();

@@ -10,6 +10,7 @@ import {
   removeDisableRecord,
   findDisableRecord,
   recordRoutedSkill,
+  withStateLock,
 } from "../src/state.ts";
 import type { DisableRecord } from "../src/types.ts";
 
@@ -108,6 +109,31 @@ test("recordRoutedSkill increments routed usage by skill id", () => {
   assert.equal(second.routedSkills?.[0]?.firstRoutedAt, "2026-05-20T00:00:00.000Z");
   assert.equal(second.routedSkills?.[0]?.lastRoutedAt, "2026-05-21T00:00:00.000Z");
   assert.equal(second.routedSkills?.[0]?.lastQuery, "reply mail");
+});
+
+test("withStateLock serializes concurrent read-modify-write mutations", async () => {
+  const { path, cleanup } = await tempPath();
+  try {
+    await saveState({ schema: 1, host: "codex", disabledSkills: [] }, path);
+    await Promise.all([0, 1].map((idx) => withStateLock(path, async () => {
+      const state = await loadState(path, "codex");
+      await new Promise((resolve) => setTimeout(resolve, idx === 0 ? 25 : 0));
+      await saveState(recordRoutedSkill(state, {
+        id: "user:codex:mail",
+        pluginKey: null,
+        skillMdPath: "/tmp/mail/SKILL.md.skill-router-disabled",
+        name: "mail",
+        query: `q${idx}`,
+        confidence: "high",
+        routedAt: `2026-05-21T00:00:0${idx}.000Z`,
+      }), path);
+    })));
+
+    const state = await loadState(path, "codex");
+    assert.equal(state.routedSkills?.[0]?.routeCount, 2);
+  } finally {
+    await cleanup();
+  }
 });
 
 test("loadState rejects malformed schema", async () => {

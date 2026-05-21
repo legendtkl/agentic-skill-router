@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, stat, writeFile, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { disableSkill, enableSkill, findOrphanMarkers, reapplyMissing } from "../src/apply.ts";
+import { disableSkill, enableSkill, enableSkillFromState, findOrphanMarkers, reapplyMissing } from "../src/apply.ts";
+import { loadState } from "../src/state.ts";
 import type { Skill } from "../src/types.ts";
 
 async function setup(): Promise<{
@@ -86,6 +87,53 @@ test("enable renames back and removes state record", async () => {
   }
 });
 
+test("enableSkillFromState cleans orphan record when both files are gone", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    await disableSkill(skill, "manual", { statePath });
+    await rm(skill.skillMdPath + ".skill-router-disabled");
+
+    const result = await enableSkillFromState("user:foo", { statePath });
+    assert.equal(result.cleanedStateOnly, true);
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("enableSkillFromState restores disabled marker and clears state", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    await disableSkill(skill, "manual", { statePath });
+
+    const result = await enableSkillFromState("user:foo", { statePath });
+    assert.equal(result.alreadyEnabled, false);
+    assert.equal(await fileExists(skill.skillMdPath), true);
+    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), false);
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 0);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("enable refuses split-brain and preserves state", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    await disableSkill(skill, "manual", { statePath });
+    await writeFile(skill.skillMdPath, "live again\n");
+
+    await assert.rejects(() => enableSkillFromState("user:foo", { statePath }), /split-brain|both/i);
+    assert.equal(await fileExists(skill.skillMdPath), true);
+    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), true);
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 1);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("reapplyMissing detects upstream-recreated SKILL.md and renames again", async () => {
   const { skill, statePath, cleanup } = await setup();
   try {
@@ -112,6 +160,30 @@ test("reapplyMissing reports orphans when SKILL.md is gone entirely", async () =
     const result = await reapplyMissing({ statePath });
     assert.deepEqual(result.reapplied, []);
     assert.deepEqual(result.orphaned, ["user:foo"]);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("reapplyMissing reconciles state path from current inventory after plugin upgrade", async () => {
+  const { skill, statePath, cleanup, workdir } = await setup();
+  try {
+    await disableSkill(skill, "manual", { statePath });
+    await rm(skill.skillMdPath + ".skill-router-disabled");
+
+    const upgradedDir = join(workdir, "skills/foo-v2");
+    await mkdir(upgradedDir, { recursive: true });
+    const upgradedLive = join(upgradedDir, "SKILL.md");
+    await writeFile(upgradedLive, "new live\n");
+    const upgradedSkill: Skill = { ...skill, skillMdPath: upgradedLive };
+
+    const result = await reapplyMissing({ statePath, skills: [upgradedSkill] });
+    assert.deepEqual(result.reapplied, ["user:foo"]);
+    assert.deepEqual(result.orphaned, []);
+    assert.equal(await fileExists(upgradedLive), false);
+    assert.equal(await fileExists(upgradedLive + ".skill-router-disabled"), true);
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills[0]?.skillMdPath, upgradedLive + ".skill-router-disabled");
   } finally {
     await cleanup();
   }

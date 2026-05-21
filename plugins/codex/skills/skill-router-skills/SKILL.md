@@ -1,6 +1,6 @@
 ---
 name: skill-router-skills
-description: "Last-resort resolver for specialized Codex skills that are disabled or not currently visible. Use when no available skill clearly matches and you would otherwise answer from general knowledge or web search for a skill-shaped request: operating, querying, configuring, deploying, inspecting, or troubleshooting a named tool, API, service, dashboard, datastore, CLI, DSL, URL, or platform workflow. The router searches disabled skills once; if none match, close the router path and continue normally. Also use to clean up / slim / 瘦身 installed Codex skills, audit unused skills, or recover context budget."
+description: "Last-resort resolver for locally disabled Codex skill instruction files. Use when no available skill clearly matches and you would otherwise answer from general knowledge or web search for a skill-shaped request: operating, querying, configuring, deploying, inspecting, or troubleshooting a named tool, API, service, dashboard, datastore, CLI, DSL, URL, or platform workflow. The router searches disabled skills once; if none match, close the router path and continue normally. Also use to clean up / slim / 瘦身 installed Codex skills, audit unused skills, or recover context budget."
 ---
 
 # skill-router — Codex disabled-skill routing and slimming
@@ -10,7 +10,7 @@ Use this skill in two cases:
 - No available skill clearly matches the current request, and you would otherwise answer from general knowledge or web search, but the request looks skill-shaped: it asks to operate, query, configure, deploy, inspect, or troubleshoot a named tool, API, service, dashboard, datastore, CLI, DSL, URL, or platform workflow. Check this router once before using general knowledge or web search.
 - The user wants to slim, audit, disable, restore, or inspect Codex skills.
 
-Do not hard-code a product list in your decision. Use this as a closed fallback: if an enabled visible skill clearly matches, use that skill instead; if route plus bounded DCI finds no confident disabled-skill match, stop the router path for this request and continue normally.
+Do not hard-code a product list in your decision. Use this as a closed fallback: if an enabled visible skill clearly matches, use that skill instead; if metadata route plus bounded body verification finds no confident disabled-skill match, stop the router path for this request and continue normally.
 
 ## 1. Locate the bundled CLI
 
@@ -30,7 +30,7 @@ Always invoke via `"<abs-path-to-skill-router>"` and always pass `--host=codex`.
 
 ## 2. Route a request to disabled skills
 
-When selected as a disabled-skill fallback, do not solve the task directly first. Run the default route command. It uses `auto` mode: fast lexical routing for stable exact matches, with bounded DCI verification when lexical is ambiguous or points at a broad umbrella skill.
+When selected as a disabled-skill fallback, do not solve the task directly first. Run the default route command. It uses `auto` mode: metadata routing first, with bounded body verification when metadata is low-confidence, ambiguous, or points at a broad umbrella skill.
 
 ```bash
 "<abs-path-to-skill-router>" --host=codex skills route --query "<current user request>" --json
@@ -38,9 +38,9 @@ When selected as a disabled-skill fallback, do not solve the task directly first
 
 If the result has `action: "read-skill-file"` and a non-null `selected`, read the returned `selected.skillMdPath` even when it ends in `SKILL.md.skill-router-disabled`. Then follow that disabled skill's instructions as if it were enabled.
 
-For audits or comparisons, force route mode with `--mode=lexical`, `--mode=dci`, or `--mode=auto`. The persistent default is `routeMode` in `~/.skill-router/config.json`; default is `auto`.
+For audits or comparisons, force route mode with `--mode=metadata`, `--mode=body`, `--mode=lexical`, `--mode=dci`, or `--mode=auto`. The persistent default is `routeMode` in `~/.skill-router/config.json`; default is `auto`. `dci` is a legacy alias for body search / body verification; it is not a full autonomous DCI research agent.
 
-If the auto route result still has `action: "no-confident-match"`, use the bounded DCI corpus tools before giving up. Stay within this prompt budget:
+If the auto route result still has `action: "no-confident-match"`, use the bounded body-verification corpus tools before giving up. Stay within this prompt budget:
 
 - Max queries: 3
 - Max candidates to consider from search: 8
@@ -75,7 +75,7 @@ You may also run a narrow literal direct-corpus search when a distinctive phrase
 "<abs-path-to-skill-router>" --host=codex skills dci grep --pattern "<distinctive phrase>" --json
 ```
 
-If the DCI evidence clearly identifies one disabled skill, record the selection and then read the returned path:
+If the body-verification evidence clearly identifies one disabled skill, record the selection and then read the returned path:
 
 ```bash
 "<abs-path-to-skill-router>" --host=codex skills dci select "<skill-id-or-ref>" --query "<current user request>" --confidence=high --reason "<brief evidence>" --json
@@ -87,9 +87,9 @@ If the evidence clearly identifies multiple complementary disabled skills, selec
 "<abs-path-to-skill-router>" --host=codex skills dci select "<ref-a>" "<ref-b>" --query "<current user request>" --confidence=medium --reason "<brief evidence>" --json
 ```
 
-After selection, read only the returned `selected[*].skillMdPath` files needed to perform the task. If DCI search/grep/find/open still leaves multiple plausible skills or no evidence, continue normally without forcing a disabled skill.
+After selection, read only the returned `selected[*].skillMdPath` files needed to perform the task. If body search/grep/find/open still leaves multiple plausible skills or no evidence, continue normally without forcing a disabled skill.
 
-The route and DCI select commands record routed usage automatically. Use `--no-record` only for audits or dry runs.
+The route and body/DCI select commands record routed usage automatically. Use `--no-record` only for audits or dry runs.
 
 ## 3. Listing and suggesting
 
@@ -129,7 +129,8 @@ After disable succeeds, tell the user: "Disabled N skills. Restart Codex or star
 
 ## 6. Other operations
 
-- `skills route --query "<text>" [--mode=auto|lexical|dci] --json` — choose a disabled skill for the current request and return the file to read. Default `auto` runs lexical first and upgrades to DCI when needed.
+- `skills route --query "<text>" [--mode=auto|metadata|body|lexical|dci] --json` — choose a disabled skill for the current request and return the file to read. Default `auto` runs metadata first and upgrades to body verification when needed.
+- `skills body ...` — alias for `skills dci ...`.
 - `skills dci budget --json` — show the bounded retrieval limits.
 - `skills dci search --query "<text>" [--query "<text>"] --json` — multi-query search over disabled skill instruction bodies and return candidate refs plus bounded snippets.
 - `skills dci grep --pattern "<text>" --json` — literal grep over disabled skill instruction bodies. Use `--regex` only when a regular expression is intentionally required.
@@ -137,7 +138,7 @@ After disable succeeds, tell the user: "Disabled N skills. Restart Codex or star
 - `skills dci open <id-or-ref> --line N --window N --json` — open a bounded line window from one disabled skill body.
 - `skills dci inspect <id-or-ref> --json` — show metadata and path for one disabled skill.
 - `skills dci read <id-or-ref> --json` — read a disabled skill body with truncation.
-- `skills dci select <id-or-ref...> --query "<text>" --confidence=high|medium --reason "<why>" --json` — record one or more DCI-backed routes, with max selections capped by the DCI budget.
+- `skills dci select <id-or-ref...> --query "<text>" --confidence=high|medium --reason "<why>" --json` — record one or more body-verification routes, with max selections capped by the budget.
 - `skills enable <id...>` — undo a disable.
 - `skills status [--json]` — list currently-disabled skills and detect/auto-reapply any that an upstream plugin or skill update may have restored.
 - `skills list --json` — full inventory with `lastUsed` and `callCount`.

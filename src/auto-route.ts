@@ -1,43 +1,58 @@
 import { dciRouteDisabledSkills, type DciRouteOptions } from "./dci.ts";
-import { routeDisabledSkills, type RouteDiagnostics, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
-import type { Confidence, Skill } from "./types.ts";
+import {
+  hasDistinctiveMetadataEvidence,
+  isMetadataUmbrellaSkill,
+  routeDisabledSkillsMetadata,
+} from "./metadata-route.ts";
+import type { RouteDiagnostics, SkillRouteMatch, SkillRouteResult } from "./route.ts";
+import type { Confidence } from "./types.ts";
 
 export interface AutoRouteOptions extends DciRouteOptions {}
 
 export async function routeDisabledSkillsAuto(
-  skills: Skill[],
+  skills: Parameters<typeof routeDisabledSkillsMetadata>[0],
   query: string,
   opts: AutoRouteOptions = {},
 ): Promise<SkillRouteResult> {
   const displayTopK = normalizeAutoTopK(opts.topK);
-  const lexical = routeDisabledSkills(skills, query, { topK: Math.max(displayTopK, 2) });
-  const escalationReason = autoEscalationReason(lexical);
-  const lexicalDiagnostics = diagnosticsForLexical(lexical);
-  const visibleLexical = withDisplayedMatches(lexical, displayTopK);
+  const metadata = routeDisabledSkillsMetadata(skills, query, { topK: Math.max(displayTopK, 2) });
+  const escalationReason = metadataEscalationReason(metadata);
+  const metadataDiagnostics = diagnosticsFor(metadata);
+  const visibleMetadata = withDisplayedMatches(metadata, displayTopK);
 
   if (!escalationReason) {
     return {
-      ...visibleLexical,
+      ...visibleMetadata,
       routeMode: "auto",
       diagnostics: {
-        lexical: lexicalDiagnostics,
-        auto: { escalated: false, reason: null, selectedSource: lexical.selected ? "lexical" : null },
+        metadata: metadataDiagnostics,
+        auto: { escalated: false, reason: null, selectedSource: metadata.selected ? "metadata" as const : null },
       },
     };
   }
 
-  const dci = await dciRouteDisabledSkills(skills, query, opts);
+  const body = await dciRouteDisabledSkills(skills, query, opts);
   const diagnostics: RouteDiagnostics = {
-    lexical: lexicalDiagnostics,
+    metadata: metadataDiagnostics,
     auto: {
       escalated: true,
       reason: escalationReason,
-      selectedSource: dci.selected ? "dci" : null,
+      selectedSource: body.selected ? "dci" : null,
     },
   };
-  if (dci.diagnostics?.dci) diagnostics.dci = dci.diagnostics.dci;
+  if (body.diagnostics?.dci) diagnostics.dci = body.diagnostics.dci;
+
+  if (!body.selected && body.matches.length === 0) {
+    return {
+      ...visibleMetadata,
+      selected: null,
+      routeMode: "auto",
+      diagnostics,
+    };
+  }
+
   return {
-    ...dci,
+    ...body,
     routeMode: "auto",
     diagnostics,
   };
@@ -47,33 +62,24 @@ function withDisplayedMatches(result: SkillRouteResult, topK: number): SkillRout
   return { ...result, matches: result.matches.slice(0, topK) };
 }
 
-function autoEscalationReason(result: SkillRouteResult): string | null {
+function metadataEscalationReason(result: SkillRouteResult): string | null {
   const selected = result.selected;
-  if (!selected) return "lexical-no-confident-match";
-  if (isUmbrellaSkill(selected.skill)) return "lexical-selected-umbrella-skill";
+  if (!selected) return "metadata-no-confident-match";
+  if (selected.confidence !== "high") return "metadata-not-high-confidence";
+  if (!hasDistinctiveMetadataEvidence(selected)) return "metadata-lacks-distinctive-evidence";
 
   const second = result.matches.find((match) => match.skill.id !== selected.skill.id);
-  if (!second) return null;
-
-  if (isSelectable(second.confidence) && selected.score - second.score < 0.12) {
-    return "lexical-close-candidates";
-  }
-
   if (
-    !selected.signals.matchedPhrase &&
-    second.signals.hitCount >= selected.signals.hitCount + 3 &&
-    second.score >= 0.3
+    isMetadataUmbrellaSkill(selected.skill) &&
+    (!selected.signals.matchedName || (second && second.signals.cueHitCount >= selected.signals.cueHitCount + 3 && second.score >= 0.3))
   ) {
-    return "lexical-runner-up-matches-more-query-terms";
+    return "metadata-selected-umbrella-skill";
+  }
+  if (second && isSelectable(second.confidence) && selected.score - second.score < 0.12) {
+    return "metadata-close-candidates";
   }
 
   return null;
-}
-
-function isUmbrellaSkill(skill: Skill): boolean {
-  const text = `${skill.name}\n${skill.description}`.normalize("NFKC").toLowerCase();
-  if (/\b(router skill|routes? to subskills?|unified skill|command surface)\b/.test(text)) return true;
-  return skill.description.length > 700 && /\bcovers?\b/.test(text);
 }
 
 function isSelectable(confidence: Confidence): boolean {
@@ -85,7 +91,7 @@ function normalizeAutoTopK(topK: number | undefined): number {
   return Math.min(Math.floor(topK), 20);
 }
 
-function diagnosticsForLexical(result: SkillRouteResult): NonNullable<RouteDiagnostics["lexical"]> {
+function diagnosticsFor(result: SkillRouteResult): NonNullable<RouteDiagnostics["metadata"]> {
   return {
     selectedId: result.selected?.skill.id ?? null,
     action: result.selected ? "read-skill-file" : "no-confident-match",
