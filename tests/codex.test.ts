@@ -206,7 +206,7 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
     assert.ok(!suggestions.some((s) => s.id === "builtin:codex-system:openai-docs"));
     assert.ok(!suggestions.some((s) => s.id === "plugin:browser-use@openai-bundled:browser"));
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local", "--yes"], { env });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), false);
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled")), true);
 
@@ -217,6 +217,38 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
 
     await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "enable", "user:codex:unused-local"], { env });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI disable of specific ids requires --yes and does not rename", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+    const livePath = join(fake.codexHome, "skills", "unused-local", "SKILL.md");
+    const disabledPath = `${livePath}.skill-router-disabled`;
+
+    let err: unknown;
+    try {
+      await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local"], { env });
+    } catch (caught) {
+      err = caught;
+    }
+
+    assert.ok(err);
+    assert.equal((err as { code?: number }).code, 1);
+    assert.match((err as { stderr?: string }).stderr ?? "", /pass --yes to apply/);
+    assert.equal(await fileExists(livePath), true);
+    assert.equal(await fileExists(disabledPath), false);
   } finally {
     await fake.cleanup();
   }
@@ -235,7 +267,7 @@ test("CLI enable cleans disabled state even when skill files disappeared", async
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local", "--yes"], { env });
     await rm(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled"));
 
     const enabled = await execFileAsync(
@@ -268,7 +300,7 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail", "--yes"], { env });
 
     const route = await execFileAsync(
       process.execPath,
@@ -320,7 +352,7 @@ test("CLI JSON route reports weak matches without failing or read actions", asyn
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail", "--yes"], { env });
     const route = await execFileAsync(
       process.execPath,
       [
@@ -365,7 +397,7 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail", "--yes"], { env });
     const badStateDir = join(fake.root, "state-dir-is-a-file");
     await writeFile(badStateDir, "not a directory");
 
