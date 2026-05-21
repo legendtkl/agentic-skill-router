@@ -73,7 +73,8 @@ npm run test:e2e:codex
 
 If a change touches Claude Code plugin loading or the agent-facing
 `skill-router-skills` workflow, also run the real Claude CLI e2e when a
-local `claude` binary is available:
+local `claude` binary and Claude auth (`~/.claude/.credentials.json`) are
+available:
 
 ```bash
 npm run test:e2e:claude

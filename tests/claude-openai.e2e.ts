@@ -1,8 +1,8 @@
 import { execFile, spawn } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appendFile, cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { appendFile, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -195,11 +195,9 @@ test(
       const listed = await runRouterJson<SkillListItem[]>(routerBin, ["skills", "list", "--json"], fresh.env);
       const claudeOpenAiSkills = listed.filter((item) => {
         if (item.pluginKey !== null) return false;
-        if (!item.id.startsWith("user:")) return false;
-        // Project-scoped ids ("project:claude:...") have the "claude:" prefix
-        // already filtered out above; reject anything else that doesn't match
-        // a simple user:<name> shape.
-        return item.id.split(":").length === 2;
+        // Accept only simple user:<name> ids; reject project:claude:* and
+        // any other multi-segment forms that don't represent ~/.claude/skills.
+        return item.id.startsWith("user:") && item.id.split(":").length === 2;
       });
       assert.equal(claudeOpenAiSkills.length, installedOpenAiSkillCount);
       assert.equal(claudeOpenAiSkills.length, EXPECTED_OPENAI_CURATED_SKILL_COUNT);
@@ -269,8 +267,15 @@ test(
       return;
     }
 
+    const authPath = await localClaudeAuthPath();
+    if (!authPath) {
+      t.skip("local Claude .credentials.json not found");
+      return;
+    }
+
     const fresh = await makeFreshClaudeEnvironment();
     try {
+      await copyFile(authPath, join(fresh.claudeHome, ".credentials.json"));
       await installSkillRouterForClaude(fresh.env);
       await appendClaudeRouterWorkflowSentinel(fresh.claudeHome);
       assert.equal(
@@ -512,6 +517,16 @@ async function findExecutable(name: string): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync("sh", ["-c", `command -v ${name}`]);
     return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+async function localClaudeAuthPath(): Promise<string | null> {
+  const claudeHome = process.env["CLAUDE_HOME"] || join(homedir(), ".claude");
+  const authPath = join(claudeHome, ".credentials.json");
+  try {
+    return (await stat(authPath)).isFile() ? authPath : null;
   } catch {
     return null;
   }
