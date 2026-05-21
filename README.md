@@ -249,8 +249,12 @@ npm run check:assets
 npm run typecheck
 npm test
 npm run build
-npm pack --dry-run
+npm run check:pack
 ```
+
+`npm run check:pack` runs after `npm run build` and verifies that
+`bin/skill-router --help` exits cleanly and `npm pack --dry-run` includes the
+required `bin/`, `lib/`, `skills/`, plugin manifests, and Codex prompt entries.
 
 Networked end-to-end suites (`npm run test:e2e`, `npm run test:e2e:codex`,
 `npm run test:e2e:claude`) are not part of CI; run them locally when relevant.

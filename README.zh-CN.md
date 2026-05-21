@@ -215,8 +215,13 @@ npm run check:assets
 npm run typecheck
 npm test
 npm run build
-npm pack --dry-run
+npm run check:pack
 ```
+
+`npm run check:pack` 会在 `npm run build` 之后运行，校验
+`bin/skill-router --help` 退出码为 0 且输出非空，并解析
+`npm pack --dry-run` 文件列表，确认 `bin/`、`lib/`、`skills/`、两个插件
+manifest 以及 Codex 的 prompt 文件都被包含。
 
 需要联网的端到端套件（`npm run test:e2e`、`npm run test:e2e:codex`、
 `npm run test:e2e:claude`）不会在 CI 中运行；需要时在本地手动执行。

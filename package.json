@@ -23,6 +23,7 @@
   "scripts": {
     "generate:assets": "node scripts/generate-assets.mjs",
     "check:assets": "node scripts/generate-assets.mjs --check",
+    "check:pack": "node scripts/check-pack.mjs",
     "build": "node scripts/generate-assets.mjs && node scripts/build.mjs",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit",

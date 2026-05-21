@@ -32,6 +32,7 @@ Subagent management is intentionally out of scope in this repository.
 | Codex CLI e2e | `npm run test:e2e:codex` |
 | Claude CLI e2e | `npm run test:e2e:claude` |
 | Build bundles | `npm run build` |
+| Pack smoke check | `npm run check:pack` |
 | Install Claude plugin | `npm run install:plugin` |
 | Install Codex plugin | `npm run install:codex-plugin` |
 
