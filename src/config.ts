@@ -1,9 +1,9 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { Config, RouteMode } from "./types.ts";
 
-export const CONFIG_PATH = join(homedir(), ".skill-router", "config.json");
+export const DEFAULT_CONFIG_PATH = join(homedir(), ".skill-router", "config.json");
 export const DEFAULT_UNUSED_FOR_DAYS = 30;
 
 export const DEFAULT_CONFIG: Config = {
@@ -11,7 +11,31 @@ export const DEFAULT_CONFIG: Config = {
   routeMode: "auto",
 };
 
-export async function loadConfig(path: string = CONFIG_PATH): Promise<Config> {
+/** Keys the CLI accepts via `config set <key> <value>`. */
+export const CONFIG_KEYS = ["unusedForDays", "routeMode", "keepNames", "keepIds"] as const;
+export type ConfigKey = (typeof CONFIG_KEYS)[number];
+
+/** Valid values for `routeMode`. Kept in sync with {@link parseRouteMode}. */
+export const ROUTE_MODES: ReadonlyArray<RouteMode> = ["auto", "metadata", "body", "lexical", "dci"];
+
+/**
+ * The active config path. Honors `SKILL_ROUTER_CONFIG_PATH` at call time so
+ * tests can run multiple in-process invocations against different fake
+ * config files without rebuilding the module. Falls back to
+ * {@link DEFAULT_CONFIG_PATH} (typically `~/.skill-router/config.json`).
+ */
+export function configPath(): string {
+  return process.env["SKILL_ROUTER_CONFIG_PATH"] ?? DEFAULT_CONFIG_PATH;
+}
+
+/**
+ * Backwards-compatible alias kept for existing imports. New code should
+ * prefer the {@link configPath} function so the env-var override is
+ * honored at call time.
+ */
+export const CONFIG_PATH = configPath();
+
+export async function loadConfig(path: string = configPath()): Promise<Config> {
   let raw: string;
   try {
     raw = await readFile(path, "utf8");
@@ -85,4 +109,133 @@ export function resolveUnusedForDays(opts: {
     return parseDuration(opts.cliFlag);
   }
   return opts.config.unusedForDays;
+}
+
+/**
+ * Read the raw config file as a JSON object, ignoring unknown keys at the
+ * top level. Returns an empty object when the file is missing. Throws when
+ * the file exists but is not valid JSON, or when it parses to a non-object.
+ * Used by {@link setConfigValue} so writes can update a single key without
+ * dropping unknown sibling keys a future schema might add.
+ */
+export async function loadRawConfigObject(path: string = configPath()): Promise<Record<string, unknown>> {
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf8");
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw err;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`config file at ${path} is not valid JSON`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`config file at ${path} is not a JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
+/**
+ * Atomically write the given config object to disk: write a temp file in the
+ * same directory then `rename` it into place so a crash during the write
+ * cannot leave a partial file at the canonical path.
+ */
+export async function saveRawConfigObject(
+  config: Record<string, unknown>,
+  path: string = configPath(),
+): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
+  await writeFile(tmp, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+  await rename(tmp, path);
+}
+
+/**
+ * Validate a textual `value` for the given config `key` and return the
+ * value the on-disk JSON should hold. Throws {@link ConfigValueError} when
+ * the value is not acceptable. Pure: does not touch disk.
+ */
+export function parseConfigValue(key: ConfigKey, value: string): unknown {
+  switch (key) {
+    case "unusedForDays": {
+      const trimmed = value.trim();
+      // Number("") is 0, which would otherwise quietly pass the integer check.
+      // Reject empty input explicitly so the user sees the expectation.
+      if (trimmed === "") {
+        throw new ConfigValueError(`unusedForDays must be a non-negative integer (got ${JSON.stringify(value)})`);
+      }
+      const n = Number(trimmed);
+      if (!Number.isInteger(n) || n < 0) {
+        throw new ConfigValueError(`unusedForDays must be a non-negative integer (got ${JSON.stringify(value)})`);
+      }
+      return n;
+    }
+    case "routeMode": {
+      const parsed = parseRouteMode(value);
+      if (!parsed) {
+        throw new ConfigValueError(`routeMode must be one of: ${ROUTE_MODES.join(", ")} (got ${JSON.stringify(value)})`);
+      }
+      return parsed;
+    }
+    case "keepNames":
+    case "keepIds":
+      return parseStringArrayValue(key, value);
+  }
+}
+
+/**
+ * Update one key in the on-disk config atomically. Reads the current raw
+ * JSON object, applies the validated value, and writes the result back via
+ * {@link saveRawConfigObject}. Unknown sibling keys are preserved.
+ */
+export async function setConfigValue(
+  key: ConfigKey,
+  value: string,
+  path: string = configPath(),
+): Promise<{ key: ConfigKey; value: unknown }> {
+  const parsed = parseConfigValue(key, value);
+  const current = await loadRawConfigObject(path);
+  current[key] = parsed;
+  await saveRawConfigObject(current, path);
+  return { key, value: parsed };
+}
+
+export function isConfigKey(value: string): value is ConfigKey {
+  return (CONFIG_KEYS as ReadonlyArray<string>).includes(value);
+}
+
+export class ConfigValueError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ConfigValueError";
+  }
+}
+
+function parseStringArrayValue(key: "keepNames" | "keepIds", value: string): string[] {
+  const trimmed = value.trim();
+  if (trimmed === "") return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new ConfigValueError(
+      `${key} must be a JSON array of strings, e.g. '["foo","bar"]' (got ${JSON.stringify(value)})`,
+    );
+  }
+  if (!Array.isArray(parsed)) {
+    throw new ConfigValueError(
+      `${key} must be a JSON array of strings, e.g. '["foo","bar"]' (got ${JSON.stringify(value)})`,
+    );
+  }
+  const out: string[] = [];
+  for (const item of parsed) {
+    if (typeof item !== "string") {
+      throw new ConfigValueError(`${key} array entries must be strings (got ${JSON.stringify(item)})`);
+    }
+    if (item !== "") out.push(item);
+  }
+  return out;
 }
