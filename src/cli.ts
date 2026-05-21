@@ -98,7 +98,7 @@ function displayHost(hostName: HostName): string {
 }
 
 function usage(code = 0): number {
-  console.log(`skill-router — manage installed Claude Code and Codex skills
+  console.log(`skill-router — manage installed Agent Skills across supported hosts
 
 USAGE
   skill-router [--host=claude-code|codex] skills list [--json]
@@ -113,7 +113,7 @@ USAGE
   skill-router [--host=claude-code|codex] skills dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
   skill-router [--host=claude-code|codex] skills dci budget [--json]
   skill-router [--host=claude-code|codex] skills body <search|grep|find|open|inspect|read|select|budget> ...  (alias for dci)
-  skill-router [--host=claude-code|codex] skills disable <id...> | --all-suggested [--unused-for=<dur>] [--yes] [--reason=<text>]
+  skill-router [--host=claude-code|codex] skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>]
   skill-router [--host=claude-code|codex] skills enable <id...>
   skill-router [--host=claude-code|codex] skills status [--json]
 
@@ -639,19 +639,16 @@ async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
 
   let targets: Skill[];
   let reason = (values.reason as string | undefined) ?? "manual";
+  let suggested: Suggestion[] | undefined;
+  let unusedDays: number | undefined;
 
   if (values["all-suggested"]) {
     const config = await loadConfig();
-    const days = resolveUnusedForDays({ cliFlag: values["unused-for"] as string | undefined, config });
+    unusedDays = resolveUnusedForDays({ cliFlag: values["unused-for"] as string | undefined, config });
     const usage = await host.usageStats();
-    const sugg = suggest(skills, usage, { unusedForDays: days });
-    targets = sugg.map((s) => s.skill);
-    reason = (values.reason as string | undefined) ?? `auto:unused-${days}d`;
-    if (!values.yes) {
-      console.error(`would disable ${targets.length} skills; pass --yes to apply`);
-      printSuggestions(sugg, days);
-      return 1;
-    }
+    suggested = suggest(skills, usage, { unusedForDays: unusedDays });
+    targets = suggested.map((s) => s.skill);
+    reason = (values.reason as string | undefined) ?? `auto:unused-${unusedDays}d`;
   } else {
     if (positionals.length === 0) {
       console.error("specify <id...> or --all-suggested");
@@ -667,6 +664,16 @@ async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
       }
       targets.push(s);
     }
+  }
+
+  if (!values.yes) {
+    console.error(`would disable ${targets.length} skill(s); pass --yes to apply`);
+    if (suggested && unusedDays !== undefined) {
+      printSuggestions(suggested, unusedDays);
+    } else {
+      for (const t of targets) console.error(`  ${t.id}`);
+    }
+    return 1;
   }
 
   const results: Array<{ id: string; alreadyDisabled: boolean }> = [];
@@ -964,5 +971,5 @@ function isMainModule(): boolean {
 
 if (isMainModule()) {
   const code = await run(process.argv.slice(2));
-  process.exit(code);
+  process.exitCode = code;
 }

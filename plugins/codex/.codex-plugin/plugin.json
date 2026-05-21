@@ -1,7 +1,7 @@
 {
   "name": "skill-router",
   "version": "0.1.0",
-  "description": "Route requests to disabled Codex skills with fast and DCI-style corpus routing, and manage installed skills based on usage.",
+  "description": "Route requests to disabled Agent Skills with fast corpus routing, and manage installed skills based on usage.",
   "author": {
     "name": "skill-router contributors"
   },
@@ -9,14 +9,13 @@
   "keywords": [
     "skills",
     "cleanup",
-    "codex",
     "context"
   ],
-  "skills": "./skills/",
+  "skills": "../../skills/",
   "interface": {
     "displayName": "Skill Router",
-    "shortDescription": "Route and manage stale Codex skills",
-    "longDescription": "Skill Router routes long-tail requests to disabled Codex skills using fast lexical routing plus DCI-style direct corpus search, audits installed skills, suggests unused or stale entries, and safely disables selected skills by renaming SKILL.md files so they can be restored later.",
+    "shortDescription": "Route and manage stale Agent Skills",
+    "longDescription": "Skill Router routes long-tail requests to disabled Agent Skills using metadata, lexical, and bounded body search, audits installed skills, suggests unused or stale entries, and safely disables selected skills by renaming SKILL.md files so they can be restored later.",
     "developerName": "skill-router contributors",
     "category": "Engineering",
     "capabilities": [
@@ -24,9 +23,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Slim down my Codex skills",
+      "Slim down my Agent Skills",
       "Route this request to a disabled skill",
-      "Restore a disabled Codex skill"
+      "Restore a disabled skill"
     ],
     "brandColor": "#2563EB",
     "screenshots": []

@@ -6,6 +6,7 @@ import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageStat } from "../types.ts";
 import { BuiltinSkillCannotDisableError } from "../types.ts";
 import {
+  compareVersions,
   DISABLED_SUFFIX,
   readCodexPluginSettings,
   readSkillFrontmatter,
@@ -27,10 +28,12 @@ interface CodexPluginInstall {
   pluginKey: string;
   installPath: string;
   skillsRoot: string;
+  version: string;
 }
 
 interface CodexPluginManifest {
   name?: unknown;
+  version?: unknown;
   skills?: unknown;
 }
 
@@ -175,7 +178,7 @@ export class CodexHost implements Host {
       throw err;
     }
 
-    const out: CodexPluginInstall[] = [];
+    const byPluginKey = new Map<string, CodexPluginInstall>();
     for (const marketplace of marketplaces) {
       if (!marketplace.isDirectory() || marketplace.name.startsWith(".")) continue;
       const marketplacePath = join(cacheRoot, marketplace.name);
@@ -203,19 +206,33 @@ export class CodexHost implements Host {
           const pluginName = typeof manifest.name === "string" && manifest.name !== ""
             ? manifest.name
             : pluginDir.name;
+          const version = typeof manifest.version === "string" && manifest.version !== ""
+            ? manifest.version
+            : versionDir.name;
           const skillsRel = typeof manifest.skills === "string" && manifest.skills !== ""
             ? manifest.skills
             : "./skills";
-          out.push({
+          const install = {
             pluginKey: `${pluginName}@${marketplace.name}`,
             installPath,
             skillsRoot: resolve(dirname(manifestPath), "..", skillsRel),
-          });
+            version,
+          };
+          const existing = byPluginKey.get(install.pluginKey);
+          if (!existing || isNewerCodexPluginInstall(install, existing)) {
+            byPluginKey.set(install.pluginKey, install);
+          }
         }
       }
     }
-    return out;
+    return [...byPluginKey.values()];
   }
+}
+
+function isNewerCodexPluginInstall(candidate: CodexPluginInstall, current: CodexPluginInstall): boolean {
+  const byVersion = compareVersions(candidate.version, current.version);
+  if (byVersion !== 0) return byVersion > 0;
+  return candidate.installPath > current.installPath;
 }
 
 async function readCodexPluginManifest(path: string): Promise<CodexPluginManifest | null> {

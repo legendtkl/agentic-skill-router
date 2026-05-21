@@ -3,7 +3,8 @@
  * Install skill-router as a local Codex plugin plus slash command.
  *
  * - builds the bundle before copying
- * - copies plugins/codex -> ~/.codex/plugins/cache/local/skill-router/<version>/
+ * - copies the Codex manifest plus shared bin/lib/skills to
+ *   ~/.codex/plugins/cache/local/skill-router/<version>/
  * - enables [plugins."skill-router@local"] in ~/.codex/config.toml
  * - copies prompts/skill-router-skills.md -> ~/.codex/prompts/
  *
@@ -20,6 +21,7 @@ const repoRoot = resolve(__dirname, "..");
 const pluginSrc = join(repoRoot, "plugins/codex");
 const pluginManifest = JSON.parse(await readFile(join(pluginSrc, ".codex-plugin/plugin.json"), "utf8"));
 const version = pluginManifest.version;
+const sharedAssetDirs = ["bin", "lib", "skills"];
 
 const PLUGIN_NAME = "skill-router";
 const MARKETPLACE = "local";
@@ -62,8 +64,18 @@ async function copyPlugin() {
   await rm(installPath, { recursive: true, force: true });
   await mkdir(dirname(installPath), { recursive: true });
   await cp(pluginSrc, installPath, { recursive: true });
+  await normalizeManifestSkills(join(installPath, ".codex-plugin/plugin.json"));
+  for (const dir of sharedAssetDirs) {
+    await cp(join(repoRoot, dir), join(installPath, dir), { recursive: true });
+  }
   await chmod(join(installPath, "bin/skill-router"), 0o755);
   log(`  copied -> ${installPath}`);
+}
+
+async function normalizeManifestSkills(path) {
+  const manifest = JSON.parse(await readFile(path, "utf8"));
+  manifest.skills = "./skills/";
+  await writeFile(path, JSON.stringify(manifest, null, 2) + "\n");
 }
 
 async function enablePlugin() {

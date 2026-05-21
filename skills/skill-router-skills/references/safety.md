@@ -2,7 +2,7 @@
 
 - Never disable without explicit user confirmation.
 - Never delete skill directories or `SKILL.md` files.
-- Built-in Claude Code skills and Codex system/admin skills are protected.
+- Built-in, system, and admin-managed skills are protected.
 - A disabled skill is recoverable because the operation only renames
   `SKILL.md` to `SKILL.md.skill-router-disabled`.
 - If a command reports a split-brain conflict, tell the user which skill needs

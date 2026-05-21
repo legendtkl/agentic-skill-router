@@ -115,6 +115,20 @@ async function writeSkill(skillDir: string, name: string, description: string, b
   await writeFile(join(skillDir, `SKILL.md${disabled ? ".skill-router-disabled" : ""}`), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`);
 }
 
+async function writeCodexPluginInstall(
+  installPath: string,
+  opts: { name: string; version?: string; skillName: string; skillDescription: string },
+): Promise<void> {
+  await mkdir(join(installPath, ".codex-plugin"), { recursive: true });
+  const manifest: { name: string; version?: string; skills: string } = { name: opts.name, skills: "./skills/" };
+  if (opts.version !== undefined) manifest.version = opts.version;
+  await writeFile(
+    join(installPath, ".codex-plugin", "plugin.json"),
+    JSON.stringify(manifest),
+  );
+  await writeSkill(join(installPath, "skills", opts.skillName), opts.skillName, opts.skillDescription);
+}
+
 async function fileExists(path: string): Promise<boolean> {
   try { return (await stat(path)).isFile(); } catch { return false; }
 }
@@ -146,6 +160,81 @@ test("CodexHost enumerates codex, agents, system, and plugin skills", async () =
     assert.ok(roots.some((root) => root.endsWith("project/packages/.agents/skills")));
   } finally {
     await fake.cleanup();
+  }
+});
+
+test("CodexHost deduplicates cached plugin versions by plugin key", async () => {
+  const root = await mkdtemp(join(tmpdir(), "skill-router-codex-cache-"));
+  const codexHome = join(root, ".codex");
+  const agentsHome = join(root, ".agents");
+  const stateDir = join(root, ".skill-router");
+  const oldInstall = join(codexHome, "plugins", "cache", "openai-curated", "gmail", "old-cache");
+  const newInstall = join(codexHome, "plugins", "cache", "openai-curated", "gmail", "new-cache");
+  const fallbackOldInstall = join(codexHome, "plugins", "cache", "openai-curated", "calendar", "1.0.0");
+  const fallbackNewInstall = join(codexHome, "plugins", "cache", "openai-curated", "calendar", "2.0.0");
+  try {
+    await writeCodexPluginInstall(oldInstall, {
+      name: "gmail",
+      version: "1.0.0",
+      skillName: "gmail",
+      skillDescription: "old Gmail workflows",
+    });
+    await writeCodexPluginInstall(newInstall, {
+      name: "gmail",
+      version: "2.0.0",
+      skillName: "gmail",
+      skillDescription: "new Gmail workflows",
+    });
+    await writeCodexPluginInstall(fallbackOldInstall, {
+      name: "calendar",
+      version: "1.0.0",
+      skillName: "calendar",
+      skillDescription: "old Calendar workflows",
+    });
+    await writeCodexPluginInstall(fallbackNewInstall, {
+      name: "calendar",
+      skillName: "calendar",
+      skillDescription: "new Calendar workflows",
+    });
+
+    const host = new CodexHost({
+      codexHome,
+      agentsHome,
+      cwd: root,
+      adminSkillsRoot: join(root, "etc", "codex", "skills"),
+    });
+    const skills = await host.listSkills();
+    const gmailSkills = skills.filter((s) => s.id === "plugin:gmail@openai-curated:gmail");
+    assert.equal(gmailSkills.length, 1);
+    assert.equal(gmailSkills[0]!.description, "new Gmail workflows");
+    assert.match(gmailSkills[0]!.skillMdPath, /new-cache/);
+    const calendarSkills = skills.filter((s) => s.id === "plugin:calendar@openai-curated:calendar");
+    assert.equal(calendarSkills.length, 1);
+    assert.equal(calendarSkills[0]!.description, "new Calendar workflows");
+    assert.match(calendarSkills[0]!.skillMdPath, /2\.0\.0/);
+
+    const roots = await host.skillRoots();
+    assert.ok(roots.includes(join(newInstall, "skills")));
+    assert.ok(!roots.includes(join(oldInstall, "skills")));
+    assert.ok(roots.includes(join(fallbackNewInstall, "skills")));
+    assert.ok(!roots.includes(join(fallbackOldInstall, "skills")));
+
+    const env = {
+      ...process.env,
+      CODEX_HOME: codexHome,
+      AGENTS_HOME: agentsHome,
+      SKILL_ROUTER_CWD: root,
+      CODEX_ADMIN_SKILLS_ROOT: join(root, "etc", "codex", "skills"),
+      SKILL_ROUTER_STATE_DIR: stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+    const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "list", "--json"], { env });
+    const listed = JSON.parse(list.stdout) as Array<{ id: string; description: string }>;
+    const listedGmailSkills = listed.filter((s) => s.id === "plugin:gmail@openai-curated:gmail");
+    assert.equal(listedGmailSkills.length, 1);
+    assert.equal(listedGmailSkills[0]!.description, "new Gmail workflows");
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 
@@ -188,6 +277,7 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
   try {
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -196,33 +286,75 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "list", "--json"], { env });
-    const listed = JSON.parse(list.stdout) as Array<{ id: string; lastUsed: string | null }>;
+    const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "list", "--json"], { env });
+    const listed = JSON.parse(list.stdout) as Array<{
+      id: string;
+      canDisable: boolean;
+      description: string;
+      lastUsed: string | null;
+    }>;
     assert.ok(listed.some((s) => s.id === "user:codex:brand" && s.lastUsed === "2026-04-20T09:00:00.000Z"));
+    assert.ok(listed.some((s) => s.id === "project:codex:.:project-root" && s.description === "Project root skill"));
+    assert.ok(
+      listed.some((s) => s.id === "project:codex:packages:project-package" && s.description === "Project package skill"),
+    );
+    assert.ok(listed.some((s) => s.id === "builtin:codex-admin:admin-policy" && s.canDisable === false));
 
-    const suggest = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "suggest", "--unused-for=365d", "--json"], { env });
+    const suggest = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "suggest", "--unused-for=365d", "--json"], { env });
     const suggestions = JSON.parse(suggest.stdout) as Array<{ id: string }>;
     assert.ok(suggestions.some((s) => s.id === "user:codex:unused-local"));
     assert.ok(!suggestions.some((s) => s.id === "builtin:codex-system:openai-docs"));
     assert.ok(!suggestions.some((s) => s.id === "plugin:browser-use@openai-bundled:browser"));
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"], { env });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), false);
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled")), true);
 
-    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "status", "--json"], { env });
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], { env });
     const parsedStatus = JSON.parse(status.stdout) as { disabledCount: number; disabled: Array<{ id: string }> };
     assert.equal(parsedStatus.disabledCount, 1);
     assert.equal(parsedStatus.disabled[0]!.id, "user:codex:unused-local");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "enable", "user:codex:unused-local"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local"], { env });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
   } finally {
     await fake.cleanup();
   }
 });
 
-test("CLI enable cleans disabled state even when skill files disappeared", async () => {
+test("CLI disable of specific ids requires --yes and does not rename", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+    const livePath = join(fake.codexHome, "skills", "unused-local", "SKILL.md");
+    const disabledPath = `${livePath}.skill-router-disabled`;
+
+    let err: unknown;
+    try {
+      await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local"], { env });
+    } catch (caught) {
+      err = caught;
+    }
+
+    assert.ok(err);
+    assert.equal((err as { code?: number }).code, 1);
+    assert.match((err as { stderr?: string }).stderr ?? "", /pass --yes to apply/);
+    assert.equal(await fileExists(livePath), true);
+    assert.equal(await fileExists(disabledPath), false);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI refuses to disable Codex admin skills", async () => {
   const fake = await makeFakeCodexUser();
   try {
     const env = {
@@ -235,18 +367,92 @@ test("CLI enable cleans disabled state even when skill files disappeared", async
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local"], { env });
+    await assert.rejects(
+      () => execFileAsync(
+        process.execPath,
+        ["--import", "tsx", cli, "--host=codex", "skills", "disable", "builtin:codex-admin:admin-policy", "--yes"],
+        { env },
+      ),
+      (err: unknown) => {
+        assert.match((err as { stderr?: string }).stderr ?? "", /Cannot disable builtin skill/);
+        return true;
+      },
+    );
+    assert.equal(await fileExists(join(fake.adminSkillsRoot, "admin-policy", "SKILL.md")), true);
+    assert.equal(await fileExists(join(fake.adminSkillsRoot, "admin-policy", "SKILL.md.skill-router-disabled")), false);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI status scans Codex project and admin roots for orphan disabled markers", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const projectRoot = join(fake.root, "project");
+    await writeSkill(
+      join(projectRoot, ".agents", "skills", "orphan-project"),
+      "orphan-project",
+      "Project orphan marker",
+      "",
+      true,
+    );
+    await writeSkill(
+      join(fake.adminSkillsRoot, "orphan-admin"),
+      "orphan-admin",
+      "Admin orphan marker",
+      "",
+      true,
+    );
+
+    const env = {
+      ...process.env,
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "status", "--json"], { env });
+    const parsedStatus = JSON.parse(status.stdout) as { orphanMarkers: string[] };
+    assert.ok(
+      parsedStatus.orphanMarkers.some((p) => p.endsWith("project/.agents/skills/orphan-project/SKILL.md.skill-router-disabled")),
+    );
+    assert.ok(
+      parsedStatus.orphanMarkers.some((p) => p.endsWith("etc/codex/skills/orphan-admin/SKILL.md.skill-router-disabled")),
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI enable cleans disabled state even when skill files disappeared", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const env = {
+      ...process.env,
+      SKILL_ROUTER_HOST: "codex",
+      CODEX_HOME: fake.codexHome,
+      AGENTS_HOME: fake.agentsHome,
+      SKILL_ROUTER_CWD: fake.cwd,
+      CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
+      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+    };
+    const cli = join(REPO_ROOT, "src", "cli.ts");
+
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"], { env });
     await rm(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled"));
 
     const enabled = await execFileAsync(
       process.execPath,
-      ["--import", "tsx", cli, "--host=codex", "skills", "enable", "user:codex:unused-local", "--json"],
+      ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local", "--json"],
       { env },
     );
     const parsed = JSON.parse(enabled.stdout) as Array<{ id: string }>;
     assert.equal(parsed[0]?.id, "user:codex:unused-local");
 
-    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "status", "--json"], { env });
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], { env });
     const parsedStatus = JSON.parse(status.stdout) as { disabledCount: number };
     assert.equal(parsedStatus.disabledCount, 0);
   } finally {
@@ -260,6 +466,7 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
   try {
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -268,7 +475,7 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail", "--yes"], { env });
 
     const route = await execFileAsync(
       process.execPath,
@@ -276,7 +483,6 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--query",
@@ -312,6 +518,7 @@ test("CLI JSON route reports weak matches without failing or read actions", asyn
   try {
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -320,14 +527,13 @@ test("CLI JSON route reports weak matches without failing or read actions", asyn
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail", "--yes"], { env });
     const route = await execFileAsync(
       process.execPath,
       [
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--query",
@@ -357,6 +563,7 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
   try {
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -365,7 +572,7 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail", "--yes"], { env });
     const badStateDir = join(fake.root, "state-dir-is-a-file");
     await writeFile(badStateDir, "not a directory");
 
@@ -375,7 +582,6 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--query",
@@ -427,6 +633,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
 
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -437,7 +644,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
 
     const budget = await execFileAsync(
       process.execPath,
-      ["--import", "tsx", cli, "--host=codex", "skills", "dci", "budget", "--json"],
+      ["--import", "tsx", cli, "skills", "dci", "budget", "--json"],
       { env },
     );
     const parsedBudget = JSON.parse(budget.stdout) as {
@@ -459,7 +666,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--mode=lexical",
@@ -479,7 +685,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--query",
@@ -504,7 +709,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--mode=metadata",
@@ -530,7 +734,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--mode=dci",
@@ -556,7 +759,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--mode=body",
@@ -582,7 +784,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "search",
@@ -614,7 +815,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "grep",
@@ -634,7 +834,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "grep",
@@ -655,7 +854,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "find",
@@ -676,7 +874,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "open",
@@ -695,7 +892,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
 
     const read = await execFileAsync(
       process.execPath,
-      ["--import", "tsx", cli, "--host=codex", "skills", "dci", "read", bodyProbeRef, "--json"],
+      ["--import", "tsx", cli, "skills", "dci", "read", bodyProbeRef, "--json"],
       { env },
     );
     const parsedRead = JSON.parse(read.stdout) as { action: string; content: string };
@@ -708,7 +905,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "select",

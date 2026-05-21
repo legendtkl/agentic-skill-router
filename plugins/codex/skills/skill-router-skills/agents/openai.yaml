@@ -1,5 +1,0 @@
-interface:
-  display_name: "Skill Router"
-  short_description: "Route and manage Claude Code or Codex skills"
-  brand_color: "#2563EB"
-  default_prompt: "Use $skill-router-skills to audit installed skills, slim stale skills, or route a Codex request to a disabled skill."

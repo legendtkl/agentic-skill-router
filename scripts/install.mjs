@@ -3,7 +3,8 @@
  * Install skill-router as a local Claude Code plugin.
  *
  * - builds the bundle before copying
- * - copies plugins/claude-code → ~/.claude/plugins/cache/local/skill-router/<version>/
+ * - copies the Claude Code manifest plus shared bin/lib/skills to
+ *   ~/.claude/plugins/cache/local/skill-router/<version>/
  * - registers the install in ~/.claude/plugins/installed_plugins.json
  * - enables it in ~/.claude/settings.json (enabledPlugins)
  *
@@ -23,6 +24,7 @@ const repoRoot = resolve(__dirname, "..");
 const pluginSrc = join(repoRoot, "plugins/claude-code");
 const pluginManifest = JSON.parse(await readFile(join(pluginSrc, ".claude-plugin/plugin.json"), "utf8"));
 const version = pluginManifest.version;
+const sharedAssetDirs = ["bin", "lib", "skills"];
 
 const PLUGIN_NAME = "skill-router";
 const MARKETPLACE = "local";
@@ -63,8 +65,18 @@ async function copyPlugin() {
   await rm(installPath, { recursive: true, force: true });
   await mkdir(dirname(installPath), { recursive: true });
   await cp(pluginSrc, installPath, { recursive: true });
+  await normalizeManifestSkills(join(installPath, ".claude-plugin/plugin.json"));
+  for (const dir of sharedAssetDirs) {
+    await cp(join(repoRoot, dir), join(installPath, dir), { recursive: true });
+  }
   await chmod(join(installPath, "bin/skill-router"), 0o755);
   log(`  copied → ${installPath}`);
+}
+
+async function normalizeManifestSkills(path) {
+  const manifest = JSON.parse(await readFile(path, "utf8"));
+  manifest.skills = "./skills/";
+  await writeFile(path, JSON.stringify(manifest, null, 2) + "\n");
 }
 
 function isPlainObject(x) {
