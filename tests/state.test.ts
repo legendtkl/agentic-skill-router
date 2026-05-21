@@ -441,6 +441,50 @@ test("loadState synthesizes instanceKey for legacy records that lack one", async
   }
 });
 
+test("loadState re-derives stale instanceKey values from id and path", async () => {
+  const { path, cleanup } = await tempPath();
+  try {
+    const { writeFile, mkdir } = await import("node:fs/promises");
+    const { dirname } = await import("node:path");
+    await mkdir(dirname(path), { recursive: true });
+    const stale = JSON.stringify({
+      schema: 1,
+      host: "claude-code",
+      disabledSkills: [
+        {
+          instanceKey: "stale-key",
+          id: "user:foo",
+          pluginKey: null,
+          skillMdPath: "/skills/a/SKILL.md.skill-router-disabled",
+          disabledAt: "2026-01-01T00:00:00Z",
+          reason: "manual",
+        },
+      ],
+      routedSkills: [
+        {
+          instanceKey: "also-stale",
+          id: "user:foo",
+          pluginKey: null,
+          skillMdPath: "/skills/a/SKILL.md.skill-router-disabled",
+          name: "foo",
+          routeCount: 1,
+          firstRoutedAt: "2026-01-01T00:00:00Z",
+          lastRoutedAt: "2026-01-01T00:00:00Z",
+          lastQuery: "do thing",
+          lastConfidence: "high",
+        },
+      ],
+    });
+    await writeFile(path, stale);
+    const state = await loadState(path);
+    const key = skillInstanceKey("user:foo", "/skills/a/SKILL.md.skill-router-disabled");
+    assert.equal(state.disabledSkills[0]?.instanceKey, key);
+    assert.equal(state.routedSkills?.[0]?.instanceKey, key);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("saveState writes per-process unique tmp file (no shared .tmp)", async () => {
   const { path, cleanup } = await tempPath();
   try {

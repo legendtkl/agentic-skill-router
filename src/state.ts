@@ -75,10 +75,10 @@ function validateRecord(x: unknown): DisableRecord | null {
   if (x["skillName"] !== undefined && typeof x["skillName"] !== "string") return null;
   if (x["source"] !== undefined && !isSkillSource(x["source"])) return null;
   if (x["instanceKey"] !== undefined && typeof x["instanceKey"] !== "string") return null;
-  // Legacy state migration: synthesize instanceKey when absent from disk.
-  const instanceKey = typeof x["instanceKey"] === "string" && x["instanceKey"] !== ""
-    ? x["instanceKey"]
-    : skillInstanceKey(x["id"], x["skillMdPath"]);
+  // Migration safety: always canonicalize identity from `(id, skillMdPath)`.
+  // This heals legacy/malformed keys on load and persists the corrected key on
+  // the next save.
+  const instanceKey = skillInstanceKey(x["id"], x["skillMdPath"]);
   return {
     instanceKey,
     id: x["id"],
@@ -126,9 +126,7 @@ function validateRoutedRecord(x: unknown): RoutedSkillRecord | null {
   if (typeof x["lastQuery"] !== "string") return null;
   if (!isConfidence(x["lastConfidence"])) return null;
   if (x["instanceKey"] !== undefined && typeof x["instanceKey"] !== "string") return null;
-  const instanceKey = typeof x["instanceKey"] === "string" && x["instanceKey"] !== ""
-    ? x["instanceKey"]
-    : skillInstanceKey(x["id"], x["skillMdPath"]);
+  const instanceKey = skillInstanceKey(x["id"], x["skillMdPath"]);
   return {
     instanceKey,
     id: x["id"],
