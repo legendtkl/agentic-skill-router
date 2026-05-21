@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
+import { parseStrict, reportUnknownOption, UnknownOptionError } from "./args.ts";
 import { ClaudeCodeHost } from "./hosts/claude-code.ts";
 import { CodexHost } from "./hosts/codex.ts";
 import type { Host } from "./hosts/base.ts";
@@ -36,27 +36,34 @@ export async function run(argv: string[]): Promise<number> {
   if (command === undefined || command === "-h" || command === "--help") return usage();
   const hostName = resolveHostName();
   if (!hostName) return usage(2);
-  if (command === "skills") {
-    switch (subcommand) {
-      case "list": return cmdList(rest, hostName);
-      case "suggest": return cmdSuggest(rest, hostName);
-      case "route": return cmdRoute(rest, hostName);
-      case "dci": return cmdDci(rest, hostName);
-      case "body": return cmdDci(rest, hostName);
-      case "disable": return cmdDisable(rest, hostName);
-      case "enable": return cmdEnable(rest, hostName);
-      case "status": return cmdStatus(rest, hostName);
-      case undefined:
-      case "-h":
-      case "--help":
-        return usage();
-      default:
-        console.error(`unknown subcommand: ${subcommand}`);
-        return usage(2);
+  try {
+    if (command === "skills") {
+      switch (subcommand) {
+        case "list": return await cmdList(rest, hostName);
+        case "suggest": return await cmdSuggest(rest, hostName);
+        case "route": return await cmdRoute(rest, hostName);
+        case "dci": return await cmdDci(rest, hostName);
+        case "body": return await cmdDci(rest, hostName);
+        case "disable": return await cmdDisable(rest, hostName);
+        case "enable": return await cmdEnable(rest, hostName);
+        case "status": return await cmdStatus(rest, hostName);
+        case undefined:
+        case "-h":
+        case "--help":
+          return usage();
+        default:
+          console.error(`unknown subcommand: ${subcommand}`);
+          return usage(2);
+      }
     }
+    console.error(`unknown command: ${command}`);
+    return usage(2);
+  } catch (err) {
+    if (err instanceof UnknownOptionError) {
+      return reportUnknownOption(err);
+    }
+    throw err;
   }
-  console.error(`unknown command: ${command}`);
-  return usage(2);
 }
 
 function findDeprecatedHostFlag(argv: string[]): string | null {
@@ -132,7 +139,10 @@ STATE     ~/.skill-router/state-<host>.json
 }
 
 async function cmdList(argv: string[], hostName: HostName): Promise<number> {
-  const { values } = parseArgs({ args: argv, options: { json: { type: "boolean" } }, strict: false });
+  const { values } = parseStrict({
+    commandName: "skill-router skills list",
+    config: { args: argv, options: { json: { type: "boolean" } } },
+  });
   const host = createHost(hostName);
   const skills = await host.listSkills();
   const usage = await host.usageStats();
@@ -146,10 +156,12 @@ async function cmdList(argv: string[], hostName: HostName): Promise<number> {
 }
 
 async function cmdSuggest(argv: string[], hostName: HostName): Promise<number> {
-  const { values } = parseArgs({
-    args: argv,
-    options: { "unused-for": { type: "string" }, json: { type: "boolean" } },
-    strict: false,
+  const { values } = parseStrict({
+    commandName: "skill-router skills suggest",
+    config: {
+      args: argv,
+      options: { "unused-for": { type: "string" }, json: { type: "boolean" } },
+    },
   });
   const host = createHost(hostName);
   const config = await loadConfig();
@@ -167,17 +179,19 @@ async function cmdSuggest(argv: string[], hostName: HostName): Promise<number> {
 }
 
 async function cmdRoute(argv: string[], hostName: HostName): Promise<number> {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: {
-      query: { type: "string", short: "q" },
-      json: { type: "boolean" },
-      "top-k": { type: "string" },
-      mode: { type: "string" },
-      "no-record": { type: "boolean" },
+  const { values, positionals } = parseStrict({
+    commandName: "skill-router skills route",
+    config: {
+      args: argv,
+      options: {
+        query: { type: "string", short: "q" },
+        json: { type: "boolean" },
+        "top-k": { type: "string" },
+        mode: { type: "string" },
+        "no-record": { type: "boolean" },
+      },
+      allowPositionals: true,
     },
-    allowPositionals: true,
-    strict: false,
   });
   const query = ((values.query as string | undefined) ?? positionals.join(" ")).trim();
   if (query === "") {
@@ -290,17 +304,19 @@ async function cmdDci(argv: string[], hostName: HostName): Promise<number> {
 }
 
 async function cmdDciSearch(argv: string[], hostName: HostName): Promise<number> {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: {
-      query: { type: "string", short: "q", multiple: true },
-      json: { type: "boolean" },
-      "top-k": { type: "string" },
-      "max-snippets": { type: "string" },
-      "max-queries": { type: "string" },
+  const { values, positionals } = parseStrict({
+    commandName: "skill-router skills dci search",
+    config: {
+      args: argv,
+      options: {
+        query: { type: "string", short: "q", multiple: true },
+        json: { type: "boolean" },
+        "top-k": { type: "string" },
+        "max-snippets": { type: "string" },
+        "max-queries": { type: "string" },
+      },
+      allowPositionals: true,
     },
-    allowPositionals: true,
-    strict: false,
   });
   const queries = stringValues(values.query);
   const positionalQuery = positionals.join(" ").trim();
@@ -331,17 +347,19 @@ async function cmdDciSearch(argv: string[], hostName: HostName): Promise<number>
 }
 
 async function cmdDciGrep(argv: string[], hostName: HostName): Promise<number> {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: {
-      pattern: { type: "string", short: "p" },
-      json: { type: "boolean" },
-      regex: { type: "boolean" },
-      "top-k": { type: "string" },
-      "max-snippets": { type: "string" },
+  const { values, positionals } = parseStrict({
+    commandName: "skill-router skills dci grep",
+    config: {
+      args: argv,
+      options: {
+        pattern: { type: "string", short: "p" },
+        json: { type: "boolean" },
+        regex: { type: "boolean" },
+        "top-k": { type: "string" },
+        "max-snippets": { type: "string" },
+      },
+      allowPositionals: true,
     },
-    allowPositionals: true,
-    strict: false,
   });
   const pattern = ((values.pattern as string | undefined) ?? positionals.join(" ")).trim();
   if (pattern === "") {
@@ -376,16 +394,18 @@ async function cmdDciGrep(argv: string[], hostName: HostName): Promise<number> {
 }
 
 async function cmdDciFind(argv: string[], hostName: HostName): Promise<number> {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: {
-      pattern: { type: "string", short: "p" },
-      json: { type: "boolean" },
-      regex: { type: "boolean" },
-      "max-snippets": { type: "string" },
+  const { values, positionals } = parseStrict({
+    commandName: "skill-router skills dci find",
+    config: {
+      args: argv,
+      options: {
+        pattern: { type: "string", short: "p" },
+        json: { type: "boolean" },
+        regex: { type: "boolean" },
+        "max-snippets": { type: "string" },
+      },
+      allowPositionals: true,
     },
-    allowPositionals: true,
-    strict: false,
   });
   const idOrRef = positionals[0];
   if (!idOrRef) {
@@ -424,15 +444,17 @@ async function cmdDciFind(argv: string[], hostName: HostName): Promise<number> {
 }
 
 async function cmdDciOpen(argv: string[], hostName: HostName): Promise<number> {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: {
-      json: { type: "boolean" },
-      line: { type: "string" },
-      window: { type: "string" },
+  const { values, positionals } = parseStrict({
+    commandName: "skill-router skills dci open",
+    config: {
+      args: argv,
+      options: {
+        json: { type: "boolean" },
+        line: { type: "string" },
+        window: { type: "string" },
+      },
+      allowPositionals: true,
     },
-    allowPositionals: true,
-    strict: false,
   });
   const idOrRef = positionals[0];
   if (!idOrRef) {
@@ -465,11 +487,13 @@ async function cmdDciOpen(argv: string[], hostName: HostName): Promise<number> {
 }
 
 async function cmdDciInspect(argv: string[], hostName: HostName): Promise<number> {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: { json: { type: "boolean" } },
-    allowPositionals: true,
-    strict: false,
+  const { values, positionals } = parseStrict({
+    commandName: "skill-router skills dci inspect",
+    config: {
+      args: argv,
+      options: { json: { type: "boolean" } },
+      allowPositionals: true,
+    },
   });
   const id = positionals[0];
   if (!id) {
@@ -489,14 +513,16 @@ async function cmdDciInspect(argv: string[], hostName: HostName): Promise<number
 }
 
 async function cmdDciRead(argv: string[], hostName: HostName): Promise<number> {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: {
-      json: { type: "boolean" },
-      "max-chars": { type: "string" },
+  const { values, positionals } = parseStrict({
+    commandName: "skill-router skills dci read",
+    config: {
+      args: argv,
+      options: {
+        json: { type: "boolean" },
+        "max-chars": { type: "string" },
+      },
+      allowPositionals: true,
     },
-    allowPositionals: true,
-    strict: false,
   });
   const id = positionals[0];
   if (!id) {
@@ -518,17 +544,19 @@ async function cmdDciRead(argv: string[], hostName: HostName): Promise<number> {
 }
 
 async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number> {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: {
-      query: { type: "string", short: "q" },
-      confidence: { type: "string" },
-      reason: { type: "string" },
-      json: { type: "boolean" },
-      "no-record": { type: "boolean" },
+  const { values, positionals } = parseStrict({
+    commandName: "skill-router skills dci select",
+    config: {
+      args: argv,
+      options: {
+        query: { type: "string", short: "q" },
+        confidence: { type: "string" },
+        reason: { type: "string" },
+        json: { type: "boolean" },
+        "no-record": { type: "boolean" },
+      },
+      allowPositionals: true,
     },
-    allowPositionals: true,
-    strict: false,
   });
   const id = positionals[0];
   if (!id) {
@@ -604,10 +632,12 @@ async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number>
 }
 
 async function cmdDciBudget(argv: string[]): Promise<number> {
-  const { values } = parseArgs({
-    args: argv,
-    options: { json: { type: "boolean" } },
-    strict: false,
+  const { values } = parseStrict({
+    commandName: "skill-router skills dci budget",
+    config: {
+      args: argv,
+      options: { json: { type: "boolean" } },
+    },
   });
   if (values.json) {
     process.stdout.write(JSON.stringify(DCI_BUDGET, null, 2) + "\n");
@@ -627,17 +657,19 @@ async function cmdDciBudget(argv: string[]): Promise<number> {
 }
 
 async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    options: {
-      "all-suggested": { type: "boolean" },
-      "unused-for": { type: "string" },
-      yes: { type: "boolean", short: "y" },
-      reason: { type: "string" },
-      json: { type: "boolean" },
+  const { values, positionals } = parseStrict({
+    commandName: "skill-router skills disable",
+    config: {
+      args: argv,
+      options: {
+        "all-suggested": { type: "boolean" },
+        "unused-for": { type: "string" },
+        yes: { type: "boolean", short: "y" },
+        reason: { type: "string" },
+        json: { type: "boolean" },
+      },
+      allowPositionals: true,
     },
-    allowPositionals: true,
-    strict: false,
   });
 
   const host = createHost(hostName);
@@ -703,11 +735,13 @@ async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
 }
 
 async function cmdEnable(argv: string[], hostName: HostName): Promise<number> {
-  const { positionals, values } = parseArgs({
-    args: argv,
-    options: { json: { type: "boolean" } },
-    allowPositionals: true,
-    strict: false,
+  const { positionals, values } = parseStrict({
+    commandName: "skill-router skills enable",
+    config: {
+      args: argv,
+      options: { json: { type: "boolean" } },
+      allowPositionals: true,
+    },
   });
   if (positionals.length === 0) {
     console.error("specify <id...>");
@@ -745,7 +779,10 @@ async function cmdEnable(argv: string[], hostName: HostName): Promise<number> {
 }
 
 async function cmdStatus(argv: string[], hostName: HostName): Promise<number> {
-  const { values } = parseArgs({ args: argv, options: { json: { type: "boolean" } }, strict: false });
+  const { values } = parseStrict({
+    commandName: "skill-router skills status",
+    config: { args: argv, options: { json: { type: "boolean" } } },
+  });
   const host = createHost(hostName);
   const statePath = statePathForHost(host.name);
   const skills = await host.listSkills();
