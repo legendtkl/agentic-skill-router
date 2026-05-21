@@ -109,6 +109,8 @@ Disable mechanism:
 - Disabled: `SKILL.md.skill-router-disabled`
 - State: `~/.skill-router/state-claude-code.json` or
   `~/.skill-router/state-codex.json`
+- Every `skills disable` form requires explicit `--yes`; without it the CLI
+  prints what would be disabled and exits without renaming files.
 
 Built-in and system skills are listed but cannot be disabled.
 

@@ -57,7 +57,7 @@ test("Codex slash command is a thin compatibility shim", async () => {
   const fm = parseFrontmatter(prompt);
 
   assert.equal(fm.description, "Use the skill-router-skills skill with optional arguments.");
-  assert.equal(fm["argument-hint"], "[route <query>|list|suggest|status|enable <id...>|disable <id...>]");
+  assert.equal(fm["argument-hint"], "[route <query>|list|suggest|status|enable <id...>|disable <id...> --yes]");
   assert.match(prompt, /Invoke\/use the installed `skill-router-skills` skill/);
   assert.ok(prompt.length < 500);
   assert.doesNotMatch(prompt, /Locate CLI/);
