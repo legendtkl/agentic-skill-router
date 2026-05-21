@@ -188,6 +188,7 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
   try {
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -196,26 +197,26 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "list", "--json"], { env });
+    const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "list", "--json"], { env });
     const listed = JSON.parse(list.stdout) as Array<{ id: string; lastUsed: string | null }>;
     assert.ok(listed.some((s) => s.id === "user:codex:brand" && s.lastUsed === "2026-04-20T09:00:00.000Z"));
 
-    const suggest = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "suggest", "--unused-for=365d", "--json"], { env });
+    const suggest = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "suggest", "--unused-for=365d", "--json"], { env });
     const suggestions = JSON.parse(suggest.stdout) as Array<{ id: string }>;
     assert.ok(suggestions.some((s) => s.id === "user:codex:unused-local"));
     assert.ok(!suggestions.some((s) => s.id === "builtin:codex-system:openai-docs"));
     assert.ok(!suggestions.some((s) => s.id === "plugin:browser-use@openai-bundled:browser"));
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local"], { env });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), false);
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled")), true);
 
-    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "status", "--json"], { env });
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], { env });
     const parsedStatus = JSON.parse(status.stdout) as { disabledCount: number; disabled: Array<{ id: string }> };
     assert.equal(parsedStatus.disabledCount, 1);
     assert.equal(parsedStatus.disabled[0]!.id, "user:codex:unused-local");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "enable", "user:codex:unused-local"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local"], { env });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
   } finally {
     await fake.cleanup();
@@ -227,6 +228,7 @@ test("CLI enable cleans disabled state even when skill files disappeared", async
   try {
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -235,18 +237,18 @@ test("CLI enable cleans disabled state even when skill files disappeared", async
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:codex:unused-local"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local"], { env });
     await rm(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled"));
 
     const enabled = await execFileAsync(
       process.execPath,
-      ["--import", "tsx", cli, "--host=codex", "skills", "enable", "user:codex:unused-local", "--json"],
+      ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local", "--json"],
       { env },
     );
     const parsed = JSON.parse(enabled.stdout) as Array<{ id: string }>;
     assert.equal(parsed[0]?.id, "user:codex:unused-local");
 
-    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "status", "--json"], { env });
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], { env });
     const parsedStatus = JSON.parse(status.stdout) as { disabledCount: number };
     assert.equal(parsedStatus.disabledCount, 0);
   } finally {
@@ -260,6 +262,7 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
   try {
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -268,7 +271,7 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail"], { env });
 
     const route = await execFileAsync(
       process.execPath,
@@ -276,7 +279,6 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--query",
@@ -312,6 +314,7 @@ test("CLI JSON route reports weak matches without failing or read actions", asyn
   try {
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -320,14 +323,13 @@ test("CLI JSON route reports weak matches without failing or read actions", asyn
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail"], { env });
     const route = await execFileAsync(
       process.execPath,
       [
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--query",
@@ -357,6 +359,7 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
   try {
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -365,7 +368,7 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "--host=codex", "skills", "disable", "user:agents:lark-mail"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail"], { env });
     const badStateDir = join(fake.root, "state-dir-is-a-file");
     await writeFile(badStateDir, "not a directory");
 
@@ -375,7 +378,6 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--query",
@@ -427,6 +429,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
 
     const env = {
       ...process.env,
+      SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
       SKILL_ROUTER_CWD: fake.cwd,
@@ -437,7 +440,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
 
     const budget = await execFileAsync(
       process.execPath,
-      ["--import", "tsx", cli, "--host=codex", "skills", "dci", "budget", "--json"],
+      ["--import", "tsx", cli, "skills", "dci", "budget", "--json"],
       { env },
     );
     const parsedBudget = JSON.parse(budget.stdout) as { maxQueries: number; maxSelections: number; maxOpenChars: number };
@@ -451,7 +454,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--mode=lexical",
@@ -471,7 +473,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--query",
@@ -496,7 +497,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--mode=metadata",
@@ -522,7 +522,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--mode=dci",
@@ -548,7 +547,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "route",
         "--mode=body",
@@ -574,7 +572,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "search",
@@ -606,7 +603,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "grep",
@@ -626,7 +622,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "grep",
@@ -647,7 +642,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "find",
@@ -668,7 +662,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "open",
@@ -687,7 +680,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
 
     const read = await execFileAsync(
       process.execPath,
-      ["--import", "tsx", cli, "--host=codex", "skills", "dci", "read", bodyProbeRef, "--json"],
+      ["--import", "tsx", cli, "skills", "dci", "read", bodyProbeRef, "--json"],
       { env },
     );
     const parsedRead = JSON.parse(read.stdout) as { action: string; content: string };
@@ -700,7 +693,6 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--import",
         "tsx",
         cli,
-        "--host=codex",
         "skills",
         "dci",
         "select",

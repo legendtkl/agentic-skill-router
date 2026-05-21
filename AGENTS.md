@@ -28,6 +28,8 @@ Subagent management is intentionally out of scope in this repository.
 | Run CLI from source | `npm run cli -- skills list` |
 | Type check | `npm run typecheck` |
 | Test | `npm test` |
+| E2E | `npm run test:e2e` |
+| Codex CLI e2e | `npm run test:e2e:codex` |
 | Build bundles | `npm run build` |
 | Install Claude plugin | `npm run install:plugin` |
 | Install Codex plugin | `npm run install:codex-plugin` |
@@ -48,7 +50,59 @@ npm test
 npm run build
 ```
 
+For Codex-related executable changes, also run the networked OpenAI skills e2e
+for the installed `skill-router` CLI path under `SKILL_ROUTER_HOST=codex`:
+
+```bash
+npm run test:e2e
+```
+
+If a change touches Codex CLI startup, slash prompts, plugin loading, or the
+agent-facing `skill-router-skills` workflow, also run the real Codex CLI e2e
+when local `codex` and Codex auth are available:
+
+```bash
+npm run test:e2e:codex
+```
+
+If either e2e is not run because local Codex, network, GitHub, or auth access is
+unavailable, state that explicitly in the final verification notes.
+
 Documentation-only changes may skip the test suite.
+
+## Codex OpenAI E2E
+
+- Keep `tests/codex-openai.e2e.ts` as the real Codex install and routing
+  guard for changes that touch Codex host discovery, Codex plugin install,
+  disable/enable state, route selection, or disabled-skill DCI behavior.
+- Keep `npm run test:e2e` as the default e2e command for installed
+  `skill-router` behavior with `SKILL_ROUTER_HOST=codex`. It should not require
+  local Codex CLI auth, and tests should not pass `--host=codex` on each CLI
+  invocation.
+- Keep `npm run test:e2e:codex` as the explicit real `codex exec` e2e for
+  machines that have a local Codex CLI and auth.
+- The case must create a fresh `CODEX_HOME`, install the local skill-router
+  Codex plugin, install all curated skills from the pinned official
+  `openai/skills` repository, disable a subset via the installed
+  `skill-router` binary, and verify at least 20 realistic user queries through
+  `skills route --json`.
+- The pinned `openai/skills` ref currently contains 38 curated skills; the e2e
+  should install that whole curated corpus rather than sampling a smaller set.
+- The separate Codex CLI e2e must invoke the installed `/skill-router:skills`
+  slash prompt, verify the slash prompt sentinel and `skill-router-skills`
+  workflow sentinel, then execute a probe that routes those disabled-skill
+  queries, reads each returned `selected.skillMdPath`, and verifies per-skill
+  sentinel markers from the matched skill file. This guards against tests that
+  only check query text without proving Codex can invoke the installed router in
+  a fresh environment.
+- Only install `skills/.curated/*` from `openai/skills`. Do not copy
+  `skills/.system/*`; those are preinstalled/builtin skills and should stay
+  protected by Codex host logic.
+- The GitHub install commands are intentionally fixed in that test. If the
+  official skill corpus changes, update the pinned repository ref, install
+  command list, expected skill ids, route queries, and this guide together.
+- The default e2e is networked and opt-in. Run `npm run test:e2e` when changing
+  the paths above; regular `npm test` must not run networked e2e files.
 
 ## Coding Notes
 
