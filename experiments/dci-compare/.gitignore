@@ -1,0 +1,8 @@
+# Local experiment state — never commit
+.tmp-home/
+.tmp-home-parallel/
+.corpus-cache/
+
+# Per-cell stream-json transcripts are large and reproducible from the
+# drivers + queries.json. Aggregated summary.json and report.html are kept.
+runs/**/*.jsonl

@@ -1,0 +1,611 @@
+{
+  "note": "skill-NNN -> origin mapping. For analysis only — never installed or shown to the agent.",
+  "cap": 150,
+  "counts": {
+    "gt": 19,
+    "distractor": 80,
+    "noise": 51
+  },
+  "skills": {
+    "skill-079": {
+      "origin": "gt",
+      "origSkillId": "gt/mesh-analysis"
+    },
+    "skill-053": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_mesh-analysis_4ecc5551"
+    },
+    "skill-081": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_mesh-analysis_d3fbf2aa"
+    },
+    "skill-118": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_mesh-analysis_714af174"
+    },
+    "skill-010": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_mesh-analysis_fa49aa08"
+    },
+    "skill-070": {
+      "origin": "gt",
+      "origSkillId": "gt/azure-bgp"
+    },
+    "skill-043": {
+      "origin": "gt",
+      "origSkillId": "gt/citation-management"
+    },
+    "skill-061": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_citation-management_1d3e32b6"
+    },
+    "skill-071": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_citation-management_7d69b153"
+    },
+    "skill-104": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_citation-management_225b1c4c"
+    },
+    "skill-114": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_citation-management_ffedd85d"
+    },
+    "skill-024": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_citation-management_b665632f"
+    },
+    "skill-003": {
+      "origin": "gt",
+      "origSkillId": "gt/pdf"
+    },
+    "skill-097": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pdf_8286a32e"
+    },
+    "skill-125": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pdf_30ec2384"
+    },
+    "skill-106": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pdf_40cbc134"
+    },
+    "skill-038": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pdf_627c5b32"
+    },
+    "skill-108": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pdf_585f0225"
+    },
+    "skill-037": {
+      "origin": "gt",
+      "origSkillId": "gt/d3-visualization"
+    },
+    "skill-060": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_d3-visualization_fa184557"
+    },
+    "skill-107": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_d3-visualization_0a072f61"
+    },
+    "skill-130": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_d3-visualization_056b8495"
+    },
+    "skill-136": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_d3-visualization_11ae01de"
+    },
+    "skill-022": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_d3-visualization_3a2bcda3"
+    },
+    "skill-009": {
+      "origin": "gt",
+      "origSkillId": "gt/dialogue_graph"
+    },
+    "skill-085": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_dialogue_graph_157dde52"
+    },
+    "skill-055": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_dialogue_graph_410964eb"
+    },
+    "skill-145": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_dialogue_graph_9d470f8a"
+    },
+    "skill-099": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_dialogue_graph_e5060037"
+    },
+    "skill-135": {
+      "origin": "gt",
+      "origSkillId": "gt/geospatial-analysis"
+    },
+    "skill-150": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_geospatial-analysis_06e3f21c"
+    },
+    "skill-036": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_geospatial-analysis_40b06aba"
+    },
+    "skill-098": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_geospatial-analysis_48e313e9"
+    },
+    "skill-092": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_geospatial-analysis_61c374b3"
+    },
+    "skill-127": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_geospatial-analysis_be46b3c4"
+    },
+    "skill-080": {
+      "origin": "gt",
+      "origSkillId": "gt/timeseries-detrending"
+    },
+    "skill-109": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_timeseries-detrending_ea120ead"
+    },
+    "skill-017": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_timeseries-detrending_609789fa"
+    },
+    "skill-093": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_timeseries-detrending_8f45ce64"
+    },
+    "skill-045": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_timeseries-detrending_1d22da0f"
+    },
+    "skill-049": {
+      "origin": "gt",
+      "origSkillId": "gt/enterprise-artifact-search"
+    },
+    "skill-056": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_enterprise-artifact-search_cf3ab698"
+    },
+    "skill-029": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_enterprise-artifact-search_065ae28e"
+    },
+    "skill-087": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_enterprise-artifact-search_923b951a"
+    },
+    "skill-013": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_enterprise-artifact-search_0afde566"
+    },
+    "skill-074": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_enterprise-artifact-search_593297c2"
+    },
+    "skill-021": {
+      "origin": "gt",
+      "origSkillId": "gt/gh-cli"
+    },
+    "skill-146": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_gh-cli_9d20e3dd"
+    },
+    "skill-095": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_gh-cli_ca192611"
+    },
+    "skill-088": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_gh-cli_520f3394"
+    },
+    "skill-046": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_gh-cli_e615b387"
+    },
+    "skill-042": {
+      "origin": "gt",
+      "origSkillId": "gt/jax-skills"
+    },
+    "skill-050": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_jax-skills_9c7732e0"
+    },
+    "skill-048": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_jax-skills_db0ac0b6"
+    },
+    "skill-139": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_jax-skills_b58ffa8a"
+    },
+    "skill-122": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_jax-skills_2c3600c7"
+    },
+    "skill-123": {
+      "origin": "gt",
+      "origSkillId": "gt/lab-unit-harmonization"
+    },
+    "skill-129": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_lab-unit-harmonization_9bbf9c8d"
+    },
+    "skill-019": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_lab-unit-harmonization_a5c8c057"
+    },
+    "skill-137": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_lab-unit-harmonization_8970d0ef"
+    },
+    "skill-047": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_lab-unit-harmonization_33faa745"
+    },
+    "skill-116": {
+      "origin": "gt",
+      "origSkillId": "gt/docx"
+    },
+    "skill-062": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_docx_8cd3a335"
+    },
+    "skill-103": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_docx_a6a1cced"
+    },
+    "skill-096": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_docx_f4cd0dbe"
+    },
+    "skill-026": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_docx_465279d1"
+    },
+    "skill-023": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_docx_39f694ff"
+    },
+    "skill-117": {
+      "origin": "gt",
+      "origSkillId": "gt/pddl-skills"
+    },
+    "skill-111": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pddl-skills_51ae9499"
+    },
+    "skill-131": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pddl-skills_de660494"
+    },
+    "skill-110": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pddl-skills_31fd9fd1"
+    },
+    "skill-141": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pddl-skills_b355637b"
+    },
+    "skill-140": {
+      "origin": "gt",
+      "origSkillId": "gt/pptx"
+    },
+    "skill-054": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pptx_05e5854a"
+    },
+    "skill-014": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pptx_f9f0f4f5"
+    },
+    "skill-072": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pptx_5c3e4bc7"
+    },
+    "skill-031": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pptx_27300a92"
+    },
+    "skill-067": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_pptx_3a846b45"
+    },
+    "skill-105": {
+      "origin": "gt",
+      "origSkillId": "gt/xlsx"
+    },
+    "skill-008": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_xlsx_f664aee6"
+    },
+    "skill-076": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_xlsx_3b15bc56"
+    },
+    "skill-121": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_xlsx_5ee0bf28"
+    },
+    "skill-002": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_xlsx_9730a1aa"
+    },
+    "skill-012": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_xlsx_cecb4a3c"
+    },
+    "skill-033": {
+      "origin": "gt",
+      "origSkillId": "gt/qutip"
+    },
+    "skill-028": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_qutip_1d2f09a9"
+    },
+    "skill-147": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_qutip_8cd233a9"
+    },
+    "skill-058": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_qutip_7bb586b8"
+    },
+    "skill-066": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_qutip_5cb010c9"
+    },
+    "skill-068": {
+      "origin": "gt",
+      "origSkillId": "gt/hierarchical-taxonomy-clustering"
+    },
+    "skill-143": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_hierarchical-taxonomy-clustering_3b052b3b"
+    },
+    "skill-032": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_hierarchical-taxonomy-clustering_1d3629bd"
+    },
+    "skill-065": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_hierarchical-taxonomy-clustering_95ead0df"
+    },
+    "skill-124": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_hierarchical-taxonomy-clustering_aea24d72"
+    },
+    "skill-113": {
+      "origin": "gt",
+      "origSkillId": "gt/speech-to-text"
+    },
+    "skill-138": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_speech-to-text_86f4d176"
+    },
+    "skill-052": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_speech-to-text_cbbd1ff3"
+    },
+    "skill-057": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_speech-to-text_e281ff42"
+    },
+    "skill-020": {
+      "origin": "distractor",
+      "origSkillId": "distractor/dist_speech-to-text_2b4a7404"
+    },
+    "skill-064": {
+      "origin": "noise",
+      "origSkillId": "other/erpnext-errors-controllers"
+    },
+    "skill-051": {
+      "origin": "noise",
+      "origSkillId": "other/api-triggered-campaigns"
+    },
+    "skill-011": {
+      "origin": "noise",
+      "origSkillId": "other/brainstorming-datorresb-vibecoding-starter"
+    },
+    "skill-086": {
+      "origin": "noise",
+      "origSkillId": "other/security-scanning-security-hardening"
+    },
+    "skill-094": {
+      "origin": "noise",
+      "origSkillId": "productivity/deployment-procedures"
+    },
+    "skill-100": {
+      "origin": "noise",
+      "origSkillId": "other/readme-standards"
+    },
+    "skill-077": {
+      "origin": "noise",
+      "origSkillId": "other/fullstory-user-properties-rcmaples-btx-2"
+    },
+    "skill-119": {
+      "origin": "noise",
+      "origSkillId": "documents/pdf-reader"
+    },
+    "skill-007": {
+      "origin": "noise",
+      "origSkillId": "other/specify-arvorco-relentless"
+    },
+    "skill-044": {
+      "origin": "noise",
+      "origSkillId": "other/hunt-credential-access"
+    },
+    "skill-025": {
+      "origin": "noise",
+      "origSkillId": "other/core-type-mapping-zerobias-org-module-2"
+    },
+    "skill-041": {
+      "origin": "noise",
+      "origSkillId": "other/edit-changelog-mystilleef-llm-agent-skills-2"
+    },
+    "skill-089": {
+      "origin": "noise",
+      "origSkillId": "development/initializer"
+    },
+    "skill-069": {
+      "origin": "noise",
+      "origSkillId": "other/pr-description-template"
+    },
+    "skill-115": {
+      "origin": "noise",
+      "origSkillId": "design/uiux-design"
+    },
+    "skill-039": {
+      "origin": "noise",
+      "origSkillId": "development/detecting-buffer-overflows"
+    },
+    "skill-078": {
+      "origin": "noise",
+      "origSkillId": "other/review-code-andrewvaughan-agent-council"
+    },
+    "skill-005": {
+      "origin": "noise",
+      "origSkillId": "other/auto-routing"
+    },
+    "skill-015": {
+      "origin": "noise",
+      "origSkillId": "other/push-to-github-spaarke-dev-spaarke"
+    },
+    "skill-148": {
+      "origin": "noise",
+      "origSkillId": "other/devcontainer-expert-decisionaut-devcontainer-expert"
+    },
+    "skill-063": {
+      "origin": "noise",
+      "origSkillId": "development/makefile-generation"
+    },
+    "skill-016": {
+      "origin": "noise",
+      "origSkillId": "other/ai-jyasuu-cheat-sheet"
+    },
+    "skill-101": {
+      "origin": "noise",
+      "origSkillId": "other/agentic-eval-darkglow-net-github-copilot-kicks-2"
+    },
+    "skill-090": {
+      "origin": "noise",
+      "origSkillId": "other/run-issues-silver2dream-ai-workflow-kit-2"
+    },
+    "skill-128": {
+      "origin": "noise",
+      "origSkillId": "other/react-useeffect-flosrn-claude"
+    },
+    "skill-075": {
+      "origin": "noise",
+      "origSkillId": "data/gastrohem-media-processor"
+    },
+    "skill-142": {
+      "origin": "noise",
+      "origSkillId": "other/journal"
+    },
+    "skill-059": {
+      "origin": "noise",
+      "origSkillId": "other/ddd-clean-architecture-partme-ai-full-stack-skills"
+    },
+    "skill-120": {
+      "origin": "noise",
+      "origSkillId": "development/graphql-mutation-builder"
+    },
+    "skill-073": {
+      "origin": "noise",
+      "origSkillId": "other/shared-worker-protocol"
+    },
+    "skill-004": {
+      "origin": "noise",
+      "origSkillId": "other/integrations"
+    },
+    "skill-083": {
+      "origin": "noise",
+      "origSkillId": "other/stability-plurigrid-asi"
+    },
+    "skill-132": {
+      "origin": "noise",
+      "origSkillId": "other/software-developer"
+    },
+    "skill-149": {
+      "origin": "noise",
+      "origSkillId": "other/simple-refactor-proflead-codex-skills-library"
+    },
+    "skill-082": {
+      "origin": "noise",
+      "origSkillId": "other/lint-and-validate-hainamchung-agent-assistant"
+    },
+    "skill-091": {
+      "origin": "noise",
+      "origSkillId": "other/mermaid-creator"
+    },
+    "skill-133": {
+      "origin": "noise",
+      "origSkillId": "other/quarto-publish"
+    },
+    "skill-027": {
+      "origin": "noise",
+      "origSkillId": "other/bb80-specification-closure-seanchatmangpt-ggen-61067fd1"
+    },
+    "skill-001": {
+      "origin": "noise",
+      "origSkillId": "other/cost-estimate"
+    },
+    "skill-040": {
+      "origin": "noise",
+      "origSkillId": "other/concurrent-rendering-orchestration-harborgrid-justin-lexiflow-premium-73598911"
+    },
+    "skill-084": {
+      "origin": "noise",
+      "origSkillId": "design/prompting-pattern-library-exploration-labs-nates-substack-skill-62c93a6a"
+    },
+    "skill-034": {
+      "origin": "noise",
+      "origSkillId": "testing/blender-3d"
+    },
+    "skill-102": {
+      "origin": "noise",
+      "origSkillId": "other/axe-ios-simulator"
+    },
+    "skill-126": {
+      "origin": "noise",
+      "origSkillId": "other/feature-flag-playbook-proflead-codex-skills-library-2"
+    },
+    "skill-030": {
+      "origin": "noise",
+      "origSkillId": "other/socratic-review"
+    },
+    "skill-018": {
+      "origin": "noise",
+      "origSkillId": "other/kitt-create-hooks-utahdws-webteam-ai-tools"
+    },
+    "skill-035": {
+      "origin": "noise",
+      "origSkillId": "other/pint-compute-parcadei-continuous-claude-v3"
+    },
+    "skill-006": {
+      "origin": "noise",
+      "origSkillId": "data/adhd-advisor"
+    },
+    "skill-134": {
+      "origin": "noise",
+      "origSkillId": "other/beta"
+    },
+    "skill-112": {
+      "origin": "noise",
+      "origSkillId": "other/repo-issue"
+    },
+    "skill-144": {
+      "origin": "noise",
+      "origSkillId": "other/product-hunt-kit"
+    }
+  }
+}

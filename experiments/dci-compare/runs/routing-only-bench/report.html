@@ -1,0 +1,177 @@
+<!doctype html><meta charset="utf-8" />
+<title>routing-only: native vs J (3 queries)</title>
+<style>
+  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 1000px; margin: 32px auto; padding: 0 16px; color: #1f2937; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .muted { color: #6b7280; font-size: 90%; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  th, td { padding: 8px 10px; vertical-align: top; border-bottom: 1px solid #e5e7eb; text-align: left; }
+  th { background: #f3f4f6; font-weight: 600; }
+  tr.agg td { background: #fefce8; }
+  .qcell { width: 22%; font-size: 13px; }
+  .cell { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  .cell.muted { padding: 4px; }
+  .line { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; }
+  .line .lbl { color: #6b7280; }
+  .ok { color: #059669; }
+  .fail { color: #dc2626; }
+  details { margin-top: 18px; }
+  details summary { cursor: pointer; font-weight: 600; font-size: 13px; padding: 6px 0; }
+  .chains { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+  .chainblk h4 { font-size: 12px; margin: 0 0 4px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; }
+  .chainblk ol { font-size: 12px; padding-left: 20px; margin: 0; }
+  .chainblk code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }
+  .chainblk code.arg { color: #6b7280; word-break: break-all; }
+  .final { margin-top: 8px; font-size: 11px; }
+  .final code { word-break: break-all; }
+</style>
+<h1>Routing-only: native vs J-bounded</h1>
+<p class="muted">3 queries × 2 modes. Production J SKILL.md (no stop in body) + routing-only stop instruction appended to query tail. NO <code>--append-system-prompt</code>. Corpus: 150 SkillRouter-cropped skills.</p>
+
+<table>
+  <thead><tr><th>query</th><th>native (corpus enabled, no plugin)</th><th>J (corpus disabled, plugin loaded)</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="qcell"><b>3d-scan-calc</b><br><span class="muted">gt: user:skill-079<br>domain: engineering</span></td>
+      <td>
+      <div class="cell">
+        <div class="line"><span class="lbl">turns</span><span>3</span></div>
+        <div class="line"><span class="lbl">duration</span><span>0.0s</span></div>
+        <div class="line"><span class="lbl">cost</span><span>—</span></div>
+        <div class="line"><span class="lbl">ctx start</span><span>35.9K</span></div>
+        <div class="line"><span class="lbl">ctx end</span><span>36.2K</span></div>
+        <div class="line"><span class="lbl">cache read</span><span>0</span></div>
+        <div class="line"><span class="lbl">cache create</span><span>0</span></div>
+        <div class="line"><span class="lbl">output</span><span>0</span></div>
+        <div class="line"><span class="lbl">init skills</span><span>161</span></div>
+        <div class="line"><span class="lbl">matched</span><span class="fail">— ✗</span></div>
+      </div></td>
+      <td>
+      <div class="cell">
+        <div class="line"><span class="lbl">turns</span><span>4</span></div>
+        <div class="line"><span class="lbl">duration</span><span>14.4s</span></div>
+        <div class="line"><span class="lbl">cost</span><span>$0.0669</span></div>
+        <div class="line"><span class="lbl">ctx start</span><span>27.5K</span></div>
+        <div class="line"><span class="lbl">ctx end</span><span>29.5K</span></div>
+        <div class="line"><span class="lbl">cache read</span><span>83.5K</span></div>
+        <div class="line"><span class="lbl">cache create</span><span>1.9K</span></div>
+        <div class="line"><span class="lbl">output</span><span>485</span></div>
+        <div class="line"><span class="lbl">init skills</span><span>12</span></div>
+        <div class="line"><span class="lbl">matched</span><span class="ok">skill-079 ✓</span></div>
+      </div></td>
+    </tr>
+    <tr>
+      <td class="qcell"><b>dialogue-parser</b><br><span class="muted">gt: user:skill-009<br>domain: game</span></td>
+      <td>
+      <div class="cell">
+        <div class="line"><span class="lbl">turns</span><span>1</span></div>
+        <div class="line"><span class="lbl">duration</span><span>5.0s</span></div>
+        <div class="line"><span class="lbl">cost</span><span>$0.1219</span></div>
+        <div class="line"><span class="lbl">ctx start</span><span>36.1K</span></div>
+        <div class="line"><span class="lbl">ctx end</span><span>36.1K</span></div>
+        <div class="line"><span class="lbl">cache read</span><span>18.7K</span></div>
+        <div class="line"><span class="lbl">cache create</span><span>17.5K</span></div>
+        <div class="line"><span class="lbl">output</span><span>94</span></div>
+        <div class="line"><span class="lbl">init skills</span><span>161</span></div>
+        <div class="line"><span class="lbl">matched</span><span class="ok">skill-009 ✓</span></div>
+      </div></td>
+      <td>
+      <div class="cell">
+        <div class="line"><span class="lbl">turns</span><span>4</span></div>
+        <div class="line"><span class="lbl">duration</span><span>14.7s</span></div>
+        <div class="line"><span class="lbl">cost</span><span>$0.1304</span></div>
+        <div class="line"><span class="lbl">ctx start</span><span>27.8K</span></div>
+        <div class="line"><span class="lbl">ctx end</span><span>31.4K</span></div>
+        <div class="line"><span class="lbl">cache read</span><span>75.2K</span></div>
+        <div class="line"><span class="lbl">cache create</span><span>12.7K</span></div>
+        <div class="line"><span class="lbl">output</span><span>485</span></div>
+        <div class="line"><span class="lbl">init skills</span><span>12</span></div>
+        <div class="line"><span class="lbl">matched</span><span class="ok">skill-009 ✓</span></div>
+      </div></td>
+    </tr>
+    <tr>
+      <td class="qcell"><b>citation-check</b><br><span class="muted">gt: user:skill-043<br>domain: research</span></td>
+      <td>
+      <div class="cell">
+        <div class="line"><span class="lbl">turns</span><span>1</span></div>
+        <div class="line"><span class="lbl">duration</span><span>5.2s</span></div>
+        <div class="line"><span class="lbl">cost</span><span>$0.1199</span></div>
+        <div class="line"><span class="lbl">ctx start</span><span>35.9K</span></div>
+        <div class="line"><span class="lbl">ctx end</span><span>35.9K</span></div>
+        <div class="line"><span class="lbl">cache read</span><span>18.7K</span></div>
+        <div class="line"><span class="lbl">cache create</span><span>17.2K</span></div>
+        <div class="line"><span class="lbl">output</span><span>94</span></div>
+        <div class="line"><span class="lbl">init skills</span><span>161</span></div>
+        <div class="line"><span class="lbl">matched</span><span class="ok">skill-043 ✓</span></div>
+      </div></td>
+      <td>
+      <div class="cell">
+        <div class="line"><span class="lbl">turns</span><span>4</span></div>
+        <div class="line"><span class="lbl">duration</span><span>13.1s</span></div>
+        <div class="line"><span class="lbl">cost</span><span>$0.1174</span></div>
+        <div class="line"><span class="lbl">ctx start</span><span>27.5K</span></div>
+        <div class="line"><span class="lbl">ctx end</span><span>29.3K</span></div>
+        <div class="line"><span class="lbl">cache read</span><span>74.7K</span></div>
+        <div class="line"><span class="lbl">cache create</span><span>10.6K</span></div>
+        <div class="line"><span class="lbl">output</span><span>516</span></div>
+        <div class="line"><span class="lbl">init skills</span><span>12</span></div>
+        <div class="line"><span class="lbl">matched</span><span class="ok">skill-043 ✓</span></div>
+      </div></td>
+    </tr><tr class="agg"><td class="qcell"><b>aggregate</b></td><td>
+      <div class="cell">
+        <div class="line"><span class="lbl">accuracy</span><span>2/3</span></div>
+        <div class="line"><span class="lbl">∑ turns</span><span>5</span></div>
+        <div class="line"><span class="lbl">∑ duration</span><span>10.3s</span></div>
+        <div class="line"><span class="lbl">∑ cost</span><span>$0.2418</span></div>
+        <div class="line"><span class="lbl">avg ctx end</span><span>36.1K</span></div>
+      </div></td><td>
+      <div class="cell">
+        <div class="line"><span class="lbl">accuracy</span><span>3/3</span></div>
+        <div class="line"><span class="lbl">∑ turns</span><span>12</span></div>
+        <div class="line"><span class="lbl">∑ duration</span><span>42.2s</span></div>
+        <div class="line"><span class="lbl">∑ cost</span><span>$0.3147</span></div>
+        <div class="line"><span class="lbl">avg ctx end</span><span>30.0K</span></div>
+      </div></td></tr></tbody>
+</table>
+
+<h2 style="margin-top:32px; font-size:16px">Tool chains</h2>
+
+    <details><summary>3d-scan-calc — tool chains</summary>
+      <div class="chains">
+        <div class="chainblk">
+          <h4>native</h4>
+          <ol><li><code>Bash</code> <code class="arg">find / -type d -name &quot;skill-118&quot; 2&gt;/dev/null | head -5</code></li><li><code>Bash</code> <code class="arg">find /root /Users/bytedance /tmp -type d -name &quot;skill-118&quot; 2&gt;/dev/null | head -5</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code></code></div>
+        </div>
+        <div class="chainblk">
+          <h4>j</h4>
+          <ol><li><code>Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>Bash</code> <code class="arg">grep -i -m1 &#39;^description:&#39; ~/.claude/skills/*/SKILL.md.skill-router-disabled | grep -i -E &quot;STL|mesh|3D|triangle|volume&quot; | head -20</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_path&quot;:&quot;/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/skills/skill-079/SKILL.md.skill-router-disabled&quot;,&quot;matched_skill_name&quot;:&quot;skill-079&quot;}</code></div>
+        </div></div>
+    </details>
+    <details><summary>dialogue-parser — tool chains</summary>
+      <div class="chains">
+        <div class="chainblk">
+          <h4>native</h4>
+          <ol></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_path&quot;:&quot;/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/skills/skill-009/SKILL.md&quot;,&quot;matched_skill_name&quot;:&quot;skill-009&quot;}</code></div>
+        </div>
+        <div class="chainblk">
+          <h4>j</h4>
+          <ol><li><code>Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>Bash</code> <code class="arg">grep -i -m1 &#39;^description:&#39; ~/.claude/skills/*/SKILL.md.skill-router-disabled | grep -i -E &quot;dialogue|script|graph|parser|parse&quot; | head -20</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_path&quot;:&quot;/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/skills/skill-009/SKILL.md.skill-router-disabled&quot;,&quot;matched_skill_name&quot;:&quot;skill-009&quot;}</code></div>
+        </div></div>
+    </details>
+    <details><summary>citation-check — tool chains</summary>
+      <div class="chains">
+        <div class="chainblk">
+          <h4>native</h4>
+          <ol></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_path&quot;:&quot;/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/skills/skill-043/SKILL.md&quot;,&quot;matched_skill_name&quot;:&quot;skill-043&quot;}</code></div>
+        </div>
+        <div class="chainblk">
+          <h4>j</h4>
+          <ol><li><code>Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>Bash</code> <code class="arg">grep -i -m1 &#39;^description:&#39; ~/.claude/skills/*/SKILL.md.skill-router-disabled | grep -i -E &quot;bibtex|bibliograph|citation|hallucinat|academic&quot; | head -20</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_path&quot;:&quot;/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/skills/skill-043/SKILL.md.skill-router-disabled&quot;,&quot;matched_skill_name&quot;:&quot;skill-043&quot;}</code></div>
+        </div></div>
+    </details>
