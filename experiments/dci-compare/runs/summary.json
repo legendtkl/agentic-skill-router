@@ -1,0 +1,49 @@
+{
+  "routerSkillPath": "/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/plugins/cache/local/skill-router/0.1.0/skills/skill-router-skills/SKILL.md",
+  "routerBin": "/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/plugins/cache/local/skill-router/0.1.0/bin/skill-router",
+  "home": "/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home",
+  "variants": [
+    "J-bounded"
+  ],
+  "queries": [
+    {
+      "id": "3d-scan-calc",
+      "expected": "user:skill-079",
+      "kind": "skillrouter"
+    }
+  ],
+  "results": [
+    {
+      "variant": "J-bounded",
+      "query": "3d-scan-calc",
+      "expected": "user:skill-079",
+      "exitCode": 0,
+      "duration": 49449,
+      "numTurns": 4,
+      "durationMs": 44022,
+      "costUsd": 0.076337,
+      "totalInput": 13,
+      "totalOutput": 634,
+      "totalCacheCreate": 2816,
+      "totalCacheRead": 84170,
+      "finalText": "{\"matched_skill_path\":\"/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/skills/skill-079/SKILL.md.skill-router-disabled\",\"matched_skill_name\":\"skill-079\"}",
+      "toolCalls": [
+        {
+          "name": "Skill",
+          "input": {
+            "skill": "skill-router:skill-router-skills",
+            "args": "Parse binary STL file with custom Material ID in Attribute Byte Count, find largest connected component, calculate volume and mass"
+          }
+        },
+        {
+          "name": "Bash",
+          "input": {
+            "command": "grep -i -m1 '^description:' ~/.claude/skills/*/SKILL.md.skill-router-disabled 2>/dev/null | grep -i -E \"STL|mesh|3D|volume|geometry|triangle\" | head -20",
+            "description": "Search disabled skills for STL/mesh/3D related descriptions"
+          }
+        }
+      ]
+    }
+  ],
+  "finishedAt": "2026-05-23T13:12:29.605Z"
+}

@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Thin DCI corpus-access wrapper for variant E (compact digest).
+#
+# Mechanical aggregation ONLY — no scoring, no ranking, no retrieval logic.
+# It just packages the same raw corpus access B/C do via ls/grep/sed into two
+# bounded one-shot operations, so the agent spends fewer turns (and therefore
+# accumulates less re-sent context) while keeping all judgement to itself.
+set -euo pipefail
+
+root="${SKILL_CORPUS_ROOT:-$HOME/.claude/skills}"
+glob="$root"/*/SKILL.md.skill-router-disabled
+
+case "${1:-}" in
+  catalog)
+    # One line per disabled skill: <id> TAB <description (<=280 chars)>.
+    for f in $glob; do
+      [ -e "$f" ] || continue
+      id=$(basename "$(dirname "$f")")
+      desc=$(awk '/^description:/{sub(/^description: */,"");gsub(/^"|"$/,"");print;exit}' "$f")
+      printf '%s\t%s\n' "$id" "${desc:0:280}"
+    done
+    ;;
+  show)
+    # Bounded full read of one skill body.
+    f="$root/${2:?usage: skill-corpus show <id>}/SKILL.md.skill-router-disabled"
+    [ -e "$f" ] || { echo "no such disabled skill: $2" >&2; exit 1; }
+    sed -n '1,220p' "$f"
+    ;;
+  *)
+    echo "usage: skill-corpus {catalog | show <id>}" >&2
+    exit 1
+    ;;
+esac

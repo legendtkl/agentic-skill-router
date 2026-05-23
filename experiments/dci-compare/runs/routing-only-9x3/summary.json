@@ -1,0 +1,252 @@
+{
+  "startedAt": "2026-05-23T15:45:59.131Z",
+  "finishedAt": "2026-05-23T16:14:06.223Z",
+  "home": "/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home",
+  "timeoutMs": 240000,
+  "queries": [
+    {
+      "id": "3d-scan-calc",
+      "expected": "user:skill-079",
+      "domain": "engineering"
+    },
+    {
+      "id": "dialogue-parser",
+      "expected": "user:skill-009",
+      "domain": "game"
+    },
+    {
+      "id": "citation-check",
+      "expected": "user:skill-043",
+      "domain": "research"
+    }
+  ],
+  "variants": [
+    {
+      "id": "G-native",
+      "mode": "native"
+    },
+    {
+      "id": "A-router",
+      "mode": "router"
+    },
+    {
+      "id": "B-cc",
+      "mode": "router"
+    },
+    {
+      "id": "C-lite",
+      "mode": "router"
+    },
+    {
+      "id": "D-agentic",
+      "mode": "router"
+    },
+    {
+      "id": "E-digest",
+      "mode": "router"
+    },
+    {
+      "id": "H-bounded",
+      "mode": "router"
+    },
+    {
+      "id": "I-meta",
+      "mode": "router"
+    },
+    {
+      "id": "J-bounded",
+      "mode": "router"
+    }
+  ],
+  "runs": [
+    {
+      "variant": "G-native",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6653
+    },
+    {
+      "variant": "G-native",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7436
+    },
+    {
+      "variant": "G-native",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6719
+    },
+    {
+      "variant": "A-router",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18600
+    },
+    {
+      "variant": "A-router",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20116
+    },
+    {
+      "variant": "A-router",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20335
+    },
+    {
+      "variant": "B-cc",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 72390
+    },
+    {
+      "variant": "B-cc",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 52746
+    },
+    {
+      "variant": "B-cc",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 1160155
+    },
+    {
+      "variant": "C-lite",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23526
+    },
+    {
+      "variant": "C-lite",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24099
+    },
+    {
+      "variant": "C-lite",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24076
+    },
+    {
+      "variant": "D-agentic",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16718
+    },
+    {
+      "variant": "D-agentic",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16880
+    },
+    {
+      "variant": "D-agentic",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18177
+    },
+    {
+      "variant": "E-digest",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15366
+    },
+    {
+      "variant": "E-digest",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18975
+    },
+    {
+      "variant": "E-digest",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6918
+    },
+    {
+      "variant": "H-bounded",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20280
+    },
+    {
+      "variant": "H-bounded",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22388
+    },
+    {
+      "variant": "H-bounded",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7503
+    },
+    {
+      "variant": "I-meta",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15866
+    },
+    {
+      "variant": "I-meta",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14558
+    },
+    {
+      "variant": "I-meta",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15484
+    },
+    {
+      "variant": "J-bounded",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13742
+    },
+    {
+      "variant": "J-bounded",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18402
+    },
+    {
+      "variant": "J-bounded",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15007
+    }
+  ]
+}

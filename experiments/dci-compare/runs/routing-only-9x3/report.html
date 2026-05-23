@@ -1,0 +1,705 @@
+<!doctype html><meta charset="utf-8" />
+<title>routing-only 9×3</title>
+<style>
+  body { font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 1200px; margin: 28px auto; padding: 0 18px; color: #1f2937; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  h2 { font-size: 17px; margin-top: 32px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
+  h3 { font-size: 14px; margin: 22px 0 8px; }
+  h4 { font-size: 13px; margin: 0 0 6px; }
+  .muted { color: #6b7280; font-size: 90%; font-weight: normal; }
+  .footnote { font-size: 11px; margin-top: 4px; }
+  .warn { color: #b45309; font-weight: bold; }
+  .ok { color: #059669; }
+  .fail { color: #dc2626; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 12px; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
+  th { background: #f3f4f6; font-weight: 600; }
+  table.agg td { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  table.agg td:first-child { font-family: inherit; }
+  table.percell td { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  table.percell td:first-child { font-family: inherit; }
+  details { margin-top: 18px; }
+  details summary { cursor: pointer; padding: 6px 0; font-size: 13px; }
+  .chains { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 8px; }
+  .chainblk { padding: 8px 12px; background: #f9fafb; border-radius: 4px; }
+  .chainblk ol { font-size: 11px; padding-left: 22px; margin: 0; }
+  .chainblk code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }
+  .chainblk code.arg { color: #6b7280; word-break: break-all; }
+  .final { margin-top: 8px; font-size: 11px; }
+  .final code { word-break: break-all; }
+  .final .lbl { color: #6b7280; }
+  .setup { background: #fefce8; border: 1px solid #fde047; padding: 12px 16px; border-radius: 4px; font-size: 13px; margin-top: 18px; }
+  .setup table { font-size: 12px; }
+  .setup table td:first-child { color: #6b7280; width: 25%; }
+</style>
+<h1>Routing-only: 9 variants × 3 queries</h1>
+<p class="muted">Aligned setup: shared strong description (only triggers), variant body production-ized (stop block removed), STOP_TAIL in query controls termination and requires only <code>matched_skill_name</code>. NO <code>--append-system-prompt</code>, NO <code>--max-turns</code>. Corpus: 150 SkillRouter-cropped skills.</p>
+
+<h2>Variant aggregate</h2>
+
+  <table class="agg">
+    <thead><tr>
+      <th>variant</th><th>accuracy</th><th>trigger rate</th><th>∑ turns</th>
+      <th>∑ duration</th><th>∑ cost</th><th>avg ctx start</th><th>avg ctx end</th>
+      <th>timeouts</th>
+    </tr></thead>
+    <tbody>
+      <tr style="border-left:4px solid #64748b">
+        <td><b>G-native</b><br><span class="muted">G — native (Claude Code skill auto-select, corpus enabled, no plugin)</span></td>
+        <td>2/3</td>
+        <td>—</td>
+        <td>3</td>
+        <td>13.8s</td>
+        <td>$0.3551</td>
+        <td>35.9K</td>
+        <td>35.9K</td>
+        <td>0</td>
+      </tr>
+      <tr style="border-left:4px solid #3b82f6">
+        <td><b>A-router</b><br><span class="muted">A — self-implemented retriever (skill-router auto)</span></td>
+        <td>2/3</td>
+        <td>100%</td>
+        <td>12</td>
+        <td>51.5s</td>
+        <td>$0.4914</td>
+        <td>27.6K</td>
+        <td>36.0K</td>
+        <td>0</td>
+      </tr>
+      <tr style="border-left:4px solid #10b981">
+        <td><b>B-cc</b><br><span class="muted">B — DCI-Agent-CC, free shell</span></td>
+        <td>2/3</td>
+        <td>100%</td>
+        <td>33</td>
+        <td>343.0s</td>
+        <td>$0.7021</td>
+        <td>27.6K</td>
+        <td>34.6K</td>
+        <td>0</td>
+      </tr>
+      <tr style="border-left:4px solid #f59e0b">
+        <td><b>C-lite</b><br><span class="muted">C — DCI-Agent-Lite, bash-only + bounded pipelines</span></td>
+        <td>3/3</td>
+        <td>100%</td>
+        <td>19</td>
+        <td>64.2s</td>
+        <td>$0.4726</td>
+        <td>27.6K</td>
+        <td>31.5K</td>
+        <td>0</td>
+      </tr>
+      <tr style="border-left:4px solid #ef4444">
+        <td><b>D-agentic</b><br><span class="muted">D — AgenticRAG, 4-step search/find/open/summarize</span></td>
+        <td>3/3</td>
+        <td>100%</td>
+        <td>12</td>
+        <td>44.1s</td>
+        <td>$0.2725</td>
+        <td>27.6K</td>
+        <td>33.4K</td>
+        <td>0</td>
+      </tr>
+      <tr style="border-left:4px solid #8b5cf6">
+        <td><b>E-digest</b><br><span class="muted">E — compact corpus digest, 2-call wrapper</span></td>
+        <td>2/3</td>
+        <td>67%</td>
+        <td>9</td>
+        <td>34.3s</td>
+        <td>$0.2400</td>
+        <td>27.6K</td>
+        <td>34.1K</td>
+        <td>0</td>
+      </tr>
+      <tr style="border-left:4px solid #db2777">
+        <td><b>H-bounded</b><br><span class="muted">H — DCI-Agent-CC, scoped glob + bounded output</span></td>
+        <td>2/3</td>
+        <td>67%</td>
+        <td>12</td>
+        <td>43.2s</td>
+        <td>$0.2463</td>
+        <td>27.6K</td>
+        <td>30.9K</td>
+        <td>0</td>
+      </tr>
+      <tr style="border-left:4px solid #65a30d">
+        <td><b>I-meta</b><br><span class="muted">I — DCI metadata-only, full catalog dump</span></td>
+        <td>3/3</td>
+        <td>100%</td>
+        <td>12</td>
+        <td>38.7s</td>
+        <td>$0.3510</td>
+        <td>27.6K</td>
+        <td>37.8K</td>
+        <td>0</td>
+      </tr>
+      <tr style="border-left:4px solid #14b8a6">
+        <td><b>J-bounded</b><br><span class="muted">J — keyword-filtered metadata-only</span></td>
+        <td>3/3</td>
+        <td>100%</td>
+        <td>12</td>
+        <td>39.5s</td>
+        <td>$0.2059</td>
+        <td>27.6K</td>
+        <td>30.0K</td>
+        <td>0</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="muted footnote">* cost partially estimated from token usage (timeout, no result event)</p>
+
+<h2>Per-query breakdown</h2>
+
+    <h3>3d-scan-calc <span class="muted">— gt user:skill-079, domain=engineering</span></h3>
+    <table class="percell">
+      <thead><tr>
+        <th>variant</th><th>turns</th><th>dur</th><th>cost</th>
+        <th>ctx start</th><th>ctx end</th><th>cache read</th><th>cache create</th>
+        <th>output</th><th>init skills</th><th>Skill fired</th><th>matched</th>
+      </tr></thead>
+      <tbody><tr style="border-left:4px solid #64748b">
+        <td><b>G-native</b></td>
+        <td>1</td>
+        <td>4.2s</td>
+        <td>$0.1172</td>
+        <td>35.8K</td>
+        <td>35.8K</td>
+        <td>18.7K</td>
+        <td>17.2K</td>
+        <td>21</td>
+        <td>161</td>
+        <td class="muted">n/a (zero-shot)</td>
+        <td class="fail">skill-118 ✗</td>
+      </tr><tr style="border-left:4px solid #3b82f6">
+        <td><b>A-router</b></td>
+        <td>4</td>
+        <td>16.1s</td>
+        <td>$0.1669</td>
+        <td>27.5K</td>
+        <td>36.9K</td>
+        <td>74.6K</td>
+        <td>18.2K</td>
+        <td>602</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-079 ✓</td>
+      </tr><tr style="border-left:4px solid #10b981">
+        <td><b>B-cc</b></td>
+        <td>12</td>
+        <td>70.1s</td>
+        <td>$0.2795</td>
+        <td>27.5K</td>
+        <td>38.1K</td>
+        <td>328.1K</td>
+        <td>10.6K</td>
+        <td>1.9K</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="fail">skill-118 ✗</td>
+      </tr><tr style="border-left:4px solid #f59e0b">
+        <td><b>C-lite</b></td>
+        <td>6</td>
+        <td>21.1s</td>
+        <td>$0.1663</td>
+        <td>27.5K</td>
+        <td>31.4K</td>
+        <td>135.0K</td>
+        <td>12.8K</td>
+        <td>724</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-079 ✓</td>
+      </tr><tr style="border-left:4px solid #ef4444">
+        <td><b>D-agentic</b></td>
+        <td>4</td>
+        <td>14.3s</td>
+        <td>$0.0923</td>
+        <td>27.5K</td>
+        <td>33.3K</td>
+        <td>83.7K</td>
+        <td>5.8K</td>
+        <td>535</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-079 ✓</td>
+      </tr><tr style="border-left:4px solid #8b5cf6">
+        <td><b>E-digest</b></td>
+        <td>4</td>
+        <td>13.0s</td>
+        <td>$0.1116</td>
+        <td>27.5K</td>
+        <td>37.3K</td>
+        <td>83.5K</td>
+        <td>9.8K</td>
+        <td>312</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-079 ✓</td>
+      </tr><tr style="border-left:4px solid #db2777">
+        <td><b>H-bounded</b></td>
+        <td>5</td>
+        <td>18.0s</td>
+        <td>$0.1023</td>
+        <td>27.5K</td>
+        <td>32.1K</td>
+        <td>113.4K</td>
+        <td>4.7K</td>
+        <td>621</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-079 ✓</td>
+      </tr><tr style="border-left:4px solid #65a30d">
+        <td><b>I-meta</b></td>
+        <td>4</td>
+        <td>13.4s</td>
+        <td>$0.1171</td>
+        <td>27.5K</td>
+        <td>37.8K</td>
+        <td>83.5K</td>
+        <td>10.3K</td>
+        <td>412</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-079 ✓</td>
+      </tr><tr style="border-left:4px solid #14b8a6">
+        <td><b>J-bounded</b></td>
+        <td>4</td>
+        <td>11.4s</td>
+        <td>$0.0653</td>
+        <td>27.5K</td>
+        <td>29.4K</td>
+        <td>83.4K</td>
+        <td>1.9K</td>
+        <td>426</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-079 ✓</td>
+      </tr></tbody>
+    </table>
+    <h3>dialogue-parser <span class="muted">— gt user:skill-009, domain=game</span></h3>
+    <table class="percell">
+      <thead><tr>
+        <th>variant</th><th>turns</th><th>dur</th><th>cost</th>
+        <th>ctx start</th><th>ctx end</th><th>cache read</th><th>cache create</th>
+        <th>output</th><th>init skills</th><th>Skill fired</th><th>matched</th>
+      </tr></thead>
+      <tbody><tr style="border-left:4px solid #64748b">
+        <td><b>G-native</b></td>
+        <td>1</td>
+        <td>5.2s</td>
+        <td>$0.1199</td>
+        <td>36.1K</td>
+        <td>36.1K</td>
+        <td>18.7K</td>
+        <td>17.4K</td>
+        <td>21</td>
+        <td>161</td>
+        <td class="muted">n/a (zero-shot)</td>
+        <td class="ok">skill-009 ✓</td>
+      </tr><tr style="border-left:4px solid #3b82f6">
+        <td><b>A-router</b></td>
+        <td>4</td>
+        <td>17.5s</td>
+        <td>$0.1786</td>
+        <td>27.8K</td>
+        <td>38.0K</td>
+        <td>75.0K</td>
+        <td>19.3K</td>
+        <td>779</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="fail">skill-140 ✗</td>
+      </tr><tr style="border-left:4px solid #10b981">
+        <td><b>B-cc</b></td>
+        <td>12</td>
+        <td>50.3s</td>
+        <td>$0.2461</td>
+        <td>27.8K</td>
+        <td>33.4K</td>
+        <td>326.6K</td>
+        <td>5.7K</td>
+        <td>1.9K</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-009 ✓</td>
+      </tr><tr style="border-left:4px solid #f59e0b">
+        <td><b>C-lite</b></td>
+        <td>8</td>
+        <td>21.7s</td>
+        <td>$0.1627</td>
+        <td>27.8K</td>
+        <td>32.3K</td>
+        <td>107.4K</td>
+        <td>13.6K</td>
+        <td>904</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-009 ✓</td>
+      </tr><tr style="border-left:4px solid #ef4444">
+        <td><b>D-agentic</b></td>
+        <td>4</td>
+        <td>14.3s</td>
+        <td>$0.0919</td>
+        <td>27.8K</td>
+        <td>33.8K</td>
+        <td>84.6K</td>
+        <td>6.0K</td>
+        <td>440</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-009 ✓</td>
+      </tr><tr style="border-left:4px solid #8b5cf6">
+        <td><b>E-digest</b></td>
+        <td>4</td>
+        <td>16.8s</td>
+        <td>$0.1131</td>
+        <td>27.8K</td>
+        <td>37.6K</td>
+        <td>84.3K</td>
+        <td>9.8K</td>
+        <td>342</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-009 ✓</td>
+      </tr><tr style="border-left:4px solid #db2777">
+        <td><b>H-bounded</b></td>
+        <td>6</td>
+        <td>20.1s</td>
+        <td>$0.1273</td>
+        <td>27.8K</td>
+        <td>33.1K</td>
+        <td>147.6K</td>
+        <td>5.3K</td>
+        <td>769</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-009 ✓</td>
+      </tr><tr style="border-left:4px solid #65a30d">
+        <td><b>I-meta</b></td>
+        <td>4</td>
+        <td>12.2s</td>
+        <td>$0.1167</td>
+        <td>27.8K</td>
+        <td>38.0K</td>
+        <td>84.3K</td>
+        <td>10.2K</td>
+        <td>380</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-009 ✓</td>
+      </tr><tr style="border-left:4px solid #14b8a6">
+        <td><b>J-bounded</b></td>
+        <td>4</td>
+        <td>15.7s</td>
+        <td>$0.0770</td>
+        <td>27.8K</td>
+        <td>31.4K</td>
+        <td>84.2K</td>
+        <td>3.6K</td>
+        <td>446</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-009 ✓</td>
+      </tr></tbody>
+    </table>
+    <h3>citation-check <span class="muted">— gt user:skill-043, domain=research</span></h3>
+    <table class="percell">
+      <thead><tr>
+        <th>variant</th><th>turns</th><th>dur</th><th>cost</th>
+        <th>ctx start</th><th>ctx end</th><th>cache read</th><th>cache create</th>
+        <th>output</th><th>init skills</th><th>Skill fired</th><th>matched</th>
+      </tr></thead>
+      <tbody><tr style="border-left:4px solid #64748b">
+        <td><b>G-native</b></td>
+        <td>1</td>
+        <td>4.5s</td>
+        <td>$0.1180</td>
+        <td>35.8K</td>
+        <td>35.8K</td>
+        <td>18.7K</td>
+        <td>17.2K</td>
+        <td>21</td>
+        <td>161</td>
+        <td class="muted">n/a (zero-shot)</td>
+        <td class="ok">skill-043 ✓</td>
+      </tr><tr style="border-left:4px solid #3b82f6">
+        <td><b>A-router</b></td>
+        <td>4</td>
+        <td>17.9s</td>
+        <td>$0.1459</td>
+        <td>27.5K</td>
+        <td>33.1K</td>
+        <td>74.5K</td>
+        <td>14.4K</td>
+        <td>698</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-043 ✓</td>
+      </tr><tr style="border-left:4px solid #10b981">
+        <td><b>B-cc</b></td>
+        <td>9</td>
+        <td>222.6s</td>
+        <td>$0.1765</td>
+        <td>27.5K</td>
+        <td>32.2K</td>
+        <td>231.3K</td>
+        <td>4.7K</td>
+        <td>1.2K</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-043 ✓</td>
+      </tr><tr style="border-left:4px solid #f59e0b">
+        <td><b>C-lite</b></td>
+        <td>5</td>
+        <td>21.5s</td>
+        <td>$0.1436</td>
+        <td>27.5K</td>
+        <td>30.8K</td>
+        <td>104.4K</td>
+        <td>12.1K</td>
+        <td>598</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-043 ✓</td>
+      </tr><tr style="border-left:4px solid #ef4444">
+        <td><b>D-agentic</b></td>
+        <td>4</td>
+        <td>15.5s</td>
+        <td>$0.0883</td>
+        <td>27.5K</td>
+        <td>33.0K</td>
+        <td>83.7K</td>
+        <td>5.6K</td>
+        <td>429</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-043 ✓</td>
+      </tr><tr style="border-left:4px solid #8b5cf6">
+        <td><b>E-digest</b></td>
+        <td>1</td>
+        <td>4.5s</td>
+        <td>$0.0153</td>
+        <td>27.5K</td>
+        <td>27.5K</td>
+        <td>27.5K</td>
+        <td>0</td>
+        <td>28</td>
+        <td>12</td>
+        <td class="fail">✗</td>
+        <td class="fail">bibtex-citation-verifier ✗</td>
+      </tr><tr style="border-left:4px solid #db2777">
+        <td><b>H-bounded</b></td>
+        <td>1</td>
+        <td>5.1s</td>
+        <td>$0.0167</td>
+        <td>27.5K</td>
+        <td>27.5K</td>
+        <td>27.5K</td>
+        <td>0</td>
+        <td>86</td>
+        <td>12</td>
+        <td class="fail">✗</td>
+        <td class="fail">skill-router:bibtex-citation-verifier ✗</td>
+      </tr><tr style="border-left:4px solid #65a30d">
+        <td><b>I-meta</b></td>
+        <td>4</td>
+        <td>13.1s</td>
+        <td>$0.1171</td>
+        <td>27.5K</td>
+        <td>37.7K</td>
+        <td>83.4K</td>
+        <td>10.3K</td>
+        <td>414</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-043 ✓</td>
+      </tr><tr style="border-left:4px solid #14b8a6">
+        <td><b>J-bounded</b></td>
+        <td>4</td>
+        <td>12.4s</td>
+        <td>$0.0636</td>
+        <td>27.5K</td>
+        <td>29.2K</td>
+        <td>83.4K</td>
+        <td>1.7K</td>
+        <td>415</td>
+        <td>12</td>
+        <td class="ok">✓</td>
+        <td class="ok">skill-043 ✓</td>
+      </tr></tbody>
+    </table>
+
+<h2>Tool chains</h2>
+
+    <details><summary><b>3d-scan-calc</b> — tool chains across 9 variants</summary>
+      <div class="chains">
+        <div class="chainblk" style="border-left:3px solid #64748b">
+          <h4><b>G-native</b> <span class="muted">1t / 4.2s / $0.1172</span></h4>
+          <ol><li class="muted">(no tool calls — zero-shot direct emit)</li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-118&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #3b82f6">
+          <h4><b>A-router</b> <span class="muted">4t / 16.1s / $0.1669</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/plugins/cache/local/skill-router/0.1.0/bin/skill-router skills route --query &quot;You need to calculate</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-079&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #10b981">
+          <h4><b>B-cc</b> <span class="muted">12t / 70.1s / $0.2795</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">ls ~/.claude/skills/ 2&gt;/dev/null | head -100</code></li><li><code>t5 Bash</code> <code class="arg">ls ~/.claude/skills/ | wc -l</code></li><li><code>t6 Grep</code> <code class="arg"></code></li><li><code>t7 Bash</code> <code class="arg">ls ~/.claude/skills/skill-001/</code></li><li><code>t8 Grep</code> <code class="arg"></code></li><li><code>t9 Bash</code> <code class="arg">ls ~/.claude/skills/skill-001/SKILL.md.skill-router-disabled &amp;&amp; head -5 ~/.claude/skills/skill-001/SKILL.md.skill-router-disabled</code></li><li><code>t11 Grep</code> <code class="arg"></code></li><li><code>t12 Grep</code> <code class="arg"></code></li><li><code>t14 Read</code> <code class="arg">/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/skills/skill-118/SKILL.md.skill-router-disabled</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-118&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #f59e0b">
+          <h4><b>C-lite</b> <span class="muted">6t / 21.1s / $0.1663</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">grep -l -i &quot;STL&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled 2&gt;/dev/null | head -20</code></li><li><code>t5 Bash</code> <code class="arg">grep -l -i &quot;STL&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled 2&gt;/dev/null | xargs grep -l -i &quot;mesh\|triangle\|volume&quot; 2&gt;/dev/null</code></li><li><code>t6 Bash</code> <code class="arg">for f in skill-010 skill-034 skill-053 skill-079 skill-081 skill-118; do echo &quot;=== $f ===&quot;; sed -n &#39;1,10p&#39; ~/.claude/skills/$f/SKILL.md.skill-router-disabled; done</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-079&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #ef4444">
+          <h4><b>D-agentic</b> <span class="muted">4t / 14.3s / $0.0923</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">&quot;/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/plugins/cache/local/skill-router/0.1.0/bin/skill-router&quot; skills dci search --query &quot;binary STL par</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-079&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #8b5cf6">
+          <h4><b>E-digest</b> <span class="muted">4t / 13.0s / $0.1116</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t3 Bash</code> <code class="arg">bash ~/.claude/skill-corpus catalog</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-079&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #db2777">
+          <h4><b>H-bounded</b> <span class="muted">5t / 18.0s / $0.1023</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">grep -l -i -E &quot;STL|stereolithography|3D print|mesh|triangle&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled | head -20</code></li><li><code>t5 Bash</code> <code class="arg">for f in skill-005 skill-010 skill-017 skill-034 skill-043 skill-053 skill-077 skill-079 skill-081 skill-086 skill-118 skill-148; do echo &quot;=== $f ===&quot;; sed -n &#39;1,10p&#39; ~/.claude/skills/$f/SKILL.md.skil</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-079&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #65a30d">
+          <h4><b>I-meta</b> <span class="muted">4t / 13.4s / $0.1171</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">for f in ~/.claude/skills/*/SKILL.md.skill-router-disabled; do
+  printf &#39;%s\t&#39; &quot;$(basename &quot;$(dirname &quot;$f&quot;)&quot;)&quot;
+  grep -m1 &#39;^description:&#39; &quot;$f&quot; | cut -c1-300
+done</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-079&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #14b8a6">
+          <h4><b>J-bounded</b> <span class="muted">4t / 11.4s / $0.0653</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">grep -i -m1 &#39;^description:&#39; ~/.claude/skills/*/SKILL.md.skill-router-disabled | grep -i -E &quot;STL|3D|mesh|triangle&quot; | head -20</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-079&quot;}</code></div>
+        </div></div>
+    </details>
+    <details><summary><b>dialogue-parser</b> — tool chains across 9 variants</summary>
+      <div class="chains">
+        <div class="chainblk" style="border-left:3px solid #64748b">
+          <h4><b>G-native</b> <span class="muted">1t / 5.2s / $0.1199</span></h4>
+          <ol><li class="muted">(no tool calls — zero-shot direct emit)</li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-009&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #3b82f6">
+          <h4><b>A-router</b> <span class="muted">4t / 17.5s / $0.1786</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t3 Bash</code> <code class="arg">/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/plugins/cache/local/skill-router/0.1.0/skills/skill-router-skills/../../bin/skill-router skills rou</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-140&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #10b981">
+          <h4><b>B-cc</b> <span class="muted">12t / 50.3s / $0.2461</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">ls ~/.claude/skills/ 2&gt;/dev/null | head -100</code></li><li><code>t5 Bash</code> <code class="arg">ls ~/.claude/skills/ | wc -l</code></li><li><code>t6 Grep</code> <code class="arg"></code></li><li><code>t7 Bash</code> <code class="arg">ls ~/.claude/skills/skill-001/</code></li><li><code>t8 Grep</code> <code class="arg"></code></li><li><code>t9 Bash</code> <code class="arg">find ~/.claude/skills -name &quot;*.skill-router-disabled&quot; | head -5</code></li><li><code>t10 Grep</code> <code class="arg"></code></li><li><code>t12 Grep</code> <code class="arg"></code></li><li><code>t13 Bash</code> <code class="arg">head -10 /Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/skills/skill-030/SKILL.md.skill-router-disabled /Users/bytedance/github/skill-router/.clau</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-009&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #f59e0b">
+          <h4><b>C-lite</b> <span class="muted">8t / 21.7s / $0.1627</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">grep -l -i &quot;dialogue&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled 2&gt;/dev/null | head -20</code></li><li><code>t5 Bash</code> <code class="arg">grep -l -i &quot;graph&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled 2&gt;/dev/null | head -20</code></li><li><code>t6 Bash</code> <code class="arg">grep -l -i &quot;parser&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled 2&gt;/dev/null | head -20</code></li><li><code>t7 Bash</code> <code class="arg">grep -l -i &quot;dot&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled 2&gt;/dev/null | head -20</code></li><li><code>t9 Bash</code> <code class="arg">sed -n &#39;1,30p&#39; ~/.claude/skills/skill-009/SKILL.md.skill-router-disabled</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-009&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #ef4444">
+          <h4><b>D-agentic</b> <span class="muted">4t / 14.3s / $0.0919</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/plugins/cache/local/skill-router/0.1.0/bin/skill-router skills dci search --query &quot;dialogue parser </code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-009&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #8b5cf6">
+          <h4><b>E-digest</b> <span class="muted">4t / 16.8s / $0.1131</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">bash ~/.claude/skill-corpus catalog</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-009&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #db2777">
+          <h4><b>H-bounded</b> <span class="muted">6t / 20.1s / $0.1273</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">grep -l -i -E &quot;dialogue|script|graph|parser|DOT|visualization|node|edge&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled | head -30</code></li><li><code>t6 Bash</code> <code class="arg">grep -l -i -E &quot;dialogue|game.?script|choice.?graph|branching&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled | head -20</code></li><li><code>t7 Bash</code> <code class="arg">for f in skill-009 skill-011 skill-030 skill-091; do echo &quot;=== $f ===&quot;; sed -n &#39;1,15p&#39; ~/.claude/skills/$f/SKILL.md.skill-router-disabled; done</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-009&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #65a30d">
+          <h4><b>I-meta</b> <span class="muted">4t / 12.2s / $0.1167</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t3 Bash</code> <code class="arg">for f in ~/.claude/skills/*/SKILL.md.skill-router-disabled; do
+  printf &#39;%s\t&#39; &quot;$(basename &quot;$(dirname &quot;$f&quot;)&quot;)&quot;
+  grep -m1 &#39;^description:&#39; &quot;$f&quot; | cut -c1-300
+done</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-009&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #14b8a6">
+          <h4><b>J-bounded</b> <span class="muted">4t / 15.7s / $0.0770</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">grep -i -m1 &#39;^description:&#39; ~/.claude/skills/*/SKILL.md.skill-router-disabled | grep -i -E &quot;dialogue|graph|parser|script|DOT|visualiz&quot; | head -20</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-009&quot;}</code></div>
+        </div></div>
+    </details>
+    <details><summary><b>citation-check</b> — tool chains across 9 variants</summary>
+      <div class="chains">
+        <div class="chainblk" style="border-left:3px solid #64748b">
+          <h4><b>G-native</b> <span class="muted">1t / 4.5s / $0.1180</span></h4>
+          <ol><li class="muted">(no tool calls — zero-shot direct emit)</li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-043&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #3b82f6">
+          <h4><b>A-router</b> <span class="muted">4t / 17.9s / $0.1459</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/plugins/cache/local/skill-router/0.1.0/bin/skill-router skills route --query &quot;You are helping a res</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-043&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #10b981">
+          <h4><b>B-cc</b> <span class="muted">9t / 222.6s / $0.1765</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">ls ~/.claude/skills/ 2&gt;/dev/null | head -100</code></li><li><code>t5 Bash</code> <code class="arg">ls ~/.claude/skills/ | wc -l</code></li><li><code>t6 Grep</code> <code class="arg"></code></li><li><code>t7 Bash</code> <code class="arg">ls ~/.claude/skills/skill-001/</code></li><li><code>t8 Bash</code> <code class="arg">grep -l -i -E &quot;bibtex|citation|bibliograph|hallucinat|academic|paper&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled 2&gt;/dev/null</code></li><li><code>t9 Bash</code> <code class="arg">for f in skill-006 skill-008 skill-024 skill-043 skill-058 skill-061 skill-084 skill-104 skill-116 skill-118; do echo &quot;=== $f ===&quot;; head -10 ~/.claude/skills/$f/SKILL.md.skill-router-disabled; done</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>skill-043 is the clearest match: citation management, validating citations, BibTeX, Google Scholar/PubMed search for verifying paper metadata.
+
+{&quot;matched_skill_name&quot;:&quot;skill-043&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #f59e0b">
+          <h4><b>C-lite</b> <span class="muted">5t / 21.5s / $0.1436</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">grep -l -i &quot;bibtex\|citation\|bibliograph&quot; ~/.claude/skills/*/SKILL.md.skill-router-disabled 2&gt;/dev/null | head -20</code></li><li><code>t5 Bash</code> <code class="arg">for f in ~/.claude/skills/skill-008 ~/.claude/skills/skill-043 ~/.claude/skills/skill-084 ~/.claude/skills/skill-104; do echo &quot;=== $f ===&quot;; sed -n &#39;1,15p&#39; &quot;$f/SKILL.md.skill-router-disabled&quot;; done</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-043&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #ef4444">
+          <h4><b>D-agentic</b> <span class="muted">4t / 15.5s / $0.0883</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home/.claude/plugins/cache/local/skill-router/0.1.0/bin/skill-router skills dci search --query &quot;bibtex citation </code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-043&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #8b5cf6">
+          <h4><b>E-digest</b> <span class="muted">1t / 4.5s / $0.0153</span></h4>
+          <ol><li class="muted">(no tool calls — zero-shot direct emit)</li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;bibtex-citation-verifier&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #db2777">
+          <h4><b>H-bounded</b> <span class="muted">1t / 5.1s / $0.0167</span></h4>
+          <ol><li class="muted">(no tool calls — zero-shot direct emit)</li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-router:bibtex-citation-verifier&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #65a30d">
+          <h4><b>I-meta</b> <span class="muted">4t / 13.1s / $0.1171</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">for f in ~/.claude/skills/*/SKILL.md.skill-router-disabled; do
+  printf &#39;%s\t&#39; &quot;$(basename &quot;$(dirname &quot;$f&quot;)&quot;)&quot;
+  grep -m1 &#39;^description:&#39; &quot;$f&quot; | cut -c1-300
+done</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-043&quot;}</code></div>
+        </div>
+        <div class="chainblk" style="border-left:3px solid #14b8a6">
+          <h4><b>J-bounded</b> <span class="muted">4t / 12.4s / $0.0636</span></h4>
+          <ol><li><code>t2 Skill</code> <code class="arg">skill-router:skill-router-skills</code></li><li><code>t4 Bash</code> <code class="arg">grep -i -m1 &#39;^description:&#39; ~/.claude/skills/*/SKILL.md.skill-router-disabled | grep -i -E &quot;bibtex|citation|bibliography|hallucinat|academic&quot; | head -20</code></li></ol>
+          <div class="final"><span class="lbl">final text:</span> <code>{&quot;matched_skill_name&quot;:&quot;skill-043&quot;}</code></div>
+        </div></div>
+    </details>
+
+<h2>Setup</h2>
+<div class="setup">
+<table>
+  <tr><td>model</td><td><code>claude-opus-4-7[1m]</code></td></tr>
+  <tr><td>started / finished</td><td><code>2026-05-23T15:45:59.131Z</code> → <code>2026-05-23T16:14:06.223Z</code></td></tr>
+  <tr><td>random baseline</td><td>uniform pick over 150 corpus skills = <b>0.67%</b> accuracy expected, ~0.0 turns to emit JSON. Use this as a lower bound when reading the variant accuracy column.</td></tr>
+  <tr><td>HOME</td><td><code>/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home</code></td></tr>
+  <tr><td>corpus</td><td>150 disabled skills (SkillRouter arXiv:2603.22455 eval-core crop, opaque skill-NNN ids)</td></tr>
+  <tr><td>router variants</td><td>corpus DISABLED + <code>--plugin-dir</code> + plugin SKILL.md swapped to <code>variants/&lt;variant&gt;.SKILL.md</code> per cell</td></tr>
+  <tr><td>G-native</td><td>corpus ENABLED + no plugin (Claude Code's native skill auto-select)</td></tr>
+  <tr><td>SKILL.md alignment</td><td>shared strong description, body stripped of routing-benchmark stop block; only routing workflow kept</td></tr>
+  <tr><td>stop semantics</td><td>STOP_TAIL appended to query — emits <code>{"matched_skill_name":"&lt;id&gt;"}</code> and stops</td></tr>
+  <tr><td>claude args</td><td><code>-p &lt;query+STOP_TAIL&gt; --output-format=stream-json --verbose --permission-mode=bypassPermissions</code></td></tr>
+  <tr><td>timeout</td><td>240s per cell</td></tr>
+  <tr><td>cost estimate</td><td>fallback when result.total_cost_usd missing: <code>(input × $3 + output × $15 + cache_read × $0.30 + cache_create × $3.75) / 1M</code> (sonnet-4.5 list price)</td></tr>
+</table>
+</div>
