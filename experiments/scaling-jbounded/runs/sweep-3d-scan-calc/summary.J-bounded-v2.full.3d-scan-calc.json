@@ -1,0 +1,67 @@
+{
+  "queryId": "3d-scan-calc",
+  "gt": "gt/mesh-analysis",
+  "expectedShort": "gt__mesh-analysis",
+  "forceIncludeIds": [
+    "gt/mesh-analysis",
+    "degraded/mesh-analysis_steps-removed_162",
+    "degraded/mesh-analysis_constraints-corrupted_163"
+  ],
+  "variant": "J-bounded-v2",
+  "scale": 0,
+  "scaleLabel": "full",
+  "timestamp": "2026-05-24T07:40:47.732Z",
+  "summary": {
+    "model": "claude-opus-4-7[1m]",
+    "skillsExposed": 12,
+    "numTurns": 8,
+    "durationMs": 91532,
+    "cost": 0.22507100000000002,
+    "startCtx": 27515,
+    "endCtx": 37438,
+    "bashCalls": 5,
+    "skillFired": true,
+    "matched": "gt__mesh-analysis",
+    "expected": "gt__mesh-analysis",
+    "correct": true,
+    "bashResults": [
+      {
+        "idx": 0,
+        "lines": 1,
+        "len": 49,
+        "preview": "Launching skill: skill-router:skill-router-skills"
+      },
+      {
+        "idx": 1,
+        "lines": 56,
+        "len": 10040,
+        "preview": "Exit code 123\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/design__istio/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/design__microservices-architecture/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/design__build123d-rawwerks-vibecad/SKILL.md.skill-router-disabled\n/Users/bytedance/gi"
+      },
+      {
+        "idx": 2,
+        "lines": 5,
+        "len": 781,
+        "preview": "Exit code 123\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/devops__manyfold/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/development__stl-generator-ihistand-claude-skills/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/other__openscad-mitsuhiko-agent-stuff/SKILL.md.skill-router-disable"
+      },
+      {
+        "idx": 3,
+        "lines": 7,
+        "len": 1242,
+        "preview": "devops__manyfold\tdescription: \"Self-hosted 3D model library manager for organizing, viewing, and managing 3D print files. Use when the user asks about deploying, configuring, or using Manyfold for managing STL/OBJ/3MF collections. Triggers on phrases like \\\"Manyfold\\\", \\\"3D model library\\\", \\\"manage my 3D prints\\\", \n\ndevelopment__stl-generator-ihistand-claude-skills\tdescription: \"Generate 3D printable STL files for woodworking jigs and fixtures using CadQuery. Use when the user requests lampshade jigs, circle cutting guides, angle wedges, spacing blocks, alignment fixtures, router jigs, or any"
+      },
+      {
+        "idx": 4,
+        "lines": 4,
+        "len": 568,
+        "preview": "Exit code 123\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/other__unit-converter/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/data__systems-thinking-leverage/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/gt__mesh-analysis/SKILL.md.skill-router-disabled"
+      },
+      {
+        "idx": 5,
+        "lines": 59,
+        "len": 2406,
+        "preview": "=== gt__mesh-analysis ===\n---\nname: gt__mesh-analysis\ndescription: \"Analyzes 3D mesh files (STL) to calculate geometric properties (volume, components) and extract attribute data. Use this skill to process noisy 3D scan data and filter debris.\"\n---\n\n# Mesh Analysis\n\nThis skill provides the `MeshAnalyzer` tool for robustly processing 3D STL files. It handles Binary STL parsing and connected component analysis.\n\n## When to Use\n\n=== distractor__dist_mesh-analysis_d3fbf2aa ===\n---\nname: distractor__dist_mesh-analysis_d3fbf2aa\ndescription: \"Visualizes 3D mesh data in an interactive viewer. Use this"
+      }
+    ],
+    "finalText": "{\"matched_skill_name\":\"gt__mesh-analysis\"}"
+  }
+}

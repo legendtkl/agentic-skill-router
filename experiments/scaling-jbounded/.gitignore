@@ -1,0 +1,15 @@
+# Local experiment state — never commit. Covers every per-scale HOME the
+# drivers create (.tmp-home-1k, .tmp-home-5k, .tmp-home-20k, .tmp-home-full,
+# .tmp-home-150, .tmp-home-parallel, ...).
+.tmp-home*/
+
+# Session-local Claude Code state (per-HOME projects, sessions)
+.claude/
+
+# Per-cell stream-json transcripts are large and reproducible from drivers
+# + queries.json. Aggregated summary.json and report.html are kept.
+runs/**/*.jsonl
+
+# Cropped corpora are reproducible from crop.mjs + the upstream HF dataset.
+# Track queries.json + corpus-manifest.json but not the per-skill files.
+corpus-*/skills/

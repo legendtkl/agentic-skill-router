@@ -1,0 +1,49 @@
+{
+  "queryId": "3d-scan-calc",
+  "gt": "gt/mesh-analysis",
+  "expectedShort": "gt__mesh-analysis",
+  "forceIncludeIds": [
+    "gt/mesh-analysis",
+    "degraded/mesh-analysis_steps-removed_162",
+    "degraded/mesh-analysis_constraints-corrupted_163"
+  ],
+  "variant": "J-bounded",
+  "scale": 5000,
+  "scaleLabel": "5k",
+  "timestamp": "2026-05-24T07:30:17.243Z",
+  "summary": {
+    "model": "claude-opus-4-7[1m]",
+    "skillsExposed": 11,
+    "numTurns": 5,
+    "durationMs": 18671,
+    "cost": 0.22087475,
+    "startCtx": 24938,
+    "endCtx": 35079,
+    "bashCalls": 2,
+    "skillFired": true,
+    "matched": "gt__mesh-analysis",
+    "expected": "gt__mesh-analysis",
+    "correct": true,
+    "bashResults": [
+      {
+        "idx": 0,
+        "lines": 1,
+        "len": 49,
+        "preview": "Launching skill: skill-router:skill-router-skills"
+      },
+      {
+        "idx": 1,
+        "lines": 20,
+        "len": 9436,
+        "preview": "/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-5k/.claude/skills/design__3d-composition-visualization/SKILL.md.skill-router-disabled:description: \"Build 3D visualizations using Three.js and React Three Fiber. Use when implementing 3D components, debugging rendering issues, optimizing performance, or creating interactive visualization features.\"\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-5k/.claude/skills/design__aceternity-ui/SKILL.md.skill-router-disabled:descripti"
+      },
+      {
+        "idx": 2,
+        "lines": 15,
+        "len": 7176,
+        "preview": "/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-5k/.claude/skills/design__analyzing-liquidity-pools/SKILL.md.skill-router-disabled:description: \"Analyze DEX liquidity pools to understand TVL, trading volume, fee income, and impermanent loss risk. Compare pools across protocols (Uniswap, Curve, Balancer) and chains to identify optimal LP opportunities.\"\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-5k/.claude/skills/design__audio-design-matthewharwood-fantasy-phonics/SKI"
+      }
+    ],
+    "finalText": "{\"matched_skill_name\":\"gt__mesh-analysis\"}"
+  }
+}

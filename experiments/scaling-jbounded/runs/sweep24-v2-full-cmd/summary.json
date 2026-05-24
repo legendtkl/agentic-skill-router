@@ -1,0 +1,303 @@
+{
+  "startedAt": "2026-05-24T08:11:51.031Z",
+  "finishedAt": "2026-05-24T08:21:20.445Z",
+  "runId": "v2-full-cmd",
+  "variant": "J-bounded-v2",
+  "home": "/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full",
+  "queriesSource": "paper",
+  "withClaudeMd": true,
+  "concurrency": 3,
+  "timeoutMs": 600000,
+  "queries": [
+    {
+      "id": "3d-scan-calc",
+      "expected": "gt__mesh-analysis",
+      "gt": "gt/mesh-analysis"
+    },
+    {
+      "id": "azure-bgp-oscillation-route-leak",
+      "expected": "gt__azure-bgp",
+      "gt": "gt/azure-bgp"
+    },
+    {
+      "id": "citation-check",
+      "expected": "gt__citation-management",
+      "gt": "gt/citation-management"
+    },
+    {
+      "id": "court-form-filling",
+      "expected": "gt__pdf",
+      "gt": "gt/pdf"
+    },
+    {
+      "id": "data-to-d3",
+      "expected": "gt__d3-visualization",
+      "gt": "gt/d3-visualization"
+    },
+    {
+      "id": "dialogue-parser",
+      "expected": "gt__dialogue_graph",
+      "gt": "gt/dialogue_graph"
+    },
+    {
+      "id": "earthquake-plate-calculation",
+      "expected": "gt__geospatial-analysis",
+      "gt": "gt/geospatial-analysis"
+    },
+    {
+      "id": "econ-detrending-correlation",
+      "expected": "gt__timeseries-detrending",
+      "gt": "gt/timeseries-detrending"
+    },
+    {
+      "id": "enterprise-information-search",
+      "expected": "gt__enterprise-artifact-search",
+      "gt": "gt/enterprise-artifact-search"
+    },
+    {
+      "id": "gh-repo-analytics",
+      "expected": "gt__gh-cli",
+      "gt": "gt/gh-cli"
+    },
+    {
+      "id": "jax-computing-basics",
+      "expected": "gt__jax-skills",
+      "gt": "gt/jax-skills"
+    },
+    {
+      "id": "lab-unit-harmonization",
+      "expected": "gt__lab-unit-harmonization",
+      "gt": "gt/lab-unit-harmonization"
+    },
+    {
+      "id": "offer-letter-generator",
+      "expected": "gt__docx",
+      "gt": "gt/docx"
+    },
+    {
+      "id": "pddl-tpp-planning",
+      "expected": "gt__pddl-skills",
+      "gt": "gt/pddl-skills"
+    },
+    {
+      "id": "pptx-reference-formatting",
+      "expected": "gt__pptx",
+      "gt": "gt/pptx"
+    },
+    {
+      "id": "protein-expression-analysis",
+      "expected": "gt__xlsx",
+      "gt": "gt/xlsx"
+    },
+    {
+      "id": "quantum-numerical-simulation",
+      "expected": "gt__qutip",
+      "gt": "gt/qutip"
+    },
+    {
+      "id": "reserves-at-risk-calc",
+      "expected": "gt__xlsx",
+      "gt": "gt/xlsx"
+    },
+    {
+      "id": "shock-analysis-demand",
+      "expected": "gt__xlsx",
+      "gt": "gt/xlsx"
+    },
+    {
+      "id": "shock-analysis-supply",
+      "expected": "gt__xlsx",
+      "gt": "gt/xlsx"
+    },
+    {
+      "id": "taxonomy-tree-merge",
+      "expected": "gt__hierarchical-taxonomy-clustering",
+      "gt": "gt/hierarchical-taxonomy-clustering"
+    },
+    {
+      "id": "video-tutorial-indexer",
+      "expected": "gt__speech-to-text",
+      "gt": "gt/speech-to-text"
+    },
+    {
+      "id": "virtualhome-agent-planning",
+      "expected": "gt__pddl-skills",
+      "gt": "gt/pddl-skills"
+    },
+    {
+      "id": "weighted-gdp-calc",
+      "expected": "gt__xlsx",
+      "gt": "gt/xlsx"
+    }
+  ],
+  "runs": [
+    {
+      "queryId": "3d-scan-calc",
+      "expected": "gt__mesh-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 143433
+    },
+    {
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "expected": "gt__azure-bgp",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 48788
+    },
+    {
+      "queryId": "citation-check",
+      "expected": "gt__citation-management",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 86680
+    },
+    {
+      "queryId": "court-form-filling",
+      "expected": "gt__pdf",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 69615
+    },
+    {
+      "queryId": "data-to-d3",
+      "expected": "gt__d3-visualization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 103847
+    },
+    {
+      "queryId": "dialogue-parser",
+      "expected": "gt__dialogue_graph",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 88761
+    },
+    {
+      "queryId": "earthquake-plate-calculation",
+      "expected": "gt__geospatial-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 42772
+    },
+    {
+      "queryId": "econ-detrending-correlation",
+      "expected": "gt__timeseries-detrending",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 49369
+    },
+    {
+      "queryId": "enterprise-information-search",
+      "expected": "gt__enterprise-artifact-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 93158
+    },
+    {
+      "queryId": "gh-repo-analytics",
+      "expected": "gt__gh-cli",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 77370
+    },
+    {
+      "queryId": "jax-computing-basics",
+      "expected": "gt__jax-skills",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 44570
+    },
+    {
+      "queryId": "lab-unit-harmonization",
+      "expected": "gt__lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 53830
+    },
+    {
+      "queryId": "offer-letter-generator",
+      "expected": "gt__docx",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 87644
+    },
+    {
+      "queryId": "pddl-tpp-planning",
+      "expected": "gt__pddl-skills",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 46517
+    },
+    {
+      "queryId": "pptx-reference-formatting",
+      "expected": "gt__pptx",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 69732
+    },
+    {
+      "queryId": "protein-expression-analysis",
+      "expected": "gt__xlsx",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 82716
+    },
+    {
+      "queryId": "quantum-numerical-simulation",
+      "expected": "gt__qutip",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 48081
+    },
+    {
+      "queryId": "reserves-at-risk-calc",
+      "expected": "gt__xlsx",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 74827
+    },
+    {
+      "queryId": "shock-analysis-demand",
+      "expected": "gt__xlsx",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 78185
+    },
+    {
+      "queryId": "shock-analysis-supply",
+      "expected": "gt__xlsx",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7543
+    },
+    {
+      "queryId": "taxonomy-tree-merge",
+      "expected": "gt__hierarchical-taxonomy-clustering",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 55919
+    },
+    {
+      "queryId": "video-tutorial-indexer",
+      "expected": "gt__speech-to-text",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 86168
+    },
+    {
+      "queryId": "virtualhome-agent-planning",
+      "expected": "gt__pddl-skills",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 46214
+    },
+    {
+      "queryId": "weighted-gdp-calc",
+      "expected": "gt__xlsx",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 74537
+    }
+  ]
+}
