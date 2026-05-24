@@ -42,6 +42,9 @@
   "phase1b": {
     "dmWithPct": 1,
     "dmWithoutPct": 1,
+    "routerCallsWithPct": 0,
+    "routerCallsWithoutPct": 0,
+    "routerCallDelta": 0,
     "pass": true,
     "rows": [
       {

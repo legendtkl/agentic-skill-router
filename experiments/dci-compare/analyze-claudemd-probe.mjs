@@ -185,15 +185,26 @@ async function main() {
   const b1With = b1Rows.filter((r) => r.withClaudeMd);
   const dmWith = b1With.reduce((s, r) => s + r.dm, 0);
   const dmWithDen = b1With.reduce((s, r) => s + r.total, 0);
+  const rcWith = b1With.reduce((s, r) => s + r.routerCalls, 0);
   const b1Without = b1Rows.filter((r) => !r.withClaudeMd);
   const dmWithout = b1Without.reduce((s, r) => s + r.dm, 0);
   const dmWithoutDen = b1Without.reduce((s, r) => s + r.total, 0);
+  const rcWithout = b1Without.reduce((s, r) => s + r.routerCalls, 0);
   const dmWithPct = dmWith / Math.max(1, dmWithDen);
   const dmWithoutPct = dmWithout / Math.max(1, dmWithoutDen);
+  // routerCalls on direct-match cells SHOULD stay 0 — if CLAUDE.md materially
+  // bumps router invocations when a direct match exists, it is hijacking the
+  // native Skill auto-select path and Phase 1B has failed.
+  const rcWithPct = rcWith / Math.max(1, dmWithDen);
+  const rcWithoutPct = rcWithout / Math.max(1, dmWithoutDen);
+  const rcDelta = rcWithPct - rcWithoutPct;
   console.log(`Phase 1B direct_match(with)    = ${(100 * dmWithPct).toFixed(1)}% (${dmWith}/${dmWithDen})`);
   console.log(`Phase 1B direct_match(without) = ${(100 * dmWithoutPct).toFixed(1)}% (${dmWithout}/${dmWithoutDen})`);
-  const b1Pass = dmWithPct >= 0.90 && (dmWithPct >= dmWithoutPct - 0.10);
-  console.log(`Phase 1B gate (>=90% and no >10pp degradation): ${b1Pass ? "PASS" : "FAIL"}`);
+  console.log(`Phase 1B router_calls(with)    = ${(100 * rcWithPct).toFixed(1)}% (${rcWith}/${dmWithDen})`);
+  console.log(`Phase 1B router_calls(without) = ${(100 * rcWithoutPct).toFixed(1)}% (${rcWithout}/${dmWithoutDen})`);
+  console.log(`Phase 1B router_call_delta     = ${rcDelta >= 0 ? "+" : ""}${(100 * rcDelta).toFixed(1)} pp`);
+  const b1Pass = dmWithPct >= 0.90 && (dmWithPct >= dmWithoutPct - 0.10) && rcDelta <= 0.10;
+  console.log(`Phase 1B gate (>=90% direct_match, no >10pp dm degradation, no >10pp router_call increase): ${b1Pass ? "PASS" : "FAIL"}`);
 
   console.log(`\nOverall gate: ${a1Pass && b1Pass ? "PASS — proceed to Phase 2" : "FAIL — iterate or abandon"}\n`);
 
@@ -219,6 +230,9 @@ async function main() {
     phase1b: {
       dmWithPct,
       dmWithoutPct,
+      routerCallsWithPct: rcWithPct,
+      routerCallsWithoutPct: rcWithoutPct,
+      routerCallDelta: rcDelta,
       pass: b1Pass,
       rows: b1Rows,
     },
