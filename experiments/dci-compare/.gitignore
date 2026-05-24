@@ -1,7 +1,12 @@
 # Local experiment state — never commit
 .tmp-home/
 .tmp-home-parallel/
+.tmp-home-paired/
+.tmp-home-claudemd-probe/
 .corpus-cache/
+
+# Session-local Claude Code state (per-HOME projects, sessions)
+.claude/
 
 # Per-cell stream-json transcripts are large and reproducible from the
 # drivers + queries.json. Aggregated summary.json and report.html are kept.

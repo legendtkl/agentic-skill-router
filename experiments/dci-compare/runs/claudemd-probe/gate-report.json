@@ -1,0 +1,69 @@
+{
+  "phase1a": {
+    "triggerRateWith": 1,
+    "triggerRateWithout": 0.375,
+    "triggerLift": 0.625,
+    "pass": true,
+    "rows": [
+      {
+        "variant": "A-router",
+        "withClaudeMd": true,
+        "triggered": 12,
+        "total": 12,
+        "correct": 6,
+        "meanCost": 0.1461419583333333
+      },
+      {
+        "variant": "A-router",
+        "withClaudeMd": false,
+        "triggered": 4,
+        "total": 12,
+        "correct": 2,
+        "meanCost": 0.07799402083333333
+      },
+      {
+        "variant": "J-bounded",
+        "withClaudeMd": true,
+        "triggered": 12,
+        "total": 12,
+        "correct": 10,
+        "meanCost": 0.11361845833333334
+      },
+      {
+        "variant": "J-bounded",
+        "withClaudeMd": false,
+        "triggered": 5,
+        "total": 12,
+        "correct": 4,
+        "meanCost": 0.07829502083333334
+      }
+    ]
+  },
+  "phase1b": {
+    "dmWithPct": 1,
+    "dmWithoutPct": 1,
+    "routerCallsWithPct": 0,
+    "routerCallsWithoutPct": 0,
+    "routerCallDelta": 0,
+    "pass": true,
+    "rows": [
+      {
+        "variant": "J-bounded",
+        "withClaudeMd": true,
+        "dm": 8,
+        "total": 8,
+        "routerCalls": 0,
+        "meanCost": 0.04450446875
+      },
+      {
+        "variant": "J-bounded",
+        "withClaudeMd": false,
+        "dm": 8,
+        "total": 8,
+        "routerCalls": 0,
+        "meanCost": 0.04248859375
+      }
+    ]
+  },
+  "overallPass": true
+}

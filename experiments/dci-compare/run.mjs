@@ -6,7 +6,10 @@
 // Usage:
 //   node experiments/dci-compare/run.mjs [--smoke] [--variant=A|B1|B2|all]
 //                                        [--reuse-home] [--keep-home]
-//                                        [--max-turns=25] [--concurrency=2]
+//                                        [--max-turns=25]
+//
+// NOTE: this driver runs serially. For parallel multi-variant execution use
+// `routing-only-parallel.mjs` (paired CLAUDE.md A/B) or `routing-only-paired.mjs`.
 import { spawn, execFile } from "node:child_process";
 import { mkdir, cp, copyFile, readFile, writeFile, readdir, rename, symlink, stat, rm, mkdtemp } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -180,14 +183,13 @@ const main = async () => {
 };
 
 function parseArgs(argv) {
-  const out = { smoke: false, variant: "all", reuseHome: false, keepHome: false, maxTurns: 25, concurrency: 1, only: [] };
+  const out = { smoke: false, variant: "all", reuseHome: false, keepHome: false, maxTurns: 25, only: [] };
   for (const a of argv) {
     if (a === "--smoke") out.smoke = true;
     else if (a === "--reuse-home") out.reuseHome = true;
     else if (a === "--keep-home") out.keepHome = true;
     else if (a.startsWith("--variant=")) out.variant = a.slice(10);
     else if (a.startsWith("--max-turns=")) out.maxTurns = Number(a.slice(12));
-    else if (a.startsWith("--concurrency=")) out.concurrency = Number(a.slice(14));
     else if (a.startsWith("--only=")) out.only = a.slice(7).split(",").map((s) => s.trim()).filter(Boolean);
     else throw new Error(`unknown arg: ${a}`);
   }
