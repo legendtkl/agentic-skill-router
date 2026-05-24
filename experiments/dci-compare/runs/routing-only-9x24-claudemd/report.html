@@ -1,0 +1,186 @@
+<!doctype html><html><head>
+<title>routing-only-paired (CLAUDE.md A/B)</title>
+<meta charset="utf-8">
+<style>
+  body { font: 13px/1.5 system-ui, sans-serif; padding: 20px; max-width: 1400px; margin: 0 auto; color: #333; }
+  h1, h2, h3 { color: #222; }
+  table { border-collapse: collapse; margin: 16px 0; }
+  td, th { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
+  th { background: #f0f0f0; }
+  .summary td:first-child { font-weight: bold; }
+  .pos { color: #1a7f37; font-weight: bold; }
+  .neg { color: #cf222e; font-weight: bold; }
+  .ok { background: #e6f4e6; }
+  .fail { background: #fcebea; color: #888; }
+  .qid { color: #555; font-family: monospace; font-size: 12px; }
+  .grid { font-size: 12px; }
+  .grid td:nth-child(2), .grid td:nth-child(3) { font-family: monospace; }
+</style>
+</head><body>
+<h1>routing-only-paired (CLAUDE.md A/B)</h1>
+<p>2026-05-24T02:18:07.918Z → 2026-05-24T02:59:11.514Z</p>
+
+<h2>Per-variant summary</h2>
+<table class="summary">
+  <tr><th rowspan="2">variant</th><th colspan="3">accuracy</th><th colspan="2">trigger</th><th colspan="2">cost</th><th colspan="2">duration</th></tr>
+  <tr><th>with</th><th>without</th><th>Δ</th><th>with</th><th>without</th><th>with</th><th>without</th><th>with</th><th>without</th></tr>
+  
+      <tr>
+        <td>A-router</td>
+        <td>13/24 (54%)</td>
+        <td>10/24 (41%)</td>
+        <td class="pos">+3</td>
+        <td>23/24</td>
+        <td>20/24</td>
+        <td>$3.90</td>
+        <td>$3.65</td>
+        <td>499s</td>
+        <td>452s</td>
+      </tr>
+      <tr>
+        <td>B-cc</td>
+        <td>23/24 (95%)</td>
+        <td>19/24 (79%)</td>
+        <td class="pos">+4</td>
+        <td>24/24</td>
+        <td>19/24</td>
+        <td>$5.56</td>
+        <td>$5.07</td>
+        <td>896s</td>
+        <td>832s</td>
+      </tr>
+      <tr>
+        <td>C-lite</td>
+        <td>23/24 (95%)</td>
+        <td>16/24 (66%)</td>
+        <td class="pos">+7</td>
+        <td>24/24</td>
+        <td>16/24</td>
+        <td>$4.30</td>
+        <td>$3.40</td>
+        <td>654s</td>
+        <td>442s</td>
+      </tr>
+      <tr>
+        <td>D-agentic</td>
+        <td>16/24 (66%)</td>
+        <td>9/24 (37%)</td>
+        <td class="pos">+7</td>
+        <td>23/24</td>
+        <td>22/24</td>
+        <td>$3.92</td>
+        <td>$3.67</td>
+        <td>459s</td>
+        <td>429s</td>
+      </tr>
+      <tr>
+        <td>E-digest</td>
+        <td>22/24 (91%)</td>
+        <td>17/24 (70%)</td>
+        <td class="pos">+5</td>
+        <td>24/24</td>
+        <td>19/24</td>
+        <td>$4.11</td>
+        <td>$3.57</td>
+        <td>355s</td>
+        <td>313s</td>
+      </tr>
+      <tr>
+        <td>G-native</td>
+        <td>15/24 (62%)</td>
+        <td>15/24 (62%)</td>
+        <td class="">+0</td>
+        <td>0/24</td>
+        <td>0/24</td>
+        <td>$2.98</td>
+        <td>$2.91</td>
+        <td>130s</td>
+        <td>116s</td>
+      </tr>
+      <tr>
+        <td>H-bounded</td>
+        <td>22/24 (91%)</td>
+        <td>19/24 (79%)</td>
+        <td class="pos">+3</td>
+        <td>23/24</td>
+        <td>19/24</td>
+        <td>$4.16</td>
+        <td>$3.58</td>
+        <td>542s</td>
+        <td>424s</td>
+      </tr>
+      <tr>
+        <td>I-meta</td>
+        <td>21/24 (87%)</td>
+        <td>17/24 (70%)</td>
+        <td class="pos">+4</td>
+        <td>23/24</td>
+        <td>19/24</td>
+        <td>$4.16</td>
+        <td>$3.67</td>
+        <td>404s</td>
+        <td>322s</td>
+      </tr>
+      <tr>
+        <td>J-bounded</td>
+        <td>22/24 (91%)</td>
+        <td>18/24 (75%)</td>
+        <td class="pos">+4</td>
+        <td>23/24</td>
+        <td>19/24</td>
+        <td>$3.07</td>
+        <td>$2.70</td>
+        <td>374s</td>
+        <td>325s</td>
+      </tr>
+</table>
+
+<h2>Per-cell detail</h2>
+
+      <h3>A-router</h3>
+      <table class="grid">
+        <tr><th>query</th><th>with</th><th>without</th></tr>
+        <tr><td class="qid">3d-scan-calc</td><td class="ok">skill-079 (T)</td><td class="ok">skill-079 (T)</td></tr><tr><td class="qid">azure-bgp-oscillation-route-leak</td><td class="ok">skill-070 (T)</td><td class="ok">skill-070 (T)</td></tr><tr><td class="qid">citation-check</td><td class="ok">skill-043 (T)</td><td class="ok">skill-043 (T)</td></tr><tr><td class="qid">court-form-filling</td><td class="fail">skill-140 (T)</td><td class="fail">skill-140 (T)</td></tr><tr><td class="qid">data-to-d3</td><td class="ok">skill-037 (T)</td><td class="fail">skill-136 (T)</td></tr><tr><td class="qid">dialogue-parser</td><td class="fail">skill-140 (T)</td><td class="fail">skill-router:skill-router-skills (-)</td></tr><tr><td class="qid">earthquake-plate-calculation</td><td class="ok">skill-135 (T)</td><td class="ok">skill-135 (T)</td></tr><tr><td class="qid">econ-detrending-correlation</td><td class="ok">skill-080 (T)</td><td class="ok">skill-080 (T)</td></tr><tr><td class="qid">enterprise-information-search</td><td class="ok">skill-049 (T)</td><td class="fail">skill-140 (T)</td></tr><tr><td class="qid">gh-repo-analytics</td><td class="fail">github-api (-)</td><td class="fail">skill-077 (T)</td></tr><tr><td class="qid">jax-computing-basics</td><td class="fail">skill-140 (T)</td><td class="fail">skill-140 (T)</td></tr><tr><td class="qid">lab-unit-harmonization</td><td class="ok">skill-123 (T)</td><td class="ok">skill-123 (T)</td></tr><tr><td class="qid">offer-letter-generator</td><td class="fail">skill-140 (T)</td><td class="fail">docx (-)</td></tr><tr><td class="qid">pddl-tpp-planning</td><td class="fail">skill-070 (T)</td><td class="fail">skill-070 (T)</td></tr><tr><td class="qid">pptx-reference-formatting</td><td class="ok">skill-140 (T)</td><td class="fail">pptx (-)</td></tr><tr><td class="qid">protein-expression-analysis</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">quantum-numerical-simulation</td><td class="ok">skill-033 (T)</td><td class="ok">skill-033 (T)</td></tr><tr><td class="qid">reserves-at-risk-calc</td><td class="fail">skill-140 (T)</td><td class="fail">skill-140 (T)</td></tr><tr><td class="qid">shock-analysis-demand</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-supply</td><td class="fail">skill-043 (T)</td><td class="fail">skill-043 (T)</td></tr><tr><td class="qid">taxonomy-tree-merge</td><td class="fail">skill-143 (T)</td><td class="fail">skill-143 (T)</td></tr><tr><td class="qid">video-tutorial-indexer</td><td class="fail">skill-140 (T)</td><td class="fail">mp4-video-edit (-)</td></tr><tr><td class="qid">virtualhome-agent-planning</td><td class="fail">skill-070 (T)</td><td class="fail">skill-070 (T)</td></tr><tr><td class="qid">weighted-gdp-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr>
+      </table>
+      <h3>B-cc</h3>
+      <table class="grid">
+        <tr><th>query</th><th>with</th><th>without</th></tr>
+        <tr><td class="qid">3d-scan-calc</td><td class="ok">skill-079 (T)</td><td class="ok">skill-079 (T)</td></tr><tr><td class="qid">azure-bgp-oscillation-route-leak</td><td class="ok">skill-070 (T)</td><td class="ok">skill-070 (T)</td></tr><tr><td class="qid">citation-check</td><td class="ok">skill-043 (T)</td><td class="ok">skill-043 (T)</td></tr><tr><td class="qid">court-form-filling</td><td class="ok">skill-003 (T)</td><td class="ok">skill-003 (T)</td></tr><tr><td class="qid">data-to-d3</td><td class="ok">skill-037 (T)</td><td class="ok">skill-037 (T)</td></tr><tr><td class="qid">dialogue-parser</td><td class="ok">skill-009 (T)</td><td class="fail">skill-router:skill-router-skills (-)</td></tr><tr><td class="qid">earthquake-plate-calculation</td><td class="ok">skill-135 (T)</td><td class="ok">skill-135 (T)</td></tr><tr><td class="qid">econ-detrending-correlation</td><td class="ok">skill-080 (T)</td><td class="ok">skill-080 (T)</td></tr><tr><td class="qid">enterprise-information-search</td><td class="ok">skill-049 (T)</td><td class="ok">skill-049 (T)</td></tr><tr><td class="qid">gh-repo-analytics</td><td class="fail">skill-046 (T)</td><td class="fail">github (-)</td></tr><tr><td class="qid">jax-computing-basics</td><td class="ok">skill-042 (T)</td><td class="fail">jax (-)</td></tr><tr><td class="qid">lab-unit-harmonization</td><td class="ok">skill-123 (T)</td><td class="fail">clinical-lab-unit-harmonization (-)</td></tr><tr><td class="qid">offer-letter-generator</td><td class="ok">skill-116 (T)</td><td class="ok">skill-116 (T)</td></tr><tr><td class="qid">pddl-tpp-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">pptx-reference-formatting</td><td class="ok">skill-140 (T)</td><td class="ok">skill-140 (T)</td></tr><tr><td class="qid">protein-expression-analysis</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">quantum-numerical-simulation</td><td class="ok">skill-033 (T)</td><td class="ok">skill-033 (T)</td></tr><tr><td class="qid">reserves-at-risk-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-demand</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-supply</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">taxonomy-tree-merge</td><td class="ok">skill-068 (T)</td><td class="ok">skill-068 (T)</td></tr><tr><td class="qid">video-tutorial-indexer</td><td class="ok">skill-113 (T)</td><td class="fail">mp4-video-editing (-)</td></tr><tr><td class="qid">virtualhome-agent-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">weighted-gdp-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr>
+      </table>
+      <h3>C-lite</h3>
+      <table class="grid">
+        <tr><th>query</th><th>with</th><th>without</th></tr>
+        <tr><td class="qid">3d-scan-calc</td><td class="ok">skill-079 (T)</td><td class="ok">skill-079 (T)</td></tr><tr><td class="qid">azure-bgp-oscillation-route-leak</td><td class="ok">skill-070 (T)</td><td class="ok">skill-070 (T)</td></tr><tr><td class="qid">citation-check</td><td class="ok">skill-043 (T)</td><td class="ok">skill-043 (T)</td></tr><tr><td class="qid">court-form-filling</td><td class="ok">skill-003 (T)</td><td class="ok">skill-003 (T)</td></tr><tr><td class="qid">data-to-d3</td><td class="ok">skill-037 (T)</td><td class="ok">skill-037 (T)</td></tr><tr><td class="qid">dialogue-parser</td><td class="ok">skill-009 (T)</td><td class="fail">dialogue-graph-parser (-)</td></tr><tr><td class="qid">earthquake-plate-calculation</td><td class="ok">skill-135 (T)</td><td class="fail">geopandas (-)</td></tr><tr><td class="qid">econ-detrending-correlation</td><td class="ok">skill-080 (T)</td><td class="ok">skill-080 (T)</td></tr><tr><td class="qid">enterprise-information-search</td><td class="ok">skill-049 (T)</td><td class="ok">skill-049 (T)</td></tr><tr><td class="qid">gh-repo-analytics</td><td class="fail">skill-046 (T)</td><td class="fail">skill-router:skill-router-skills (-)</td></tr><tr><td class="qid">jax-computing-basics</td><td class="ok">skill-042 (T)</td><td class="fail">jax (-)</td></tr><tr><td class="qid">lab-unit-harmonization</td><td class="ok">skill-123 (T)</td><td class="fail">clinical-lab-unit-harmonizer (-)</td></tr><tr><td class="qid">offer-letter-generator</td><td class="ok">skill-116 (T)</td><td class="ok">skill-116 (T)</td></tr><tr><td class="qid">pddl-tpp-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">pptx-reference-formatting</td><td class="ok">skill-140 (T)</td><td class="ok">skill-140 (T)</td></tr><tr><td class="qid">protein-expression-analysis</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">quantum-numerical-simulation</td><td class="ok">skill-033 (T)</td><td class="ok">skill-033 (T)</td></tr><tr><td class="qid">reserves-at-risk-calc</td><td class="ok">skill-105 (T)</td><td class="fail">xlsx (-)</td></tr><tr><td class="qid">shock-analysis-demand</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-supply</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">taxonomy-tree-merge</td><td class="ok">skill-068 (T)</td><td class="fail">skill-router:skill-router-skills (-)</td></tr><tr><td class="qid">video-tutorial-indexer</td><td class="ok">skill-113 (T)</td><td class="fail">mp4-video-chapter-indexer (-)</td></tr><tr><td class="qid">virtualhome-agent-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">weighted-gdp-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr>
+      </table>
+      <h3>D-agentic</h3>
+      <table class="grid">
+        <tr><th>query</th><th>with</th><th>without</th></tr>
+        <tr><td class="qid">3d-scan-calc</td><td class="ok">skill-079 (T)</td><td class="ok">skill-079 (T)</td></tr><tr><td class="qid">azure-bgp-oscillation-route-leak</td><td class="ok">skill-070 (T)</td><td class="ok">skill-070 (T)</td></tr><tr><td class="qid">citation-check</td><td class="fail">bibtex-citation-verifier (-)</td><td class="fail">user:skill-043 (T)</td></tr><tr><td class="qid">court-form-filling</td><td class="ok">skill-003 (T)</td><td class="ok">skill-003 (T)</td></tr><tr><td class="qid">data-to-d3</td><td class="fail">user:skill-037 (T)</td><td class="ok">skill-037 (T)</td></tr><tr><td class="qid">dialogue-parser</td><td class="ok">skill-009 (T)</td><td class="fail">user:skill-009 (T)</td></tr><tr><td class="qid">earthquake-plate-calculation</td><td class="ok">skill-135 (T)</td><td class="fail">user:skill-135 (T)</td></tr><tr><td class="qid">econ-detrending-correlation</td><td class="fail">user:skill-080 (T)</td><td class="ok">skill-080 (T)</td></tr><tr><td class="qid">enterprise-information-search</td><td class="ok">skill-049 (T)</td><td class="fail">user:skill-049 (T)</td></tr><tr><td class="qid">gh-repo-analytics</td><td class="ok">skill-021 (T)</td><td class="fail">github-pulse-report (-)</td></tr><tr><td class="qid">jax-computing-basics</td><td class="ok">skill-042 (T)</td><td class="fail">user:skill-042 (T)</td></tr><tr><td class="qid">lab-unit-harmonization</td><td class="ok">skill-123 (T)</td><td class="fail">user:skill-123 (T)</td></tr><tr><td class="qid">offer-letter-generator</td><td class="ok">skill-116 (T)</td><td class="fail">user:skill-116 (T)</td></tr><tr><td class="qid">pddl-tpp-planning</td><td class="fail">user:skill-117 (T)</td><td class="fail">user:skill-117 (T)</td></tr><tr><td class="qid">pptx-reference-formatting</td><td class="fail">user:skill-140 (T)</td><td class="fail">user:skill-140 (T)</td></tr><tr><td class="qid">protein-expression-analysis</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">quantum-numerical-simulation</td><td class="ok">skill-033 (T)</td><td class="fail">user:skill-033 (T)</td></tr><tr><td class="qid">reserves-at-risk-calc</td><td class="ok">skill-105 (T)</td><td class="fail">user:skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-demand</td><td class="fail">user:skill-105 (T)</td><td class="fail">user:skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-supply</td><td class="fail">user:skill-080 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">taxonomy-tree-merge</td><td class="ok">skill-068 (T)</td><td class="ok">skill-068 (T)</td></tr><tr><td class="qid">video-tutorial-indexer</td><td class="fail">user:skill-113 (T)</td><td class="fail">mediabridge (-)</td></tr><tr><td class="qid">virtualhome-agent-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">weighted-gdp-calc</td><td class="ok">skill-105 (T)</td><td class="fail">user:skill-105 (T)</td></tr>
+      </table>
+      <h3>E-digest</h3>
+      <table class="grid">
+        <tr><th>query</th><th>with</th><th>without</th></tr>
+        <tr><td class="qid">3d-scan-calc</td><td class="ok">skill-079 (T)</td><td class="ok">skill-079 (T)</td></tr><tr><td class="qid">azure-bgp-oscillation-route-leak</td><td class="ok">skill-070 (T)</td><td class="fail">bgp-oscillation-detection (-)</td></tr><tr><td class="qid">citation-check</td><td class="ok">skill-043 (T)</td><td class="ok">skill-043 (T)</td></tr><tr><td class="qid">court-form-filling</td><td class="ok">skill-003 (T)</td><td class="fail">pdf (-)</td></tr><tr><td class="qid">data-to-d3</td><td class="ok">skill-037 (T)</td><td class="ok">skill-037 (T)</td></tr><tr><td class="qid">dialogue-parser</td><td class="ok">skill-009 (T)</td><td class="fail">dialogue-parser (-)</td></tr><tr><td class="qid">earthquake-plate-calculation</td><td class="ok">skill-135 (T)</td><td class="ok">skill-135 (T)</td></tr><tr><td class="qid">econ-detrending-correlation</td><td class="ok">skill-080 (T)</td><td class="ok">skill-080 (T)</td></tr><tr><td class="qid">enterprise-information-search</td><td class="ok">skill-049 (T)</td><td class="ok">skill-049 (T)</td></tr><tr><td class="qid">gh-repo-analytics</td><td class="fail">skill-046 (T)</td><td class="fail">github-cli-skill (-)</td></tr><tr><td class="qid">jax-computing-basics</td><td class="ok">skill-042 (T)</td><td class="fail">skill-139 (T)</td></tr><tr><td class="qid">lab-unit-harmonization</td><td class="ok">skill-123 (T)</td><td class="ok">skill-123 (T)</td></tr><tr><td class="qid">offer-letter-generator</td><td class="ok">skill-116 (T)</td><td class="ok">skill-116 (T)</td></tr><tr><td class="qid">pddl-tpp-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">pptx-reference-formatting</td><td class="ok">skill-140 (T)</td><td class="fail">pptx (-)</td></tr><tr><td class="qid">protein-expression-analysis</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">quantum-numerical-simulation</td><td class="ok">skill-033 (T)</td><td class="ok">skill-033 (T)</td></tr><tr><td class="qid">reserves-at-risk-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-demand</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-supply</td><td class="fail">skill-080 (T)</td><td class="fail">skill-080 (T)</td></tr><tr><td class="qid">taxonomy-tree-merge</td><td class="ok">skill-068 (T)</td><td class="ok">skill-068 (T)</td></tr><tr><td class="qid">video-tutorial-indexer</td><td class="ok">skill-113 (T)</td><td class="ok">skill-113 (T)</td></tr><tr><td class="qid">virtualhome-agent-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">weighted-gdp-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr>
+      </table>
+      <h3>G-native</h3>
+      <table class="grid">
+        <tr><th>query</th><th>with</th><th>without</th></tr>
+        <tr><td class="qid">3d-scan-calc</td><td class="fail">skill-118 (-)</td><td class="fail">skill-118 (-)</td></tr><tr><td class="qid">azure-bgp-oscillation-route-leak</td><td class="ok">skill-070 (-)</td><td class="ok">skill-070 (-)</td></tr><tr><td class="qid">citation-check</td><td class="ok">skill-043 (-)</td><td class="ok">skill-043 (-)</td></tr><tr><td class="qid">court-form-filling</td><td class="ok">skill-003 (-)</td><td class="fail">skill-077 (-)</td></tr><tr><td class="qid">data-to-d3</td><td class="ok">skill-037 (-)</td><td class="ok">skill-037 (-)</td></tr><tr><td class="qid">dialogue-parser</td><td class="ok">skill-009 (-)</td><td class="ok">skill-009 (-)</td></tr><tr><td class="qid">earthquake-plate-calculation</td><td class="fail">skill-098 (-)</td><td class="fail">skill-092 (-)</td></tr><tr><td class="qid">econ-detrending-correlation</td><td class="ok">skill-080 (-)</td><td class="ok">skill-080 (-)</td></tr><tr><td class="qid">enterprise-information-search</td><td class="fail">skill-087 (-)</td><td class="ok">skill-049 (-)</td></tr><tr><td class="qid">gh-repo-analytics</td><td class="fail">skill-146 (-)</td><td class="fail">skill-088 (-)</td></tr><tr><td class="qid">jax-computing-basics</td><td class="ok">skill-042 (-)</td><td class="ok">skill-042 (-)</td></tr><tr><td class="qid">lab-unit-harmonization</td><td class="ok">skill-123 (-)</td><td class="ok">skill-123 (-)</td></tr><tr><td class="qid">offer-letter-generator</td><td class="ok">skill-116 (-)</td><td class="ok">skill-116 (-)</td></tr><tr><td class="qid">pddl-tpp-planning</td><td class="ok">skill-117 (-)</td><td class="ok">skill-117 (-)</td></tr><tr><td class="qid">pptx-reference-formatting</td><td class="ok">skill-140 (-)</td><td class="ok">skill-140 (-)</td></tr><tr><td class="qid">protein-expression-analysis</td><td class="fail">skill-026 (-)</td><td class="fail">skill-026 (-)</td></tr><tr><td class="qid">quantum-numerical-simulation</td><td class="ok">skill-033 (-)</td><td class="ok">skill-033 (-)</td></tr><tr><td class="qid">reserves-at-risk-calc</td><td class="fail">skill-002 (-)</td><td class="fail">skill-026 (-)</td></tr><tr><td class="qid">shock-analysis-demand</td><td class="fail">skill-026 (-)</td><td class="fail">skill-026 (-)</td></tr><tr><td class="qid">shock-analysis-supply</td><td class="fail">skill-026 (-)</td><td class="fail">skill-026 (-)</td></tr><tr><td class="qid">taxonomy-tree-merge</td><td class="ok">skill-068 (-)</td><td class="ok">skill-068 (-)</td></tr><tr><td class="qid">video-tutorial-indexer</td><td class="ok">skill-113 (-)</td><td class="ok">skill-113 (-)</td></tr><tr><td class="qid">virtualhome-agent-planning</td><td class="ok">skill-117 (-)</td><td class="ok">skill-117 (-)</td></tr><tr><td class="qid">weighted-gdp-calc</td><td class="fail">skill-026 (-)</td><td class="fail">skill-026 (-)</td></tr>
+      </table>
+      <h3>H-bounded</h3>
+      <table class="grid">
+        <tr><th>query</th><th>with</th><th>without</th></tr>
+        <tr><td class="qid">3d-scan-calc</td><td class="ok">skill-079 (T)</td><td class="ok">skill-079 (T)</td></tr><tr><td class="qid">azure-bgp-oscillation-route-leak</td><td class="ok">skill-070 (T)</td><td class="ok">skill-070 (T)</td></tr><tr><td class="qid">citation-check</td><td class="ok">skill-043 (T)</td><td class="ok">skill-043 (T)</td></tr><tr><td class="qid">court-form-filling</td><td class="ok">skill-003 (T)</td><td class="ok">skill-003 (T)</td></tr><tr><td class="qid">data-to-d3</td><td class="ok">skill-037 (T)</td><td class="ok">skill-037 (T)</td></tr><tr><td class="qid">dialogue-parser</td><td class="ok">skill-009 (T)</td><td class="fail">dialogue-parser (-)</td></tr><tr><td class="qid">earthquake-plate-calculation</td><td class="ok">skill-135 (T)</td><td class="ok">skill-135 (T)</td></tr><tr><td class="qid">econ-detrending-correlation</td><td class="ok">skill-080 (T)</td><td class="ok">skill-080 (T)</td></tr><tr><td class="qid">enterprise-information-search</td><td class="ok">skill-049 (T)</td><td class="fail">skill-router:skill-router-skills (-)</td></tr><tr><td class="qid">gh-repo-analytics</td><td class="fail">github-pulse-report (-)</td><td class="fail">skill-router:skill-router-skills (-)</td></tr><tr><td class="qid">jax-computing-basics</td><td class="ok">skill-042 (T)</td><td class="ok">skill-042 (T)</td></tr><tr><td class="qid">lab-unit-harmonization</td><td class="ok">skill-123 (T)</td><td class="fail">clinical-lab-unit-harmonization (-)</td></tr><tr><td class="qid">offer-letter-generator</td><td class="ok">skill-116 (T)</td><td class="ok">skill-116 (T)</td></tr><tr><td class="qid">pddl-tpp-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">pptx-reference-formatting</td><td class="ok">skill-140 (T)</td><td class="ok">skill-140 (T)</td></tr><tr><td class="qid">protein-expression-analysis</td><td class="ok">skill-105 (T)</td><td class="fail">xlsx (-)</td></tr><tr><td class="qid">quantum-numerical-simulation</td><td class="ok">skill-033 (T)</td><td class="ok">skill-033 (T)</td></tr><tr><td class="qid">reserves-at-risk-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-demand</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-supply</td><td class="fail">skill-026 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">taxonomy-tree-merge</td><td class="ok">skill-068 (T)</td><td class="ok">skill-068 (T)</td></tr><tr><td class="qid">video-tutorial-indexer</td><td class="ok">skill-113 (T)</td><td class="ok">skill-113 (T)</td></tr><tr><td class="qid">virtualhome-agent-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">weighted-gdp-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr>
+      </table>
+      <h3>I-meta</h3>
+      <table class="grid">
+        <tr><th>query</th><th>with</th><th>without</th></tr>
+        <tr><td class="qid">3d-scan-calc</td><td class="ok">skill-079 (T)</td><td class="ok">skill-079 (T)</td></tr><tr><td class="qid">azure-bgp-oscillation-route-leak</td><td class="ok">skill-070 (T)</td><td class="ok">skill-070 (T)</td></tr><tr><td class="qid">citation-check</td><td class="fail">bibtex-citation-checker (-)</td><td class="ok">skill-043 (T)</td></tr><tr><td class="qid">court-form-filling</td><td class="ok">skill-003 (T)</td><td class="ok">skill-003 (T)</td></tr><tr><td class="qid">data-to-d3</td><td class="ok">skill-037 (T)</td><td class="ok">skill-037 (T)</td></tr><tr><td class="qid">dialogue-parser</td><td class="ok">skill-009 (T)</td><td class="fail">skill-router:skill-router-skills (-)</td></tr><tr><td class="qid">earthquake-plate-calculation</td><td class="ok">skill-135 (T)</td><td class="ok">skill-135 (T)</td></tr><tr><td class="qid">econ-detrending-correlation</td><td class="ok">skill-080 (T)</td><td class="ok">skill-080 (T)</td></tr><tr><td class="qid">enterprise-information-search</td><td class="ok">skill-049 (T)</td><td class="ok">skill-049 (T)</td></tr><tr><td class="qid">gh-repo-analytics</td><td class="fail">skill-046 (T)</td><td class="fail">skill-router:skill-router-skills (-)</td></tr><tr><td class="qid">jax-computing-basics</td><td class="ok">skill-042 (T)</td><td class="ok">skill-042 (T)</td></tr><tr><td class="qid">lab-unit-harmonization</td><td class="ok">skill-123 (T)</td><td class="ok">skill-123 (T)</td></tr><tr><td class="qid">offer-letter-generator</td><td class="ok">skill-116 (T)</td><td class="ok">skill-116 (T)</td></tr><tr><td class="qid">pddl-tpp-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">pptx-reference-formatting</td><td class="ok">skill-140 (T)</td><td class="fail">pptx (-)</td></tr><tr><td class="qid">protein-expression-analysis</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">quantum-numerical-simulation</td><td class="ok">skill-033 (T)</td><td class="ok">skill-033 (T)</td></tr><tr><td class="qid">reserves-at-risk-calc</td><td class="ok">skill-105 (T)</td><td class="fail">xlsx (-)</td></tr><tr><td class="qid">shock-analysis-demand</td><td class="ok">skill-105 (T)</td><td class="fail">skill-076 (T)</td></tr><tr><td class="qid">shock-analysis-supply</td><td class="fail">skill-080 (T)</td><td class="fail">skill-080 (T)</td></tr><tr><td class="qid">taxonomy-tree-merge</td><td class="ok">skill-068 (T)</td><td class="ok">skill-068 (T)</td></tr><tr><td class="qid">video-tutorial-indexer</td><td class="ok">skill-113 (T)</td><td class="fail">skill-router:skill-router-skills (-)</td></tr><tr><td class="qid">virtualhome-agent-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">weighted-gdp-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr>
+      </table>
+      <h3>J-bounded</h3>
+      <table class="grid">
+        <tr><th>query</th><th>with</th><th>without</th></tr>
+        <tr><td class="qid">3d-scan-calc</td><td class="ok">skill-079 (T)</td><td class="ok">skill-079 (T)</td></tr><tr><td class="qid">azure-bgp-oscillation-route-leak</td><td class="ok">skill-070 (T)</td><td class="ok">skill-070 (T)</td></tr><tr><td class="qid">citation-check</td><td class="ok">skill-043 (T)</td><td class="ok">skill-043 (T)</td></tr><tr><td class="qid">court-form-filling</td><td class="ok">skill-003 (T)</td><td class="ok">skill-003 (T)</td></tr><tr><td class="qid">data-to-d3</td><td class="ok">skill-037 (T)</td><td class="fail">skill-060 (T)</td></tr><tr><td class="qid">dialogue-parser</td><td class="ok">skill-009 (T)</td><td class="fail">dialogue-graph-parser (-)</td></tr><tr><td class="qid">earthquake-plate-calculation</td><td class="ok">skill-135 (T)</td><td class="ok">skill-135 (T)</td></tr><tr><td class="qid">econ-detrending-correlation</td><td class="ok">skill-080 (T)</td><td class="ok">skill-080 (T)</td></tr><tr><td class="qid">enterprise-information-search</td><td class="ok">skill-049 (T)</td><td class="ok">skill-049 (T)</td></tr><tr><td class="qid">gh-repo-analytics</td><td class="fail">skill-046 (T)</td><td class="fail">github-cli-analyzer (-)</td></tr><tr><td class="qid">jax-computing-basics</td><td class="ok">skill-042 (T)</td><td class="fail">jax (-)</td></tr><tr><td class="qid">lab-unit-harmonization</td><td class="ok">skill-123 (T)</td><td class="ok">skill-123 (T)</td></tr><tr><td class="qid">offer-letter-generator</td><td class="ok">skill-116 (T)</td><td class="ok">skill-116 (T)</td></tr><tr><td class="qid">pddl-tpp-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">pptx-reference-formatting</td><td class="ok">skill-140 (T)</td><td class="fail">pptx (-)</td></tr><tr><td class="qid">protein-expression-analysis</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">quantum-numerical-simulation</td><td class="ok">skill-033 (T)</td><td class="ok">skill-033 (T)</td></tr><tr><td class="qid">reserves-at-risk-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-demand</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">shock-analysis-supply</td><td class="fail">xlsx (-)</td><td class="ok">skill-105 (T)</td></tr><tr><td class="qid">taxonomy-tree-merge</td><td class="ok">skill-068 (T)</td><td class="ok">skill-068 (T)</td></tr><tr><td class="qid">video-tutorial-indexer</td><td class="ok">skill-113 (T)</td><td class="fail">mediabench-video-chapters (-)</td></tr><tr><td class="qid">virtualhome-agent-planning</td><td class="ok">skill-117 (T)</td><td class="ok">skill-117 (T)</td></tr><tr><td class="qid">weighted-gdp-calc</td><td class="ok">skill-105 (T)</td><td class="ok">skill-105 (T)</td></tr>
+      </table>
+
+</body></html>

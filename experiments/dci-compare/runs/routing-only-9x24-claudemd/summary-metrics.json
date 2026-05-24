@@ -1,0 +1,268 @@
+{
+  "rows": [
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "total": 24,
+      "triggered": 23,
+      "correct": 13,
+      "sumCost": 3.9002835000000005,
+      "sumTurns": 96,
+      "sumDur": 499485,
+      "meanCtxEnd": 94227.91666666667
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "total": 24,
+      "triggered": 20,
+      "correct": 10,
+      "sumCost": 3.6482539999999997,
+      "sumTurns": 89,
+      "sumDur": 451601,
+      "meanCtxEnd": 87993.875
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "total": 24,
+      "triggered": 24,
+      "correct": 23,
+      "sumCost": 5.555042,
+      "sumTurns": 197,
+      "sumDur": 896275,
+      "meanCtxEnd": 218978.79166666666
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "total": 24,
+      "triggered": 19,
+      "correct": 19,
+      "sumCost": 5.068513,
+      "sumTurns": 168,
+      "sumDur": 832158,
+      "meanCtxEnd": 189420.45833333334
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "total": 24,
+      "triggered": 24,
+      "correct": 23,
+      "sumCost": 4.302266749999999,
+      "sumTurns": 156,
+      "sumDur": 654472,
+      "meanCtxEnd": 144961.70833333334
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "total": 24,
+      "triggered": 16,
+      "correct": 16,
+      "sumCost": 3.3952255,
+      "sumTurns": 114,
+      "sumDur": 441777,
+      "meanCtxEnd": 106107
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "total": 24,
+      "triggered": 23,
+      "correct": 16,
+      "sumCost": 3.9180920000000006,
+      "sumTurns": 107,
+      "sumDur": 458740,
+      "meanCtxEnd": 108351.08333333333
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "total": 24,
+      "triggered": 22,
+      "correct": 9,
+      "sumCost": 3.6727870000000005,
+      "sumTurns": 102,
+      "sumDur": 429161,
+      "meanCtxEnd": 97406.54166666667
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "total": 24,
+      "triggered": 24,
+      "correct": 22,
+      "sumCost": 4.11019575,
+      "sumTurns": 96,
+      "sumDur": 355087,
+      "meanCtxEnd": 95491
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "total": 24,
+      "triggered": 19,
+      "correct": 17,
+      "sumCost": 3.5743985,
+      "sumTurns": 81,
+      "sumDur": 313394,
+      "meanCtxEnd": 80953.41666666667
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "total": 24,
+      "triggered": 0,
+      "correct": 15,
+      "sumCost": 2.9786775000000003,
+      "sumTurns": 24,
+      "sumDur": 129992,
+      "meanCtxEnd": 36543.583333333336
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "total": 24,
+      "triggered": 0,
+      "correct": 15,
+      "sumCost": 2.90947475,
+      "sumTurns": 24,
+      "sumDur": 115564,
+      "meanCtxEnd": 36338.958333333336
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "total": 24,
+      "triggered": 23,
+      "correct": 22,
+      "sumCost": 4.1595745000000015,
+      "sumTurns": 132,
+      "sumDur": 541809,
+      "meanCtxEnd": 139305.45833333334
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "total": 24,
+      "triggered": 19,
+      "correct": 19,
+      "sumCost": 3.582723,
+      "sumTurns": 109,
+      "sumDur": 423884,
+      "meanCtxEnd": 113387.41666666667
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "total": 24,
+      "triggered": 23,
+      "correct": 21,
+      "sumCost": 4.157676,
+      "sumTurns": 93,
+      "sumDur": 404354,
+      "meanCtxEnd": 93090.875
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "total": 24,
+      "triggered": 19,
+      "correct": 17,
+      "sumCost": 3.6668844999999997,
+      "sumTurns": 81,
+      "sumDur": 322027,
+      "meanCtxEnd": 81248.54166666667
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "total": 24,
+      "triggered": 23,
+      "correct": 22,
+      "sumCost": 3.06945425,
+      "sumTurns": 96,
+      "sumDur": 374019,
+      "meanCtxEnd": 89632.70833333333
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "total": 24,
+      "triggered": 19,
+      "correct": 18,
+      "sumCost": 2.7020684999999998,
+      "sumTurns": 81,
+      "sumDur": 324576,
+      "meanCtxEnd": 74976.16666666667
+    }
+  ],
+  "variantDelta": [
+    {
+      "variant": "A-router",
+      "dAcc": 3,
+      "dTrig": 3,
+      "dCost": 0.2520295000000008
+    },
+    {
+      "variant": "B-cc",
+      "dAcc": 4,
+      "dTrig": 5,
+      "dCost": 0.486529
+    },
+    {
+      "variant": "C-lite",
+      "dAcc": 7,
+      "dTrig": 8,
+      "dCost": 0.9070412499999994
+    },
+    {
+      "variant": "D-agentic",
+      "dAcc": 7,
+      "dTrig": 1,
+      "dCost": 0.2453050000000001
+    },
+    {
+      "variant": "E-digest",
+      "dAcc": 5,
+      "dTrig": 5,
+      "dCost": 0.5357972499999999
+    },
+    {
+      "variant": "G-native",
+      "dAcc": 0,
+      "dTrig": 0,
+      "dCost": 0.06920275000000009
+    },
+    {
+      "variant": "H-bounded",
+      "dAcc": 3,
+      "dTrig": 4,
+      "dCost": 0.5768515000000014
+    },
+    {
+      "variant": "I-meta",
+      "dAcc": 4,
+      "dTrig": 4,
+      "dCost": 0.4907915000000007
+    },
+    {
+      "variant": "J-bounded",
+      "dAcc": 4,
+      "dTrig": 4,
+      "dCost": 0.3673857500000004
+    }
+  ],
+  "aggregate": {
+    "triggerWith": 187,
+    "triggerWithout": 153,
+    "totalWith": 216,
+    "totalWithout": 216,
+    "accWith": 177,
+    "accWithout": 140,
+    "costWith": 36.15126225,
+    "costWithout": 32.22032875000001
+  }
+}

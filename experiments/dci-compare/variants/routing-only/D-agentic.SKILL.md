@@ -50,10 +50,14 @@ exposes:
    Keep total find/open calls ≤ 3 per query (the budget enforces this).
 
 3. **summarize / commit**: when one candidate is the clear winner, return its
-   skill-id (visible in the search/find/open results) as your chosen routing
-   result. (In a non-routing-only deployment you would `dci read <ref>` to
-   retrieve the body and follow its instructions; in this routing-only
-   session you do not.)
+   **bare** skill-id as your chosen routing result. The `dci search` /
+   `dci find` JSON responses report ids in the qualified form
+   `user:skill-NNN` (or `user:codex:skill-NNN` on the Codex host). Strip
+   the `user:` (and any `codex:`) prefix before emitting `matched_skill_name`
+   — output just `skill-NNN` (e.g. `skill-037`, NOT `user:skill-037`).
+   (In a non-routing-only deployment you would `dci read <ref>` to retrieve
+   the body and follow its instructions; in this routing-only session you
+   do not.)
 
 4. If no candidate is a confident match after the bounded loop, fall back
    to general knowledge.

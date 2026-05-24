@@ -1,0 +1,3637 @@
+{
+  "startedAt": "2026-05-24T02:18:07.918Z",
+  "finishedAt": "2026-05-24T02:59:11.514Z",
+  "pairedHomesDir": "/Users/bytedance/github/skill-router/.claude/worktrees/dci/experiments/dci-compare/.tmp-home-paired",
+  "timeoutMs": 240000,
+  "concurrency": 4,
+  "claudeMdText": "# Skill routing\n\n`skill-router-skills` is a routing Skill that searches a catalog of\nlocally-installed disabled skills.\n\nWhen no enabled Skill clearly matches the user's query, you must call\n`skill-router-skills` before answering. Do not invent a Skill name or\nfabricate `matched_skill_name` without a Skill/tool result.\n",
+  "stopTail": "\n\n---\nROUTING-ONLY mode: this session evaluates skill routing accuracy only.\nAfter identifying the single best matching disabled skill, output exactly\none line of minified JSON on its own and stop:\n\n{\"matched_skill_name\":\"<skill-id>\"}\n\nDo NOT Read the matched skill's body, do NOT execute the user's task above,\ndo NOT produce any other text. This overrides any \"execute the task\"\nguidance in the skill router's instructions.",
+  "variants": [
+    {
+      "id": "G-native",
+      "mode": "native"
+    },
+    {
+      "id": "A-router",
+      "mode": "router"
+    },
+    {
+      "id": "B-cc",
+      "mode": "router"
+    },
+    {
+      "id": "C-lite",
+      "mode": "router"
+    },
+    {
+      "id": "D-agentic",
+      "mode": "router"
+    },
+    {
+      "id": "E-digest",
+      "mode": "router"
+    },
+    {
+      "id": "H-bounded",
+      "mode": "router"
+    },
+    {
+      "id": "I-meta",
+      "mode": "router"
+    },
+    {
+      "id": "J-bounded",
+      "mode": "router"
+    }
+  ],
+  "conditions": [
+    {
+      "id": "with-claudemd",
+      "withClaudeMd": true
+    },
+    {
+      "id": "without-claudemd",
+      "withClaudeMd": false
+    }
+  ],
+  "queries": [
+    {
+      "id": "3d-scan-calc",
+      "expected": "user:skill-079",
+      "domain": "engineering"
+    },
+    {
+      "id": "azure-bgp-oscillation-route-leak",
+      "expected": "user:skill-070",
+      "domain": "bgp-route"
+    },
+    {
+      "id": "citation-check",
+      "expected": "user:skill-043",
+      "domain": "research"
+    },
+    {
+      "id": "court-form-filling",
+      "expected": "user:skill-003",
+      "domain": "document-processing"
+    },
+    {
+      "id": "data-to-d3",
+      "expected": "user:skill-037",
+      "domain": "Data Visualization"
+    },
+    {
+      "id": "dialogue-parser",
+      "expected": "user:skill-009",
+      "domain": "game"
+    },
+    {
+      "id": "earthquake-plate-calculation",
+      "expected": "user:skill-135",
+      "domain": "geophysics"
+    },
+    {
+      "id": "econ-detrending-correlation",
+      "expected": "user:skill-080",
+      "domain": "economics"
+    },
+    {
+      "id": "enterprise-information-search",
+      "expected": "user:skill-049",
+      "domain": "enterprise-search"
+    },
+    {
+      "id": "gh-repo-analytics",
+      "expected": "user:skill-021",
+      "domain": "devops-analytics"
+    },
+    {
+      "id": "jax-computing-basics",
+      "expected": "user:skill-042",
+      "domain": "research"
+    },
+    {
+      "id": "lab-unit-harmonization",
+      "expected": "user:skill-123",
+      "domain": "healthcare"
+    },
+    {
+      "id": "offer-letter-generator",
+      "expected": "user:skill-116",
+      "domain": "document-generation"
+    },
+    {
+      "id": "pddl-tpp-planning",
+      "expected": "user:skill-117",
+      "domain": "research"
+    },
+    {
+      "id": "pptx-reference-formatting",
+      "expected": "user:skill-140",
+      "domain": "office-suite"
+    },
+    {
+      "id": "protein-expression-analysis",
+      "expected": "user:skill-105",
+      "domain": "data-analysis"
+    },
+    {
+      "id": "quantum-numerical-simulation",
+      "expected": "user:skill-033",
+      "domain": "quantum-simulation"
+    },
+    {
+      "id": "reserves-at-risk-calc",
+      "expected": "user:skill-105",
+      "domain": "financial-analysis"
+    },
+    {
+      "id": "shock-analysis-demand",
+      "expected": "user:skill-105",
+      "domain": "financial-analysis"
+    },
+    {
+      "id": "shock-analysis-supply",
+      "expected": "user:skill-105",
+      "domain": "financial-analysis"
+    },
+    {
+      "id": "taxonomy-tree-merge",
+      "expected": "user:skill-068",
+      "domain": "ML/NLP"
+    },
+    {
+      "id": "video-tutorial-indexer",
+      "expected": "user:skill-113",
+      "domain": "multimodal-processing"
+    },
+    {
+      "id": "virtualhome-agent-planning",
+      "expected": "user:skill-117",
+      "domain": "research"
+    },
+    {
+      "id": "weighted-gdp-calc",
+      "expected": "user:skill-105",
+      "domain": "financial-analysis"
+    }
+  ],
+  "runs": [
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7110
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5764
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7013
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 9675
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5964
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7553
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 9209
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6446
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7544
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6030
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 10121
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14052
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6908
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 9711
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5860
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5654
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7995
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6949
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6073
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6260
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 8987
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 8080
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 10787
+    },
+    {
+      "variant": "G-native",
+      "condition": "with-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6131
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7417
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 8751
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6658
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6994
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6204
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 9808
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7410
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6149
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6101
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7111
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5642
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6554
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6107
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7401
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6074
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5908
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5968
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6521
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6147
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16194
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5836
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5913
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6339
+    },
+    {
+      "variant": "G-native",
+      "condition": "without-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7859
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17245
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17860
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14699
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 34831
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 31441
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 32496
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27288
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20277
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25731
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6930
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21023
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 33558
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23227
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15274
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23374
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17520
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18033
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 36767
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 26170
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22269
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20634
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 28688
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21052
+    },
+    {
+      "variant": "A-router",
+      "condition": "with-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23214
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16915
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17813
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18638
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19096
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20529
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5931
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 34918
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20222
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21032
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21675
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19944
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24107
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 10472
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17897
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14133
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30702
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20292
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 39368
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25729
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30840
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24907
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7368
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21094
+    },
+    {
+      "variant": "A-router",
+      "condition": "without-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25543
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24827
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 59239
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 26120
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40176
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 57139
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 53846
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40918
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27112
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 35039
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 34917
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 33775
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 57784
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 42145
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40481
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40187
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 43052
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 39736
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 26411
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 44751
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 46049
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 42260
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 36918
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30929
+    },
+    {
+      "variant": "B-cc",
+      "condition": "with-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 31061
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 42853
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 49488
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 37039
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 63734
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 87979
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 8029
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 58111
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40047
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 55413
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 8084
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13290
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 9411
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 38477
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27846
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 52225
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 34271
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25220
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 28165
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 57634
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 51601
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 44234
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6861
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29905
+    },
+    {
+      "variant": "B-cc",
+      "condition": "without-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27288
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30480
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22216
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22254
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 38969
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40396
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29591
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 36760
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40406
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 35371
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27291
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20149
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29190
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20334
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27166
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23856
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23039
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20025
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 39607
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 36092
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 37263
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24497
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 31504
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30827
+    },
+    {
+      "variant": "C-lite",
+      "condition": "with-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29319
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27384
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18870
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29015
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40581
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 39762
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6997
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 8121
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24294
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 35826
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6750
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7386
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6986
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24670
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 33103
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20775
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21941
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22557
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6403
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25031
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21707
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7247
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 11161
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27999
+    },
+    {
+      "variant": "C-lite",
+      "condition": "without-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25885
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21016
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22879
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7143
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16081
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29411
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16553
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17055
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18530
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15559
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 33768
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16385
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17144
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27951
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 39391
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20059
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19622
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16184
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17827
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18691
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 41495
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17670
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17903
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30149
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "with-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16149
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15379
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17497
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18216
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19578
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18779
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14527
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18175
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30331
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 31704
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13605
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14360
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17222
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 35356
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25273
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17404
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16524
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15608
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20024
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17396
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21224
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22716
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6716
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29906
+    },
+    {
+      "variant": "D-agentic",
+      "condition": "without-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27304
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16229
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13759
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18328
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 12809
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13660
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16629
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19584
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14396
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18887
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 31233
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21100
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16261
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15559
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17567
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16206
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13598
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14703
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15246
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22591
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17530
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13181
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17915
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14950
+    },
+    {
+      "variant": "E-digest",
+      "condition": "with-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18802
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16426
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6422
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13884
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6597
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16085
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6959
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18205
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14259
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22440
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6044
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13790
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21079
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13050
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20899
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6674
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17183
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14404
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17792
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17225
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27799
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15981
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19654
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20606
+    },
+    {
+      "variant": "E-digest",
+      "condition": "without-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15492
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30687
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19011
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21739
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21752
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 36174
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 26386
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29907
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18008
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 35262
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6924
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 34122
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 27254
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22541
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25332
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22338
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20918
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19547
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20646
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 38720
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25695
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21705
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 33991
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19733
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "with-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17513
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24403
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29388
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18661
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23058
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 28564
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6809
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30410
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18284
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7024
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7339
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21262
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6355
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21826
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25181
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22105
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6287
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18579
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19180
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 35468
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23813
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22092
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23141
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19140
+    },
+    {
+      "variant": "H-bounded",
+      "condition": "without-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21739
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14266
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16902
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6525
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19639
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14516
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13787
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20108
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20150
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25037
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22484
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24329
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16170
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22016
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15819
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16725
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21586
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15118
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15861
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15690
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 35351
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14112
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15263
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22420
+    },
+    {
+      "variant": "I-meta",
+      "condition": "with-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 34990
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16749
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16758
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16806
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14456
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13658
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 8110
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16835
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15130
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18284
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6167
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20149
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14088
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16924
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22868
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 11364
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21997
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13911
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 11656
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16001
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16329
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17728
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 7998
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21693
+    },
+    {
+      "variant": "I-meta",
+      "condition": "without-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21868
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17803
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15840
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15000
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18597
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 20753
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13464
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15577
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18607
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18672
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 39529
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17063
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14729
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15035
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21579
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19866
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18401
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18101
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19004
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17088
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6958
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21779
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15145
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15552
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "with-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15415
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "3d-scan-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 28871
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 12394
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "citation-check",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17701
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "court-form-filling",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14006
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "data-to-d3",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18825
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "dialogue-parser",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6837
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "earthquake-plate-calculation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19591
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "econ-detrending-correlation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 15639
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "enterprise-information-search",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23805
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "gh-repo-analytics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6285
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "jax-computing-basics",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6342
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "lab-unit-harmonization",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19228
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "offer-letter-generator",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30309
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "pddl-tpp-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16208
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "pptx-reference-formatting",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 5948
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "protein-expression-analysis",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 16763
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "quantum-numerical-simulation",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13921
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "reserves-at-risk-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17249
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-demand",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 17596
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "shock-analysis-supply",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 18775
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "taxonomy-tree-merge",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 13852
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "video-tutorial-indexer",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 6822
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "virtualhome-agent-planning",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 14483
+    },
+    {
+      "variant": "J-bounded",
+      "condition": "without-claudemd",
+      "queryId": "weighted-gdp-calc",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 19200
+    }
+  ]
+}
