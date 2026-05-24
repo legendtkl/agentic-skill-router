@@ -2,7 +2,7 @@
 
 **九种 retriever 在 trigger 充分激活条件下的系统对比**
 
-实验日期:2026-05-23 ~ 2026-05-24 · 语料:SkillRouter eval-core (arXiv:2603.22455) 裁剪匿名化版,150 skills · 规模:Phase 1 probe 64 cells + Phase 2 paired 432 cells + D-agentic rerun 48 cells = **544 cells**
+实验日期:2026-05-23 ~ 2026-05-24 · 语料:SkillRouter eval-core (arXiv:2603.22455) 裁剪匿名化版,150 skills · 规模:Claude Code 主实验 544 cells + Codex 补充实验 216 cells = **760 routing cells**
 
 ---
 
@@ -18,9 +18,95 @@
 2. **J-bounded 是 Pareto 王者**:在 92% 准确率同时,cost \$3.07、duration 374s、ctx_end 30.7K 三项 router 全场最低。读 body 的 B-cc 把准确率推到 96%,但 cost 高 81%。
 3. **trigger noise 的本质是模型在强 keyword 锚定下跳过工具调用,与 corpus 内容无关**。CLAUDE.md 把 hallucination(输出不存在的 skill 名)从 21.4% 压到 2.6%,而 G-native 对照变体(corpus 全启用、router 不加载)两条 arm 完全无差异(15/24 / 15/24),严格证伪"提升仅来自 LLM 跨 run 随机性"。
 
+同步远端 `main` 后,补齐了同一 24-query / 150-skill 语料上的 **Codex 9×24 routing-only 复现实验**。Codex 结果显著不同:宿主原生 G-native 为 **24/24**,D-agentic router 也为 **24/24**,C-lite / E-digest / H-bounded 为 23/24,B-cc / I-meta / J-bounded 为 22/24,A-router 为 8/24。结合真实请求抓包,Codex 与 Claude Code 的 native 差异主要来自 skill 选择机制:Codex 请求内联了更长、更完整的 skill 元数据列表;Claude Code 真实请求中 skill 列表被压到更短描述,并通过独立 `Skill` tool 再触发执行。详见下方"Codex 补充"。
+
 本实验**仅验证路由层准确率**,不验证下游 skill 执行链路;hallucinated 命名在生产中的兜底机制讨论见 §10。
 
 ---
+
+## Codex 补充:跨宿主复现实验与 native 差异分析
+
+### 补充 1:实验边界
+
+为回答"Claude Code native 15/24 而 Codex G-native 24/24 是否可信、原因是什么",在同步远端 `main` 后补跑 Codex 侧完整 9×24 routing-only 实验:
+
+- **同一 query 集**:`queries.json` 的 24 个 SkillsBench single-skill query,expected skill mapping 与 Claude Code 主实验完全相同。
+- **同一语料**:匿名化后的 150 个 `skill-NNN` corpus,同一 `STOP_TAIL`,同样只评测 routing 层,不执行下游任务。
+- **同一变体族**:G-native + A/B/C/D/E/H/I/J。Codex 版 router SKILL.md 仅做宿主适配:路径从 `.claude/skills` 改为 `.codex/skills`,skill id 归一化去除 `user:codex:` 前缀,并把 `skill-corpus` wrapper 安装到隔离 HOME。
+- **执行环境**:`codex exec`,model `gpt-5.5`,`reasoning_effort=high`,每 cell timeout 240s。先跑完既有 4×24,再补齐剩余 A/B/D/E/H 的 5×24,最后合并为 9×24。
+
+主产物:
+
+- `runs/codex-routing-only-9x24/summary.json`
+- `runs/codex-routing-only-9x24/report.md`
+- `runs/native-prompt-capture/analysis.md`
+
+### 补充 2:Codex 9×24 总体结果
+
+| variant | acc | router | Σdur(s) | Σtools | avg ctx_end | Σout | Σreason | Σ$est |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| **G-native** | **24/24** | n/a | 185.4 | 0 | 19,456 | 2,985 | 2,625 | 1.816 |
+| A-router | 8/24 | 24/24 | 945.6 | 59 | 26,906 | 34,046 | 9,543 | 4.485 |
+| B-cc | 22/24 | 24/24 | 718.0 | 84 | 30,810 | 17,227 | 6,671 | 4.853 |
+| C-lite | 23/24 | 24/24 | 658.5 | 140 | 18,388 | 19,741 | 4,877 | 3.594 |
+| **D-agentic** | **24/24** | 24/24 | 538.6 | 59 | 19,678 | 13,177 | 4,937 | 2.870 |
+| E-digest | 23/24 | 24/24 | 637.7 | 48 | 20,254 | 11,563 | 5,191 | 2.946 |
+| H-bounded | 23/24 | 24/24 | 751.0 | 130 | 19,913 | 21,707 | 6,739 | 4.348 |
+| I-meta | 22/24 | 24/24 | 495.0 | 50 | 21,076 | 12,137 | 5,067 | 3.310 |
+| J-bounded | 22/24 | 24/24 | 473.9 | 53 | 16,851 | 11,286 | 4,851 | 2.415 |
+
+Codex 侧的策略结论与 Claude Code 不同:
+
+1. **Codex native G-native 在 150-skill 规模上达到 24/24**。这不是生产上"永远启用全部 skill"的推荐,因为它仍占用常驻上下文且更大 corpus 未测;但它说明 Codex 当前 native skill 选择在本基准上没有 Claude Code native 的 15/24 天花板。
+2. **D-agentic 是 Codex router 的 accuracy/cost 最优点**:24/24,成本 \$2.870,avg ctx_end 19.7K,比 B-cc 更准、更便宜、更短。
+3. **J-bounded 仍是最低成本 router,但不再是 Pareto 王者**:Codex 上 J 为 22/24,\$2.415;D-agentic 用 +\$0.455 换 +2 cells 到满分。
+4. **A-router 继续失效且在 Codex 上更差**:8/24。固定 lexical/级联 scorer 在长 query + 近义 distractor 下仍不能可靠替代 LLM-driven keyword extraction 和二次判别。
+
+除 A-router 外,Codex router 失误集中在少数边界样本:
+
+| variant | miss |
+| --- | --- |
+| B-cc | `gh-repo-analytics`→skill-046,`virtualhome-agent-planning`→skill-110 |
+| C-lite | `enterprise-information-search`→skill-087 |
+| E-digest | `weighted-gdp-calc`→skill-026 |
+| H-bounded | `shock-analysis-supply`→skill-080 |
+| I-meta | `earthquake-plate-calculation`→skill-092,`gh-repo-analytics`→skill-046 |
+| J-bounded | `econ-detrending-correlation`→skill-105,`shock-analysis-supply`→skill-080 |
+
+### 补充 3:Claude Code vs Codex 策略层差异
+
+| host / condition | G-native | A | B | C | D | E | H | I | J | 策略结论 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Claude Code with-CLAUDE.md | 15/24 | 13/24 | **23/24** | **23/24** | 22/24 | 22/24 | 22/24 | 21/24 | 22/24 | B/C accuracy 第一,J-bounded 是成本 Pareto |
+| Codex | **24/24** | 8/24 | 22/24 | 23/24 | **24/24** | 23/24 | 23/24 | 22/24 | 22/24 | G-native 与 D-agentic 满分,D-agentic 是 router 首选 |
+
+这说明两点:
+
+1. **query 与 gt mapping 不是差异来源**。两边使用的是同一 `queries.json`,同一匿名化语料,同一 routing-only 输出 schema。
+2. **host skill 选择机制会改变策略排序**。Claude Code 需要先解决 trigger noise,再比较 retriever;Codex router 24/24 全部触发,主要差异变成变体 body 如何组织搜索与证据。
+
+### 补充 4:native 请求抓包证据
+
+为避免只凭文档或推测归因,对 `weighted-gdp-calc` 同一 query 抓取了真实发出的 native 请求。抓包脚本只保留本地实验请求体,去除了 auth-like header 和 metadata identifier;原始请求 JSON 被 `.gitignore` 忽略,汇总保存在 `runs/native-prompt-capture/analysis.md`。
+
+| host native | endpoint | skill lines | skill list chars | avg desc chars | max desc chars | 执行机制 |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Codex | `/v1/responses` | 150 | 21,117 | 92 | 100 | `instructions` 中内联 `### Available skills` + open `SKILL.md` 指令 |
+| Claude Code | `/v1/messages?beta=true` | 150 | 7,948 | 20 | 20 | `Skill` tool + budgeted skill listing |
+
+关键差异:
+
+- **Codex 请求里 `skill-105` 保留了可判别描述**:`Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, ...`。这对 `weighted-gdp-calc` / financial spreadsheet 类 query 是强信号。
+- **Claude Code 请求里同一 skill 只剩短描述片段**:`Comprehensive sprea…`。`skill-026` 等 spreadsheet distractor 也被同样截短,模型要在短片段上先决定是否调用 `Skill` tool,再启动对应 skill。
+- **Codex 的 native routing-only 可以直接基于内联元数据输出 JSON**;Claude Code native 则多一个 tool trigger / tool selection 阶段,因此更容易受到 trigger 失败、截断描述和近义 distractor 的共同影响。
+
+这组抓包不能单独证明所有 24 个 query 的因果链,因为它只覆盖一个代表性 query 和当前 CLI / 模型版本;但它与完整结果一致:Codex G-native 24/24,Claude Code G-native 15/24。最稳妥的归因是 **同 query、同 corpus 下,宿主请求中的 skill 元数据预算/呈现方式和 skill 执行机制不同**,而不是语料或 query 不一致。
+
+### 补充 5:对实现选择的影响
+
+- **Claude Code 生产路径**:必须先解决 trigger,否则比较 retriever 没意义。当前证据支持 `CLAUDE.md`/prompt hardening + J-bounded 作为低成本默认,B/C 作为最高准确率选项,并加 hallucinated name 校验。
+- **Codex 生产路径**:如果只看 150-skill native,G-native 已满分;但 `skill-router` 的目标是降低常驻 skill context 和支持更大 corpus,所以仍应以 disabled-skill router 为主。当前 Codex router 默认应优先考虑 D-agentic;若成本优先再考虑 J-bounded/E-digest。
+- **A-router 后续不应继续只调 lexical 级联**。两边都低分,说明应把 query rewrite / candidate rerank 交回 LLM,或者把 CLI 改为返回候选证据而非直接 commit。
 
 ## 1. 引言与研究问题
 
@@ -28,7 +114,7 @@
 
 Claude Code 与 Codex 等编码 agent 通过 **Agent Skill** 机制在推理时注入领域知识。每个 skill 由一个 `SKILL.md` 文件构成,包含 YAML frontmatter(`name`、`description`)和 markdown 正文(实际指令)。宿主在会话启动时把所有已启用 skill 的元数据(name + description)拼入系统上下文,使模型可以基于元数据自动决定是否调用某个 skill。
 
-宿主对 skill 元数据有显式的上下文预算约束:Claude Code 大约 1%、Codex 大约 2% / 8000 字符。当用户安装的 skill 数量超过预算时,要么挤占有限的上下文,要么被截断 —— 两种情况都使 skill 数量越多、可用性反而越差。
+宿主对 skill 元数据有显式的上下文预算约束,且不同版本/宿主会采用不同压缩与呈现策略;本次抓包中 Codex native 内联了约 21K chars 的 skill section,而 Claude Code native 将同一 150-skill listing 压到约 7.9K chars。当用户安装的 skill 数量超过预算时,要么挤占有限的上下文,要么被截断 —— 两种情况都使 skill 数量越多、可用性反而越差。
 
 `skill-router` 项目提出的方案是:把不常用的 skill **禁用**(将 `SKILL.md` 重命名为 `SKILL.md.skill-router-disabled`),使其退出宿主的常驻元数据预算;**当某个请求确实需要某项被禁用的能力时,再通过一个"路由"步骤把它找回来**。
 
@@ -458,6 +544,28 @@ J-bounded 的 30.7K 略低于 G-native 的 36.5K —— 关键词过滤短列表
 - **1 个 query 全部失败:gh-repo-analytics**(8/8 router 变体在两条 arm 都挂),原因详见 §7.4。
 - **1 个 query 比 without 更差:shock-analysis-supply**(with 2/8 vs without 5/8),原因详见 §7.5。
 - **最大涨幅:dialogue-parser**(7/8 vs 0/8 baseline),trigger 噪声移除后 7 个 router 都能命中。
+
+### 6.6 Codex 与 Claude Code 并列结果
+
+同步远端 `main` 后补跑的 Codex 9×24 使用同一 24-query / 150-skill 语料、同一 expected mapping、同一 routing-only 输出 schema。下表把 Codex 与 Claude Code with-CLAUDE.md 主结果并列展示:
+
+| variant | Claude Code acc | Codex acc | 差异说明 |
+| --- | ---: | ---: | --- |
+| **G-native** | 15/24 | **24/24** | 最大差异;Codex native 在本基准上满分,Claude Code native 受 skill listing 压缩 + Skill tool 选择机制影响 |
+| A-router | 13/24 | 8/24 | 两边都低,固定 lexical/级联 scorer 不适合长 query + 近义 distractor |
+| B-cc | **23/24** | 22/24 | Claude Code 第一档之一;Codex 上成本较高且非 Pareto |
+| C-lite | **23/24** | 23/24 | 两边稳定,读 body 的有界 DCI 泛化最好 |
+| **D-agentic** | 22/24 | **24/24** | Codex router 首选;结构化循环在 Codex 上达到满分 |
+| E-digest | 22/24 | 23/24 | Codex 上 metadata digest 略优 |
+| H-bounded | 22/24 | 23/24 | Codex 上 bounded DCI 略优,但工具调用较多 |
+| I-meta | 21/24 | 22/24 | 两边均低于最强 metadata/reader 变体 |
+| J-bounded | 22/24 | 22/24 | Claude Code 成本 Pareto;Codex 上仍最低成本但不再是 Pareto 王者 |
+
+并列结果改变了两个结论的表述:
+
+1. **Claude Code 侧的核心问题是 trigger + native skill selection**。CLAUDE.md 注入后 router 才能稳定进入比较;native G-native 只有 15/24。
+2. **Codex 侧 native 与 D-agentic 都达到 24/24**。这不意味着生产应全量启用所有 skill,因为上下文预算和更大 corpus 尚未验证;但说明在当前 150-skill 基准上,Codex 原生 skill 选择能力显著强于 Claude Code native。
+3. **推荐策略按宿主分化**:Claude Code 默认推荐 J-bounded(低成本)或 B/C(最高准确率);Codex 默认推荐 D-agentic,成本优先再考虑 J-bounded/E-digest。
 
 ---
 
@@ -1071,7 +1179,13 @@ If no description is a confident match after one re-grep, fall back to general k
 | `detail-paired.mjs` | Phase 2 详细指标分析器(含 ctx_end 修正) |
 | `render-paired.mjs` | Phase 2 side-by-side HTML 渲染器 |
 | `rerun-d-agentic.mjs` | D-agentic SKILL.md 修复后的 48-cell rerun driver |
+| `codex-routing-only-9x24.mjs` | Codex 9×24 routing-only driver wrapper |
+| `merge-codex-routing-runs.mjs` | Codex 4×24 + 5×24 结果合并器 |
+| `render-codex-9x24.mjs` | Codex 9×24 Markdown 报告渲染器 |
+| `capture-native-prompts.mjs` | Codex / Claude Code native 请求抓包与摘要脚本 |
 | `runs/claudemd-probe/` | Phase 1 64-cell transcripts + summary.json + gate-report.json |
 | `runs/routing-only-9x24-claudemd/` | Phase 2 paired 432-cell transcripts + summary.json + summary-metrics.json + report.html |
+| `runs/codex-routing-only-9x24/` | Codex 9×24 汇总 summary.json + report.md |
+| `runs/native-prompt-capture/analysis.md` | native 请求抓包汇总(原始 request JSON 本地忽略) |
 | `REPORT-claudemd.md` | 本报告 |
 | `REPORT-claudemd.html` | 本报告 HTML 版 |

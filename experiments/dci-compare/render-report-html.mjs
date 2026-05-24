@@ -14,6 +14,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, "runs", "routing-only-9x24-claudemd");
 const SUMMARY_PATH = join(OUT_DIR, "summary.json");
 const REPORT_HTML = join(__dirname, "REPORT-claudemd.html");
+const CODEX_SUMMARY_PATH = join(__dirname, "runs", "codex-routing-only-9x24", "summary.json");
+const CODEX_REPORT_PATH = join(__dirname, "runs", "codex-routing-only-9x24", "report.md");
+const NATIVE_CAPTURE_PATH = join(__dirname, "runs", "native-prompt-capture", "analysis.md");
 
 const ROUTER_TOOL_PATTERN = /skill-router-skills|skill[_-]router[_-]skills/i;
 const REAL_ID = /^skill-\d{3}$/;
@@ -30,6 +33,18 @@ const VARIANT_INFO = {
   "J-bounded": { paradigm: "Keyword-filtered",  reads_body: false },
 };
 const VARIANT_ORDER = ["B-cc", "C-lite", "D-agentic", "E-digest", "H-bounded", "J-bounded", "I-meta", "G-native", "A-router"];
+const CODEX_EXPECTED = [
+  { variant: "G-native", acc: "24/24", router: "n/a", dur: "185.4", tools: "0", avgCtx: "19456", out: "2985", reason: "2625", cost: "1.816" },
+  { variant: "A-router", acc: "8/24", router: "24/24", dur: "945.6", tools: "59", avgCtx: "26906", out: "34046", reason: "9543", cost: "4.485" },
+  { variant: "B-cc", acc: "22/24", router: "24/24", dur: "718.0", tools: "84", avgCtx: "30810", out: "17227", reason: "6671", cost: "4.853" },
+  { variant: "C-lite", acc: "23/24", router: "24/24", dur: "658.5", tools: "140", avgCtx: "18388", out: "19741", reason: "4877", cost: "3.594" },
+  { variant: "D-agentic", acc: "24/24", router: "24/24", dur: "538.6", tools: "59", avgCtx: "19678", out: "13177", reason: "4937", cost: "2.870" },
+  { variant: "E-digest", acc: "23/24", router: "24/24", dur: "637.7", tools: "48", avgCtx: "20254", out: "11563", reason: "5191", cost: "2.946" },
+  { variant: "H-bounded", acc: "23/24", router: "24/24", dur: "751.0", tools: "130", avgCtx: "19913", out: "21707", reason: "6739", cost: "4.348" },
+  { variant: "I-meta", acc: "22/24", router: "24/24", dur: "495.0", tools: "50", avgCtx: "21076", out: "12137", reason: "5067", cost: "3.310" },
+  { variant: "J-bounded", acc: "22/24", router: "24/24", dur: "473.9", tools: "53", avgCtx: "16851", out: "11286", reason: "4851", cost: "2.415" },
+];
+const CODEX_VARIANT_ORDER = ["G-native", "A-router", "B-cc", "C-lite", "D-agentic", "E-digest", "H-bounded", "I-meta", "J-bounded"];
 
 async function parseCell(path) {
   const text = await readFile(path, "utf8");
@@ -83,15 +98,78 @@ function fmt$(n) { return n == null ? "—" : `$${n.toFixed(2)}`; }
 function fmtSec(ms) { return ms == null ? "—" : `${(ms / 1000).toFixed(0)}s`; }
 function fmtK(n) { return n == null ? "—" : `${(n / 1000).toFixed(1)}K`; }
 
+function assertReportInvariant(cond, message) {
+  if (!cond) throw new Error(message);
+}
+
+async function loadCodexSupplement() {
+  for (const path of [CODEX_SUMMARY_PATH, CODEX_REPORT_PATH, NATIVE_CAPTURE_PATH]) {
+    assertReportInvariant(existsSync(path), `missing Codex supplement artifact: ${path}`);
+  }
+  const summary = JSON.parse(await readFile(CODEX_SUMMARY_PATH, "utf8"));
+  const report = await readFile(CODEX_REPORT_PATH, "utf8");
+  const native = await readFile(NATIVE_CAPTURE_PATH, "utf8");
+
+  assertReportInvariant(summary.variants?.length === 9, "Codex summary must contain 9 variants");
+  assertReportInvariant(summary.queries?.length === 24, "Codex summary must contain 24 queries");
+  assertReportInvariant(summary.runs?.length === 216, "Codex summary must contain 216 runs");
+  assertReportInvariant(new Set(summary.variants.map((v) => v.id)).size === 9, "Codex summary variant ids must be unique");
+
+  const statsByVariant = new Map((summary.variantStats || []).map((s) => [s.variant, s]));
+  for (const row of CODEX_EXPECTED) {
+    const stat = statsByVariant.get(row.variant);
+    assertReportInvariant(stat, `Codex summary missing stat for ${row.variant}`);
+    const [correct, total] = row.acc.split("/").map(Number);
+    assertReportInvariant(stat.correct === correct && stat.n === total, `Codex accuracy drift for ${row.variant}`);
+    if (row.router !== "n/a") {
+      assertReportInvariant(`${stat.routerTriggered}/${stat.n}` === row.router, `Codex router count drift for ${row.variant}`);
+    }
+    assertReportInvariant(report.includes(`| ${row.variant} | ${row.acc} | ${row.router} | ${row.dur} | ${row.tools} |`),
+      `Codex rollup report drift for ${row.variant}`);
+  }
+
+  assertReportInvariant(native.includes("| Codex native | `/v1/responses` | 150 | 21117 | 92 | 100 |"),
+    "native prompt capture drift for Codex");
+  assertReportInvariant(native.includes("| Claude Code native | `/v1/messages?beta=true` | 150 | 7948 | 20 | 20 |"),
+    "native prompt capture drift for Claude Code");
+
+  const expectedByQ = new Map(summary.queries.map((q) => [q.id, q.expected]));
+  const misses = new Map();
+  for (const run of summary.runs) {
+    if (run.variant === "A-router") continue;
+    const expected = expectedByQ.get(run.queryId);
+    if (run.matched !== expected) {
+      const arr = misses.get(run.variant) || [];
+      arr.push(`${run.queryId}→${run.matched || "none"}`);
+      misses.set(run.variant, arr);
+    }
+  }
+  return {
+    missRows: CODEX_VARIANT_ORDER
+      .filter((variant) => misses.has(variant))
+      .map((variant) => ({ variant, misses: misses.get(variant) })),
+  };
+}
+
 async function main() {
   if (!existsSync(SUMMARY_PATH)) {
     console.error(`missing ${SUMMARY_PATH}`);
     process.exit(1);
   }
+  const codex = await loadCodexSupplement();
   const summary = JSON.parse(await readFile(SUMMARY_PATH, "utf8"));
   const queries = summary.queries;
   const qById = new Map(queries.map((q) => [q.id, q]));
   const runs = summary.runs.filter((r) => !r.__error && r.queryId);
+  const missingTranscript = runs.find((r) => {
+    const path = join(OUT_DIR, `${r.variant}.${r.condition}`, `${r.queryId}.jsonl`);
+    return !existsSync(path);
+  });
+  if (missingTranscript) {
+    const path = join(OUT_DIR, `${missingTranscript.variant}.${missingTranscript.condition}`, `${missingTranscript.queryId}.jsonl`);
+    console.error(`missing transcript ${path}; refusing to render partial metrics`);
+    process.exit(1);
+  }
 
   const cells = await Promise.all(runs.map(async (r) => {
     const path = join(OUT_DIR, `${r.variant}.${r.condition}`, `${r.queryId}.jsonl`);
@@ -242,13 +320,14 @@ async function main() {
 <p class="meta">
   实验日期 ${summary.startedAt?.slice(0, 10) || "2026-05-23"} ~ ${summary.finishedAt?.slice(0, 10) || "2026-05-24"} ·
   语料 SkillRouter eval-core (arXiv:2603.22455) 裁剪匿名化版,150 skills ·
-  规模 Phase 1 64 cells + Phase 2 paired 432 cells + D-agentic rerun 48 cells = <b>544 cells</b>
+  规模 Claude Code 主实验 544 cells + Codex 补充实验 216 cells = <b>760 routing cells</b>
 </p>
 
 <div class="toc">
 <b>目录</b>
 <ol>
   <li><a href="#summary">摘要</a></li>
+  <li><a href="#codex-supplement">Codex 补充</a></li>
   <li><a href="#s1">引言与研究问题</a></li>
   <li><a href="#s2">相关工作</a></li>
   <li><a href="#s3">实验方法</a></li>
@@ -275,7 +354,7 @@ async function main() {
 </p>
 
 <dl class="kv">
-<dt>Router 准确率提升</dt><dd>65% → <span class="delta-pos">84% (+19.3pp)</span></dd>
+<dt>Router 准确率提升</dt><dd>70% → <span class="delta-pos">88% (+17.2pp)</span></dd>
 <dt>Trigger rate</dt><dd>80% → <span class="delta-pos">97% (+17.7pp)</span></dd>
 <dt>Hallucination rate</dt><dd>21.4% → <span class="delta-pos">2.6%</span></dd>
 <dt>Cost 增量</dt><dd>+13% (\$3.86 / 192 cells)</dd>
@@ -284,6 +363,72 @@ async function main() {
 <dt>第二档 (92%)</dt><dd>D-agentic,E-digest,H-bounded,J-bounded</dd>
 <dt>Pareto 王者</dt><dd>J-bounded (92% / \$3.07 / 374s / 30.7K ctx)</dd>
 </dl>
+
+<h2 id="codex-supplement">Codex 补充:跨宿主复现实验与 native 差异分析</h2>
+
+<h3>补充 1:实验边界</h3>
+<p>同步远端 <code>main</code> 后,补跑 Codex 侧完整 9×24 routing-only 实验,用于解释 Claude Code native 15/24 而 Codex G-native 24/24 的差异。两边使用同一 <code>queries.json</code>、同一匿名化 150-skill corpus、同一 expected mapping 和同一 routing-only 输出 schema。Codex 版 router SKILL.md 仅做宿主适配:<code>.claude/skills</code> 改为 <code>.codex/skills</code>,归一化 <code>user:codex:</code> 前缀,并把 <code>skill-corpus</code> wrapper 安装到隔离 HOME。</p>
+
+<p>执行环境:<code>codex exec</code>,model <code>gpt-5.5</code>,<code>reasoning_effort=high</code>,timeout 240s/cell。先跑既有 4×24,再补齐 A/B/D/E/H 的 5×24,合并为 9×24。主产物见 <code>runs/codex-routing-only-9x24/summary.json</code>、<code>runs/codex-routing-only-9x24/report.md</code> 与 <code>runs/native-prompt-capture/analysis.md</code>。</p>
+
+<h3>补充 2:Codex 9×24 总体结果</h3>
+<table class="compact">
+<thead><tr><th>variant</th><th>acc</th><th>router</th><th>Σdur(s)</th><th>Σtools</th><th>avg ctx_end</th><th>Σout</th><th>Σreason</th><th>Σ$est</th></tr></thead>
+<tbody>
+<tr><td><b>G-native</b></td><td class="ok num"><b>24/24</b></td><td>n/a</td><td class="num">185.4</td><td class="num">0</td><td class="num">19,456</td><td class="num">2,985</td><td class="num">2,625</td><td class="num">1.816</td></tr>
+<tr><td>A-router</td><td class="fail num">8/24</td><td>24/24</td><td class="num">945.6</td><td class="num">59</td><td class="num">26,906</td><td class="num">34,046</td><td class="num">9,543</td><td class="num">4.485</td></tr>
+<tr><td>B-cc</td><td class="num">22/24</td><td>24/24</td><td class="num">718.0</td><td class="num">84</td><td class="num">30,810</td><td class="num">17,227</td><td class="num">6,671</td><td class="num">4.853</td></tr>
+<tr><td>C-lite</td><td class="num">23/24</td><td>24/24</td><td class="num">658.5</td><td class="num">140</td><td class="num">18,388</td><td class="num">19,741</td><td class="num">4,877</td><td class="num">3.594</td></tr>
+<tr><td><b>D-agentic</b></td><td class="ok num"><b>24/24</b></td><td>24/24</td><td class="num">538.6</td><td class="num">59</td><td class="num">19,678</td><td class="num">13,177</td><td class="num">4,937</td><td class="num">2.870</td></tr>
+<tr><td>E-digest</td><td class="num">23/24</td><td>24/24</td><td class="num">637.7</td><td class="num">48</td><td class="num">20,254</td><td class="num">11,563</td><td class="num">5,191</td><td class="num">2.946</td></tr>
+<tr><td>H-bounded</td><td class="num">23/24</td><td>24/24</td><td class="num">751.0</td><td class="num">130</td><td class="num">19,913</td><td class="num">21,707</td><td class="num">6,739</td><td class="num">4.348</td></tr>
+<tr><td>I-meta</td><td class="num">22/24</td><td>24/24</td><td class="num">495.0</td><td class="num">50</td><td class="num">21,076</td><td class="num">12,137</td><td class="num">5,067</td><td class="num">3.310</td></tr>
+<tr><td>J-bounded</td><td class="num">22/24</td><td>24/24</td><td class="num">473.9</td><td class="num">53</td><td class="num">16,851</td><td class="num">11,286</td><td class="num">4,851</td><td class="num">2.415</td></tr>
+</tbody>
+</table>
+
+<ol>
+<li><b>Codex native G-native 在 150-skill 规模上达到 24/24</b>。这不等于生产上应永远启用全部 skill,但说明本基准里 Codex native skill 选择没有 Claude Code native 的 15/24 天花板。</li>
+<li><b>D-agentic 是 Codex router 的 accuracy/cost 最优点</b>:24/24,成本 $2.870,avg ctx_end 19.7K,比 B-cc 更准、更便宜、更短。</li>
+<li><b>J-bounded 仍是最低成本 router,但不再是 Pareto 王者</b>:22/24,$2.415;D-agentic 用 +$0.455 换 +2 cells 到满分。</li>
+<li><b>A-router 两边都低分</b>:Claude Code 13/24,Codex 8/24,说明固定 lexical/级联 scorer 不能替代 LLM-driven keyword extraction 与二次判别。</li>
+</ol>
+
+<p>除 A-router 外,Codex router 失误集中在少数边界样本:</p>
+<table class="compact">
+<thead><tr><th>variant</th><th>miss</th></tr></thead>
+<tbody>
+${codex.missRows.map((row) => `<tr><td>${row.variant}</td><td>${row.misses.map((m) => `<code>${m}</code>`).join(",")}</td></tr>`).join("\n")}
+</tbody>
+</table>
+
+<h3>补充 3:Claude Code vs Codex 策略层差异</h3>
+<table class="compact">
+<thead><tr><th>host / condition</th><th>G-native</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>H</th><th>I</th><th>J</th><th>策略结论</th></tr></thead>
+<tbody>
+<tr><td>Claude Code with-CLAUDE.md</td><td>15/24</td><td>13/24</td><td><b>23/24</b></td><td><b>23/24</b></td><td>22/24</td><td>22/24</td><td>22/24</td><td>21/24</td><td>22/24</td><td>B/C accuracy 第一,J-bounded 是成本 Pareto</td></tr>
+<tr><td>Codex</td><td><b>24/24</b></td><td>8/24</td><td>22/24</td><td>23/24</td><td><b>24/24</b></td><td>23/24</td><td>23/24</td><td>22/24</td><td>22/24</td><td>G-native 与 D-agentic 满分,D-agentic 是 router 首选</td></tr>
+</tbody>
+</table>
+<p>两边 query 与 gt mapping 完全相同,因此差异不来自样本。Claude Code 需要先解决 trigger noise,再比较 retriever;Codex router 24/24 全部触发,主要差异变成变体 body 如何组织搜索与证据。</p>
+
+<h3>补充 4:native 请求抓包证据</h3>
+<p>对 <code>weighted-gdp-calc</code> 同一 query 抓取真实 native 请求。汇总如下:</p>
+<table class="compact">
+<thead><tr><th>host native</th><th>endpoint</th><th>skill lines</th><th>skill list chars</th><th>avg desc chars</th><th>max desc chars</th><th>执行机制</th></tr></thead>
+<tbody>
+<tr><td>Codex</td><td><code>/v1/responses</code></td><td class="num">150</td><td class="num">21,117</td><td class="num">92</td><td class="num">100</td><td><code>instructions</code> 中内联 <code>### Available skills</code> + open <code>SKILL.md</code> 指令</td></tr>
+<tr><td>Claude Code</td><td><code>/v1/messages?beta=true</code></td><td class="num">150</td><td class="num">7,948</td><td class="num">20</td><td class="num">20</td><td><code>Skill</code> tool + budgeted skill listing</td></tr>
+</tbody>
+</table>
+<p>Codex 请求中 <code>skill-105</code> 保留了 spreadsheet / formulas / formatting 等可判别描述;Claude Code 请求中同一 skill 只剩 <code>Comprehensive sprea…</code> 级别短片段,且还需要通过独立 <code>Skill</code> tool 启动。这组抓包只覆盖一个代表性 query,不能单独证明全部 24 个 query 的因果链;但它与完整结果一致。因此 native 差异的最稳妥归因是:同 query、同 corpus 下,宿主请求中的 skill 元数据预算/呈现方式与 skill 执行机制不同。</p>
+
+<h3>补充 5:对实现选择的影响</h3>
+<ul>
+<li><b>Claude Code</b>:必须先解决 trigger。当前证据支持 prompt hardening + J-bounded 作为低成本默认,B/C 作为最高准确率选项,并加 hallucinated name 校验。</li>
+<li><b>Codex</b>:150-skill native 已满分,但 skill-router 的目标是降低常驻 skill context 并支持更大 corpus。disabled-skill router 默认优先 D-agentic;成本优先再考虑 J-bounded/E-digest。</li>
+<li><b>A-router</b>:后续不应继续只调 lexical 级联,应让 CLI 返回候选证据或加入 LLM-driven query rewrite / rerank。</li>
+</ul>
 
 <h2 id="s1">1. 引言与研究问题</h2>
 
@@ -294,7 +439,7 @@ Claude Code 与 Codex 等编码 agent 通过 <b>Agent Skill</b> 机制在推理�
 </p>
 
 <p>
-宿主对 skill 元数据有显式预算:Claude Code ~1%,Codex ~2% / 8000 字符。skill 数量增长后,要么挤占上下文,要么被截断。<code>skill-router</code> 的方案是:不常用 skill <b>禁用</b>(<code>SKILL.md</code> 重命名为 <code>SKILL.md.skill-router-disabled</code>),需要时再通过路由步骤召回。
+宿主对 skill 元数据有显式预算,且不同版本/宿主会采用不同压缩与呈现策略;本次抓包中 Codex native 内联了约 21K chars 的 skill section,而 Claude Code native 将同一 150-skill listing 压到约 7.9K chars。skill 数量增长后,要么挤占上下文,要么被截断。<code>skill-router</code> 的方案是:不常用 skill <b>禁用</b>(<code>SKILL.md</code> 重命名为 <code>SKILL.md.skill-router-disabled</code>),需要时再通过路由步骤召回。
 </p>
 
 <p>这个路由步骤的实现差异决定了准确率与成本,是本研究的核心问题。</p>
@@ -590,6 +735,28 @@ ${perQueryWith.map((q) => {
 <b>全军覆没</b>:<code>gh-repo-analytics</code> 0/8 / 0/8(corpus annotation 争议,见 §7.4)。
 <b>唯一回退</b>:<code>shock-analysis-supply</code> with 2/8 vs without 5/8(overloaded gt skill 偏置,见 §7.5)。</p>
 
+<h3>6.6 Codex 与 Claude Code 并列结果</h3>
+<p>同步远端 <code>main</code> 后补跑的 Codex 9×24 使用同一 24-query / 150-skill 语料、同一 expected mapping、同一 routing-only 输出 schema。下表把 Codex 与 Claude Code with-CLAUDE.md 主结果并列展示:</p>
+<table class="compact">
+<thead><tr><th>variant</th><th>Claude Code acc</th><th>Codex acc</th><th>差异说明</th></tr></thead>
+<tbody>
+<tr><td><b>G-native</b></td><td class="num">15/24</td><td class="ok num"><b>24/24</b></td><td>最大差异;Codex native 在本基准上满分,Claude Code native 受 skill listing 压缩 + Skill tool 选择机制影响</td></tr>
+<tr><td>A-router</td><td class="num">13/24</td><td class="num">8/24</td><td>两边都低,固定 lexical/级联 scorer 不适合长 query + 近义 distractor</td></tr>
+<tr><td>B-cc</td><td class="ok num"><b>23/24</b></td><td class="num">22/24</td><td>Claude Code 第一档之一;Codex 上成本较高且非 Pareto</td></tr>
+<tr><td>C-lite</td><td class="ok num"><b>23/24</b></td><td class="num">23/24</td><td>两边稳定,读 body 的有界 DCI 泛化最好</td></tr>
+<tr><td><b>D-agentic</b></td><td class="num">22/24</td><td class="ok num"><b>24/24</b></td><td>Codex router 首选;结构化循环在 Codex 上达到满分</td></tr>
+<tr><td>E-digest</td><td class="num">22/24</td><td class="num">23/24</td><td>Codex 上 metadata digest 略优</td></tr>
+<tr><td>H-bounded</td><td class="num">22/24</td><td class="num">23/24</td><td>Codex 上 bounded DCI 略优,但工具调用较多</td></tr>
+<tr><td>I-meta</td><td class="num">21/24</td><td class="num">22/24</td><td>两边均低于最强 metadata/reader 变体</td></tr>
+<tr><td>J-bounded</td><td class="num">22/24</td><td class="num">22/24</td><td>Claude Code 成本 Pareto;Codex 上仍最低成本但不再是 Pareto 王者</td></tr>
+</tbody>
+</table>
+<ol>
+<li><b>Claude Code 侧的核心问题是 trigger + native skill selection</b>。CLAUDE.md 注入后 router 才能稳定进入比较;native G-native 只有 15/24。</li>
+<li><b>Codex 侧 native 与 D-agentic 都达到 24/24</b>。这不意味着生产应全量启用所有 skill,因为上下文预算和更大 corpus 尚未验证;但说明在当前 150-skill 基准上,Codex 原生 skill 选择能力显著强于 Claude Code native。</li>
+<li><b>推荐策略按宿主分化</b>:Claude Code 默认推荐 J-bounded(低成本)或 B/C(最高准确率);Codex 默认推荐 D-agentic,成本优先再考虑 J-bounded/E-digest。</li>
+</ol>
+
 <h2 id="s7">7. 失败案例分析</h2>
 
 <h3>7.1 A-router:lexical 检索器在长查询上的崩溃(54%)</h3>
@@ -753,8 +920,14 @@ ${queries.map((q) => `<tr><td>${q.id}</td><td>${q.expected.replace(/^user:/, "")
 <tr><td><code>claudemd-policy-probe.mjs</code></td><td>Phase 1 gate probe driver(64 cells)</td></tr>
 <tr><td><code>detail-paired.mjs</code></td><td>Phase 2 详细指标分析器(含 ctx_end 修正)</td></tr>
 <tr><td><code>rerun-d-agentic.mjs</code></td><td>D-agentic 修复后的 48-cell rerun driver</td></tr>
+<tr><td><code>codex-routing-only-9x24.mjs</code></td><td>Codex 9×24 routing-only driver wrapper</td></tr>
+<tr><td><code>merge-codex-routing-runs.mjs</code></td><td>Codex 4×24 + 5×24 结果合并器</td></tr>
+<tr><td><code>render-codex-9x24.mjs</code></td><td>Codex 9×24 Markdown 报告渲染器</td></tr>
+<tr><td><code>capture-native-prompts.mjs</code></td><td>Codex / Claude Code native 请求抓包与摘要脚本</td></tr>
 <tr><td><code>runs/claudemd-probe/</code></td><td>Phase 1 transcripts + summary.json + gate-report.json</td></tr>
 <tr><td><code>runs/routing-only-9x24-claudemd/</code></td><td>Phase 2 paired transcripts + summary.json + report.html</td></tr>
+<tr><td><code>runs/codex-routing-only-9x24/</code></td><td>Codex 9×24 汇总 summary.json + report.md</td></tr>
+<tr><td><code>runs/native-prompt-capture/analysis.md</code></td><td>native 请求抓包汇总(原始 request JSON 本地忽略)</td></tr>
 <tr><td><code>REPORT-claudemd.md</code></td><td>本报告 (markdown)</td></tr>
 <tr><td><code>REPORT-claudemd.html</code></td><td>本报告 (HTML 渲染)</td></tr>
 </tbody>

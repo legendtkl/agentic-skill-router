@@ -1,0 +1,141 @@
+{
+  "generatedAt": "2026-05-24T04:53:17.926Z",
+  "query": {
+    "id": "weighted-gdp-calc",
+    "expected": "user:skill-105",
+    "domain": "financial-analysis"
+  },
+  "codex": {
+    "requestUrl": "/v1/responses",
+    "requestBodyTopLevelKeys": [
+      "model",
+      "instructions",
+      "input",
+      "tools",
+      "tool_choice",
+      "parallel_tool_calls",
+      "reasoning",
+      "store",
+      "stream",
+      "include",
+      "prompt_cache_key",
+      "text",
+      "client_metadata"
+    ],
+    "debugPromptInputMessages": 3,
+    "availableSkillsSection": {
+      "skillLines": 150,
+      "chars": 21117,
+      "bytes": 21265,
+      "maxDescriptionChars": 100,
+      "minDescriptionChars": 32,
+      "avgDescriptionChars": 92,
+      "firstSkillLines": [
+        "- skill-001: コスト見積書を作成する。予算策定、見積もり、コスト計画時に使う。 (file: r0/skill-001/SKILL.md)",
+        "- skill-002: Advanced tools for creating, modifying, and analyzing pivot tables in Excel, enabling quick data sum (file: r0/skill-002/SKILL.md)",
+        "- skill-003: PDF manipulation toolkit. Extract text/tables, create PDFs, merge/split, fill forms, for programmati (file: r0/skill-003/SKILL.md)",
+        "- skill-004: Third-party WordPress plugin integration patterns. Use when adding new integrations, debugging c (file: r0/skill-004/SKILL.md)",
+        "- skill-005: Intelligent agent routing and topology selection based on task characteristics (file: r0/skill-005/SKILL.md)"
+      ],
+      "skill026Line": "- skill-026: A skill for generating and automating Excel spreadsheet (.xlsx) creation and modification for da (file: r0/skill-026/SKILL.md)",
+      "skill105Line": "- skill-105: Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, (file: r0/skill-105/SKILL.md)"
+    },
+    "debugAvailableSkillsSection": {
+      "skillLines": 150,
+      "chars": 21117,
+      "bytes": 21265,
+      "maxDescriptionChars": 100,
+      "minDescriptionChars": 32,
+      "avgDescriptionChars": 92,
+      "firstSkillLines": [
+        "- skill-001: コスト見積書を作成する。予算策定、見積もり、コスト計画時に使う。 (file: r0/skill-001/SKILL.md)",
+        "- skill-002: Advanced tools for creating, modifying, and analyzing pivot tables in Excel, enabling quick data sum (file: r0/skill-002/SKILL.md)",
+        "- skill-003: PDF manipulation toolkit. Extract text/tables, create PDFs, merge/split, fill forms, for programmati (file: r0/skill-003/SKILL.md)",
+        "- skill-004: Third-party WordPress plugin integration patterns. Use when adding new integrations, debugging c (file: r0/skill-004/SKILL.md)",
+        "- skill-005: Intelligent agent routing and topology selection based on task characteristics (file: r0/skill-005/SKILL.md)"
+      ],
+      "skill026Line": "- skill-026: A skill for generating and automating Excel spreadsheet (.xlsx) creation and modification for da (file: r0/skill-026/SKILL.md)",
+      "skill105Line": "- skill-105: Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, (file: r0/skill-105/SKILL.md)"
+    },
+    "requestContainsAvailableSkills": true,
+    "requestContainsSkillTool": false,
+    "requestContainsOpenSkillInstruction": true
+  },
+  "claude": {
+    "requestUrl": "/v1/messages?beta=true",
+    "requestBodyTopLevelKeys": [
+      "model",
+      "messages",
+      "system",
+      "tools",
+      "metadata",
+      "max_tokens",
+      "thinking",
+      "context_management",
+      "output_config",
+      "stream"
+    ],
+    "model": "claude-sonnet-4-6",
+    "systemType": "array",
+    "toolCount": 26,
+    "toolNames": [
+      "Agent",
+      "AskUserQuestion",
+      "Bash",
+      "CronCreate",
+      "CronDelete",
+      "CronList",
+      "Edit",
+      "EnterPlanMode",
+      "EnterWorktree",
+      "ExitPlanMode",
+      "ExitWorktree",
+      "Glob",
+      "Grep",
+      "Monitor",
+      "NotebookEdit",
+      "PushNotification",
+      "Read",
+      "RemoteTrigger",
+      "ScheduleWakeup",
+      "Skill",
+      "TaskOutput",
+      "TaskStop",
+      "TodoWrite",
+      "WebFetch",
+      "WebSearch",
+      "Write"
+    ],
+    "hasSkillTool": true,
+    "skillToolDescriptionChars": 1498,
+    "skillToolRequiresLaunchBeforeAnswer": true,
+    "skillListingSection": {
+      "skillLines": 150,
+      "chars": 7948,
+      "bytes": 8294,
+      "maxDescriptionChars": 20,
+      "minDescriptionChars": 10,
+      "avgDescriptionChars": 20,
+      "firstSkillLines": [
+        "- skill-113: Transcribe video to…",
+        "- skill-114: Structured approach…",
+        "- skill-122: Create high-quality…",
+        "- skill-125: Convert PDF documen…",
+        "- skill-149: Suggest small refac…"
+      ],
+      "skill026Line": "- skill-026: A skill for generat…",
+      "skill105Line": "- skill-105: Comprehensive sprea…"
+    },
+    "requestContainsSkillListing": true,
+    "requestContainsSystemReminder": true
+  },
+  "files": {
+    "codexPromptInput": "codex-prompt-input.json",
+    "codexRequest": "codex-request.json",
+    "claudeRequest": "claude-request.json",
+    "analysisJson": "analysis.json",
+    "analysisMd": "analysis.md",
+    "codexRequests": "codex-requests.json",
+    "claudeRequests": "claude-requests.json"
+  }
+}
