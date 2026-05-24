@@ -3,6 +3,7 @@
 .tmp-home-parallel/
 .tmp-home-paired/
 .tmp-home-claudemd-probe/
+.tmp-home-codex/
 .corpus-cache/
 
 # Session-local Claude Code state (per-HOME projects, sessions)
@@ -11,3 +12,8 @@
 # Per-cell stream-json transcripts are large and reproducible from the
 # drivers + queries.json. Aggregated summary.json and report.html are kept.
 runs/**/*.jsonl
+runs/codex-routing-only-4x5/
+runs/codex-routing-only-smoke-*/
+runs/native-prompt-capture/*-home/
+runs/native-prompt-capture/*request*.json
+runs/native-prompt-capture/codex-prompt-input.json
