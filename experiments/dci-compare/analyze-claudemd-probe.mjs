@@ -130,7 +130,6 @@ async function main() {
   for (const [key, group] of [...a1Groups.entries()].sort()) {
     const cells = group.cells;
     const triggered = cells.filter((c) => (c._parse?.routerToolCalls ?? 0) >= 1).length;
-    const expected = `user:skill-`; // crude — we'll match by query.id
     const correct = cells.filter((c) => {
       const matched = c._parse?.matchedSkillName;
       const q = c.queryObj || summary.runs.find((r) => r.label === c.label)?.queryObj;

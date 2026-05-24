@@ -44,7 +44,11 @@ async function parseCell(path) {
   let numTurns = null;
   let durationMs = null;
   let ctxEnd = null;
-  let usage = null;
+  // lastAssistantUsage: per-turn context window size (ctx_end).
+  // cumulativeUsage: result.usage is cumulative token spend across all turns
+  // (used only as cost fallback, NOT for ctx_end).
+  let lastAssistantUsage = null;
+  let cumulativeUsage = null;
   let timedOut = false;
   for (const ev of events) {
     if (ev.type === "_run_error" && /timed out/.test(ev.error || "")) timedOut = true;
@@ -53,40 +57,45 @@ async function parseCell(path) {
     }
     if (ev.type === "assistant" && ev.message?.content) {
       for (const block of ev.message.content) {
-        if (block.type === "tool_use" && block.name && ROUTER_TOOL_PATTERN.test(block.name)) {
-          routerToolCalls++;
-        }
-        if (block.type === "tool_use" && block.input?.skill &&
-            ROUTER_TOOL_PATTERN.test(String(block.input.skill))) {
-          routerToolCalls++;
+        if (block.type === "tool_use") {
+          const name = block.name || "";
+          const inputSkill = block.input?.skill ? String(block.input.skill) : "";
+          if (ROUTER_TOOL_PATTERN.test(name) || ROUTER_TOOL_PATTERN.test(inputSkill)) {
+            routerToolCalls++;
+          }
         }
         if (block.type === "text" && block.text) finalText = block.text;
       }
-      if (ev.message?.usage) usage = ev.message.usage;
+      if (ev.message?.usage) lastAssistantUsage = ev.message.usage;
     }
     if (ev.type === "result" && ev.subtype === "success") {
       totalCost = ev.total_cost_usd ?? totalCost;
       numTurns = ev.num_turns ?? numTurns;
       durationMs = ev.duration_ms ?? durationMs;
-      if (ev.usage) usage = ev.usage;
+      if (ev.usage) cumulativeUsage = ev.usage;
     }
   }
-  if (usage) {
-    const inT = (usage.input_tokens || 0);
-    const outT = (usage.output_tokens || 0);
-    const cacheRead = usage.cache_read_input_tokens || 0;
-    const cacheWrite = usage.cache_creation_input_tokens || 0;
+  // ctx_end = input window the model saw on the FINAL turn (not cumulative spend).
+  if (lastAssistantUsage) {
+    const inT = lastAssistantUsage.input_tokens || 0;
+    const cacheRead = lastAssistantUsage.cache_read_input_tokens || 0;
+    const cacheWrite = lastAssistantUsage.cache_creation_input_tokens || 0;
     ctxEnd = inT + cacheRead + cacheWrite;
-    if (totalCost == null) {
-      const p = pickPrice(model);
-      totalCost = (
-        inT * p.input / 1e6 +
-        outT * p.output / 1e6 +
-        cacheRead * p.cacheRead / 1e6 +
-        cacheWrite * p.cacheWrite / 1e6
-      );
-      costFallback = true;
-    }
+  }
+  // Cost fallback uses cumulative usage when result.total_cost_usd is absent.
+  if (totalCost == null && cumulativeUsage) {
+    const p = pickPrice(model);
+    const inT = cumulativeUsage.input_tokens || 0;
+    const outT = cumulativeUsage.output_tokens || 0;
+    const cacheRead = cumulativeUsage.cache_read_input_tokens || 0;
+    const cacheWrite = cumulativeUsage.cache_creation_input_tokens || 0;
+    totalCost = (
+      inT * p.input / 1e6 +
+      outT * p.output / 1e6 +
+      cacheRead * p.cacheRead / 1e6 +
+      cacheWrite * p.cacheWrite / 1e6
+    );
+    costFallback = true;
   }
   const m = finalText.match(/\{[^{}]*"matched_skill_name"\s*:\s*"([^"]+)"[^{}]*\}/);
   const matched = m ? m[1] : null;
