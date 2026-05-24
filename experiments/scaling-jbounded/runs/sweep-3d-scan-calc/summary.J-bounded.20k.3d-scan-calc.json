@@ -1,0 +1,91 @@
+{
+  "queryId": "3d-scan-calc",
+  "gt": "gt/mesh-analysis",
+  "expectedShort": "gt__mesh-analysis",
+  "forceIncludeIds": [
+    "gt/mesh-analysis",
+    "degraded/mesh-analysis_steps-removed_162",
+    "degraded/mesh-analysis_constraints-corrupted_163"
+  ],
+  "variant": "J-bounded",
+  "scale": 20000,
+  "scaleLabel": "20k",
+  "timestamp": "2026-05-24T07:35:33.555Z",
+  "summary": {
+    "model": "claude-opus-4-7[1m]",
+    "skillsExposed": 11,
+    "numTurns": 12,
+    "durationMs": 256076,
+    "cost": 0.48218949999999994,
+    "startCtx": 24938,
+    "endCtx": 46818,
+    "bashCalls": 9,
+    "skillFired": true,
+    "matched": "design__build123d-rawwerks-vibecad",
+    "expected": "gt__mesh-analysis",
+    "correct": false,
+    "bashResults": [
+      {
+        "idx": 0,
+        "lines": 1,
+        "len": 49,
+        "preview": "Launching skill: skill-router:skill-router-skills"
+      },
+      {
+        "idx": 1,
+        "lines": 1,
+        "len": 38,
+        "preview": "(eval):1: argument list too long: grep"
+      },
+      {
+        "idx": 2,
+        "lines": 41,
+        "len": 8093,
+        "preview": "description: \"CAD modeling with build123d Python library. Use when creating 3D models, exporting to GLB/STEP/STL, or doing boolean operations (union, difference, intersection). Triggers on: CAD, 3D modeling, sphere, box, cylinder, mesh export, GLB, STEP, STL, solid modeling, parametric design, threads, fasteners, bolts, nuts, screws, gears, pipes, flanges, bearings, bd_warehouse, spur gear, helical gear, bevel gear, planetary gear, ring gear, cycloid gear, rack and pinion, gggears, herringbone, gear mesh, gear train.\"\nFILE: design__build123d-rawwerks-vibecad/SKILL.md.skill-router-disabled\ndesc"
+      },
+      {
+        "idx": 3,
+        "lines": 41,
+        "len": 6933,
+        "preview": "description: \"Analyze DEX liquidity pools to understand TVL, trading volume, fee income, and impermanent loss risk. Compare pools across protocols (Uniswap, Curve, Balancer) and chains to identify optimal LP opportunities.\"\nFILE: design__analyzing-liquidity-pools/SKILL.md.skill-router-disabled\ndescription: \"Game audio design patterns for creating sound effects and UI audio. Use when designing sounds for games, writing AI audio prompts (ElevenLabs, etc.), creating feedback sounds, or specifying audio for abilities/UI. Includes psychological principles from Kind Games, volume hierarchy, frequenc"
+      },
+      {
+        "idx": 4,
+        "lines": 11,
+        "len": 2553,
+        "preview": "description: \"Extracts hidden or encoded text from GCODE files by analyzing toolpath geometry and coordinate data. This skill should be used when tasks involve decoding text from 3D printing files, recovering embossed or engraved text from GCODE, or CTF-style challenges involving GCODE analysis. Applies to any task requiring geometric reconstruction of text from CNC or 3D printer movement commands.\"\nFILE: design__gcode-to-text-letta-ai-skills-fa019add/SKILL.md.skill-router-disabled\ndescription: \"Decode and interpret text content from G-code files by analyzing toolpath geometry and coordinate p"
+      },
+      {
+        "idx": 5,
+        "lines": 31,
+        "len": 6541,
+        "preview": "description: \"Audit a checkpoint specification for realism and design decision forcing. Reviews specs to remove hand-holding, hidden corner cases, and architectural giveaways. Invoke with /audit-spec <problem> <checkpoint>.\"\nFILE: design__audit-spec-sprocketlab-slop-code-bench/SKILL.md.skill-router-disabled\ndescription: \"This skill should be used when the user asks about Bootstrap 5 getting started, Bootstrap installation, Bootstrap CDN setup, Bootstrap npm installation, Bootstrap Bun installation, Bootstrap project setup, Bootstrap starter template, Bootstrap browser support, Bootstrap versio"
+      },
+      {
+        "idx": 6,
+        "lines": 31,
+        "len": 6315,
+        "preview": "description: \"**Name:** ace-context-engineering\"\nFILE: design__ace-context-engineering-jmanhype-claude-code-plugin-m/SKILL.md.skill-router-disabled\ndescription: \"Expert guidance for creating effective Claude Code agents (subagents). Use when users want to create a new agent, update an existing agent, or learn agent design best practices. Covers agent architecture, prompt engineering, tool selection, model choice, and common pitfalls. Integrates with skill-creator when agent needs accompanying skills.\"\nFILE: design__agent-creator-agdev-claude-code/SKILL.md.skill-router-disabled\ndescription: \"In"
+      },
+      {
+        "idx": 7,
+        "lines": 31,
+        "len": 5678,
+        "preview": "description: \"Applies AdaptiveX's official brand colors and typography to any sort of artifact that may benefit from having AdaptiveX's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply for AdaptiveX training and consulting materials.\"\nFILE: design__adaptivex-brand-guidelines/SKILL.md.skill-router-disabled\ndescription: \"Apply Android/Jetpack Compose design principles following Material Design 3 when building any Android UI component. Only execute this when the current project is an Android project and involves UI-related work. Use"
+      },
+      {
+        "idx": 8,
+        "lines": 31,
+        "len": 5645,
+        "preview": "description: \"Generates premium dark-mode UI for Apex OS wellness app (React Native + Expo 54). Use when designing screens, creating components, making layout decisions, generating data visualizations, or writing frontend code. Covers color system, typography, motion, haptics, and component patterns for a Bloomberg-meets-Calm aesthetic. References APEX_OS_PRD_v8.1.md for product logic and APEX_OS_BRAND_GUIDE.md for voice.\"\nFILE: design__apex-os-design-ferdiebotden-ai-wellnessapp-0714c6d5/SKILL.md.skill-router-disabled\ndescription: \"Create Apple-inspired modern, minimalist UI designs with glass"
+      },
+      {
+        "idx": 9,
+        "lines": 7,
+        "len": 1609,
+        "preview": "description: \"CAD modeling with build123d Python library. Use when creating 3D models, exporting to GLB/STEP/STL, or doing boolean operations (union, difference, intersection). Triggers on: CAD, 3D modeling, sphere, box, cylinder, mesh export, GLB, STEP, STL, solid modeling, parametric design, threads, fasteners, bolts, nuts, screws, gears, pipes, flanges, bearings, bd_warehouse, spur gear, helical gear, bevel gear, planetary gear, ring gear, cycloid gear, rack and pinion, gggears, herringbone, gear mesh, gear train.\"\nFILE: design__build123d-rawwerks-vibecad/SKILL.md.skill-router-disabled\ndesc"
+      }
+    ],
+    "finalText": "{\"matched_skill_name\":\"design__build123d-rawwerks-vibecad\"}"
+  }
+}

@@ -794,6 +794,92 @@ D-agentic 经 SKILL.md 修复后跳到 92%,但 without arm 也跳到 79%(部分�
 
 ---
 
+## 12. 后续:规模扩展实验 (scaling-jbounded)
+
+本节是对 §9 #3(语料规模 150 远小于真实部署)与 §10 P2(扩大规模验证外推性)的直接跟进。完整实验放在 `experiments/scaling-jbounded/`,这里只汇报核心结果与对本报告 §6 结论的修正含义。
+
+### 12.1 实验问题
+
+J-bounded 在 150 scale 上是 Pareto 王者(§6.2),但 dci-compare 9×24 的语料规模远低于 SkillRouter 论文的 ~80K。**J-bounded 的 inline shell 检索模板在更大规模上是否仍然工作?如果不工作,在哪一档规模上崩、什么原因?**
+
+### 12.2 三个失效机制(@ 80K)
+
+在 79,141-candidate Hard pool 上的单 query probe + 4-scale 单 query sweep 揭示三种衰减:
+
+1. **`ARG_MAX` 撞墙(约 13K skills 起)**。J-bounded v1 的模板第一句:
+   ```bash
+   grep -i -m1 '^description:' ~/.claude/skills/*/SKILL.md.skill-router-disabled \
+     | grep -i -E "<kw>|<kw>" | head -20
+   ```
+   shell 展开 glob,argv 在 80K paths 时约 11 MB,超过 Linux 默认 2 MB 限制,直接报 `argument list too long: grep`。
+2. **`head -20` 在大池里饱和**。即便 agent 切到 `for f in <glob>; do ...; done` 绕开 `ARG_MAX`,`head -20` 仍然有效。在 80K 池上关键词 `mesh` 匹配 **95 个 skill 名**,gt 排在第 23 位 —— 字母序里 `gt__*` 排在 `distractor__*` / `easy__*` 之后,**`head -20` 系统性把 gt 切掉**。
+3. **near-miss 退化到 catch-all**。在 80K 池中,任何 finance/economics/forms 类 query 都会面对几十个通用工具 skill(`excel`/`spreadsheet`/`docx-template-filling`/...)。当 description-only 关键词无法定位准确 gt 时,agent 倾向选语义近邻的"反正能做"的工具 —— 这就是本报告 §9 #5 描述质量天花板在大规模下的放大版。
+
+### 12.3 J-bounded-v2:三处模板修复
+
+`description:` frontmatter 字段保持字节级一致(因此 trigger 概率与 v1 一致)。只改 body workflow:
+
+| | v1 | v2 |
+| --- | --- | --- |
+| 枚举 | shell glob | `find -print0 \| xargs -0 grep -l` |
+| 关键词宽度 | "distinctive keywords" | "narrow technical terms;avoid broad words" |
+| 候选上限 | `head -20` | **去掉**,改为"shortlist 太长就 narrow keywords 重 grep" |
+| shortlist payload | `grep` 返回 description 文本 | `grep -l` 只返回路径 |
+
+### 12.4 主要结果(24-query × {150, 79K} × {J-v1, J-v2})
+
+**Task 1:同 150 corpus、同 24 query、同 +CLAUDE.md trigger lift,跟本报告 §6 J-bounded 直接对位:**
+
+| Variant | accuracy | trigger | Σ cost | avg cost/cell | Σ dur | avg ctx_end |
+| --- | --- | --- | --- | --- | --- | --- |
+| dci-compare **J-v1** (本报告 §6) | 22/24 (92%) | 23/24 | \$3.07 | \$0.128 | 374s | 30.7K |
+| **J-v2** (scaling-jbounded Task 1) | 22/24 (92%) | 23/24 | \$3.95 | \$0.164 | 665s | 30.8K |
+
+条件命中率(去除 trigger 失败的 1 cell):v1 = v2 = 22/23 (95.7%)。**v2 在 150 上不输 v1**,代价是 +29% cost / +78% duration(narrow-keyword 多步收敛多走 1-2 turn);`ctx_end` 与 v1 几乎一致(`grep -l` 把单步 payload 反而压小了,但被多 turn 抵消)。
+
+**Task 2:同 24 query 扩到 79K Hard 池(论文实际规模):**
+
+| 配置 | accuracy | trigger | Σ cost | avg cost/cell | avg dur/cell | avg ctx_end | avg turns |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| J-v2 × 150 (+CMD) | 22/24 (91.7%) | 23/24 | \$3.95 | \$0.164 | 27.7s | 30.8K | 5.5 |
+| **J-v2 × 79K (+CMD)** | **12/24 (50.0%)** | 23/24 | \$5.33 | \$0.222 | 65.7s | 36.6K | 5.8 |
+
+池放大 **527×**:
+- accuracy −42pp(几乎全部是 near-miss 到 excel/spreadsheet 等 catch-all)
+- avg cost/cell **只涨 35%**(v2 的 bounded payload 性质在大池上守住了)
+- avg `ctx_end` 只涨 +19%
+- avg turns 只涨 5%(模板没崩,没出现 v1 在 80K 上的 23 turns timeout 死循环)
+
+**对比 SkillRouter 论文 baseline(80K Hit@1):**
+
+| Method | Body access | Hit@1 |
+| --- | --- | --- |
+| BM25 (sparse) | name+desc only | 0.0% |
+| Qwen3-Emb-8B | name+desc only | 25.3% |
+| **J-v2 (本实验)** | **name+desc only** | **50.0%** (24 single, Hard only) |
+| Qwen3-Emb-8B | full text | 64.0% |
+| **SKILLROUTER 1.2B** | full text | **74.0%** |
+
+J-v2 是 nd-only 最强编码器 baseline 的 ~2×,但仍比读 body 方法低 14-26pp —— **直接证实论文 §3 的"full skill text 是关键信号"论断在我们这种 LLM-agent + shell 路径上同样成立**。失败案例(catch-all fallback)正是 description 不足以区分 gt 的那一类 query。
+
+### 12.5 对本报告 §11 结论的修正
+
+- **结论 #2 修正**:J-bounded 在 150 上是 Pareto 王者的论断**仍然成立**,但应限定为"150-skill 受控规模"。在 79K 真实部署规模下,v1 的模板会直接撞 `ARG_MAX` + `head -20` 饱和;**生产采用 J-bounded 类设计应改用 v2 模板**(`find -print0 | xargs -0`、去 `head` 截断、narrow keywords 收敛)。
+- **结论 #4 修正**:本报告原话 "读 body 有 4pp 优势,但 metadata-only 路径在 LLM-driven keyword extraction 加持下足够接近"在 150 scale 仍成立。在 79K scale 下,**两者差距从 4pp 拉大到 14-26pp**(对照论文 nd vs full-body 编码器 baseline 平均 31-44pp gap)。读 body 的关键性随规模增长。
+- **§9 #3 限制确认**:metadata-only 变体随规模下降的预测被本实验验证。建议把 §10 P1(I-meta 升级为带 escalation 的混合路由)推进 —— v2 在 79K 上一半失败是 catch-all near-miss,这一类只需 "body-on-tie" 就能恢复。
+
+### 12.6 文件指针
+
+完整数据、单 query trace、与论文对比的扩展讨论在:
+
+- `experiments/scaling-jbounded/EXPERIMENT_NOTES.md` — 本节的完整版,含失效机制详解、x4 规模衰减表、cost 弹性分析、已知局限
+- `experiments/scaling-jbounded/variants/J-bounded-v2.SKILL.md` — v2 模板
+- `experiments/scaling-jbounded/runs/sweep24-v2-150-cmd/report.md` — Task 1 全表
+- `experiments/scaling-jbounded/runs/sweep24-v2-full-cmd/report.md` — Task 2 全表
+- `experiments/scaling-jbounded/runs/sweep-3d-scan-calc/report.md` — 4-scale × 2-variant × 1-query smoke
+
+---
+
 ## 附录 A:24 个查询全文
 
 完整 query 集存放在 `queries.json`。每个 query 由 SkillsBench 任务的 `instruction_text` 直接引用,长度从约 200 字到 1500+ 字不等。

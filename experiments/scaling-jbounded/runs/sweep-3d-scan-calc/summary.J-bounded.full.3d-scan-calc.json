@@ -1,0 +1,155 @@
+{
+  "queryId": "3d-scan-calc",
+  "gt": "gt/mesh-analysis",
+  "expectedShort": "gt__mesh-analysis",
+  "forceIncludeIds": [
+    "gt/mesh-analysis"
+  ],
+  "variant": "J-bounded",
+  "scale": 0,
+  "scaleLabel": "full",
+  "timestamp": "2026-05-24T07:12:14.514Z",
+  "summary": {
+    "model": "claude-opus-4-7[1m]",
+    "skillsExposed": 12,
+    "numTurns": 23,
+    "durationMs": 391675,
+    "cost": 0.5862567499999999,
+    "startCtx": 27181,
+    "endCtx": 39455,
+    "bashCalls": 18,
+    "skillFired": true,
+    "matched": "design__build123d-rawwerks-vibecad",
+    "expected": "gt__mesh-analysis",
+    "correct": false,
+    "bashResults": [
+      {
+        "idx": 0,
+        "lines": 1,
+        "len": 49,
+        "preview": "Launching skill: skill-router:skill-router-skills"
+      },
+      {
+        "idx": 1,
+        "lines": 1,
+        "len": 38,
+        "preview": "(eval):1: argument list too long: grep"
+      },
+      {
+        "idx": 2,
+        "lines": 1,
+        "len": 490,
+        "preview": "Command running in background with ID: bodrfaw02. Output is being written to: /Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/tmp/claude-501/-Users-bytedance-github-skill-router--claude-worktrees-large-skill-set-experiments-scaling-jbounded--tmp-home-full-project-probe/3a188931-b956-4028-b2b7-92c5a41b4dcf/tasks/bodrfaw02.output. You will be notified when it completes. To check interim output, use Read on that file path."
+      },
+      {
+        "idx": 3,
+        "lines": 1,
+        "len": 490,
+        "preview": "Command running in background with ID: b2k6e4qs2. Output is being written to: /Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/tmp/claude-501/-Users-bytedance-github-skill-router--claude-worktrees-large-skill-set-experiments-scaling-jbounded--tmp-home-full-project-probe/3a188931-b956-4028-b2b7-92c5a41b4dcf/tasks/b2k6e4qs2.output. You will be notified when it completes. To check interim output, use Read on that file path."
+      },
+      {
+        "idx": 4,
+        "lines": 1,
+        "len": 126,
+        "preview": "<system-reminder>Warning: the file exists but is shorter than the provided offset (1). The file has 1 lines.</system-reminder>"
+      },
+      {
+        "idx": 5,
+        "lines": 1,
+        "len": 126,
+        "preview": "<system-reminder>Warning: the file exists but is shorter than the provided offset (1). The file has 1 lines.</system-reminder>"
+      },
+      {
+        "idx": 6,
+        "lines": 53,
+        "len": 1622,
+        "preview": "agent-coordination__wolf-scripts-agents-majiayu000-claude-skill-regist-majiayu000-claude-skill-registr\nai-llm__model-selection-majiayu000-claude-skill-registr\nanalysis-methods__diff-analysis-majiayu000-claude-skill-registr\nanalysis__agent-ops-article-verification\nanalysis__agent-ops-docker-review\nanalysis__agent-ops-reality-audit-majiayu000-claude-skill-regist\napplied__35-google-adk-reliable-agents\napplied__80-livekit-agents-panaversity-agentfactory\napplied__81-pipecat\nartifact-generation__doc-updates-majiayu000-claude-skill-registr\nbusiness-monetization__claude-ecosystem-promoter-majiayu000-c"
+      },
+      {
+        "idx": 7,
+        "lines": 20,
+        "len": 849,
+        "preview": "data__cad-mesh-generation\ndata__setup-fastlane\ndata__stl\ndesign__backup-sovereign-vaultmesh-org-backup-sovereign\ndesign__fsharp-frontend-heimeshoff-cinemarco\ndesign__side-hustle-maker-auldsyababua-instructor-workflow\ndevelopment__blazor-framework-fortiumpartners-ai-mesh\ndevelopment__code-review-excellence-tylermiranda-questly\ndevelopment__fastled\ndevelopment__fastled-color-specialist\ndevelopment__firebase-tylermiranda-questly\ndevelopment__fsharp-routing-heimeshoff-cinemarco\ndevelopment__istio-service-mesh-config-jeremylongshore-claude-code-plugins-\ndevelopment__kubectl-localmesh-operations\ndev"
+      },
+      {
+        "idx": 8,
+        "lines": 7,
+        "len": 564,
+        "preview": "description: \"**Production-Grade Learning Skill** | Standard Template Library\"\n---\ndescription: \"CAD and Mesh Generation Skill\"\n---\ndescription: \"Build TX V4 meshes - agent configs, prompts, routing. Use for new meshes, agent roles, or multi-agent workflows. Triggers - mesh, routing, agents, multi-agent, config.yaml\"\n---\ndescription: \"Plan and evaluate mesh generation for numerical simulations. Use when choosing grid resolution, checking aspect ratios/skewness, estimating mesh quality constraints, or planning adaptive mesh refinement for PDE discretization.\""
+      },
+      {
+        "idx": 9,
+        "lines": 21,
+        "len": 829,
+        "preview": "data__academic-research\ndata__academic-research-writer\ndata__academic-search\ndata__academic-writing-style\ndata__bridging-2d-3d-rendering\ndata__cad-mesh-generation\ndata__cascade-workflow\ndata__generate-3d-model\ndata__windsurf-cascade-onboarding\ndesign__3d-composition-visualization\ndesign__academic-reviewer-fdhidalgo-claude-config\ndesign__academic-writing-cs-sipengxie2024-helios-writing\ndesign__ansible-role-design-basher83-lunar-claude-403d4eaf\ndesign__arch-v-rfxlamia-flow-c2f713d5\ndesign__architecture-paradigm-event-driven-athola-claude-night-market-4e7a73d6\ndesign__audit-pipeline-dnyoussef-con"
+      },
+      {
+        "idx": 10,
+        "lines": 5,
+        "len": 1100,
+        "preview": "description: \"Convert 2D images to 3D GLB models using Fal.ai's sam-3/3d-objects model. Use this skill when the user asks to create 3D models from images, convert images to GLB format, or generate 3D game assets from 2D sources.\"\n---\ndescription: \"CAD modeling with build123d Python library. Use when creating 3D models, exporting to GLB/STEP/STL, or doing boolean operations (union, difference, intersection). Triggers on: CAD, 3D modeling, sphere, box, cylinder, mesh export, GLB, STEP, STL, solid modeling, parametric design, threads, fasteners, bolts, nuts, screws, gears, pipes, flanges, bearing"
+      },
+      {
+        "idx": 11,
+        "lines": 30,
+        "len": 1092,
+        "preview": "data__airparser-api\ndata__binary-reconnaissance\ndata__csv-url-parser\ndata__document-parser\ndata__email-parser-jeremylongshore-claude-code-plugins-\ndata__excel-parser\ndata__la-bench-parser\ndata__oscal-parser\ndata__parse-ad-requirements\ndata__parse-git-status\ndata__parse-package-json\ndata__r3f-geometry\ndata__threejs-geometry\ndata__visualize-parsed-spatial-omics-metadata\ndesign__adding-mod-parsers\ndesign__adding-mod-parsers-aclinia-torchlight-of-buildi\ndesign__ddd-da-massa-emvnuel-skill-md-aa71e477\ndesign__design-asset-parser-munlucky-claude-command-relay\ndesign__detecting-privilege-escalation-wa"
+      },
+      {
+        "idx": 12,
+        "lines": 31,
+        "len": 927,
+        "preview": "data__agentic-quality-engineering-proffesor-for-testin-agentic-qe\ndata__ai-engineering-guide\ndata__ai-ml-engineer\ndata__ai-prompt-engineering\ndata__android-engineering-core\ndata__api-engineering\ndata__assisting-reverse-engineering\ndata__audit-engineering-productivity\ndata__backend-engineer\ndata__blueprint\ndata__blueprints-writing\ndata__chaos-engineer\ndata__chaos-engineering-resilience-proffesor-for-testin-agentic-qe\ndata__claims-engineer\ndata__context-engineering-state\ndata__cto-engineering-metrics\ndata__database-engineering\ndata__dataset-engineering\ndata__engineering-nba-data\ndata__flux-konte"
+      },
+      {
+        "idx": 13,
+        "lines": 20,
+        "len": 836,
+        "preview": "data__setup-fastlane\ndata__stl\ndesign__side-hustle-maker-auldsyababua-instructor-workflow\ndevelopment__code-review-excellence-tylermiranda-questly\ndevelopment__fastled\ndevelopment__fastled-color-specialist\ndevelopment__firebase-tylermiranda-questly\ndevelopment__prompt-engineer-tylermiranda-questly\ndevelopment__stl-generator-ihistand-claude-skills\ndevelopment__templates-tylermiranda-questly\ndevelopment__whistleblower-policy-fr\ndevops__android-fastlane-setup-hitoshura25-claude-devtools\ndevops__saas-pricing-strategy-bcasci-hustler-marketplace-7cb997d7\nother__fastlane\nother__macos-scrollbar-firstl"
+      },
+      {
+        "idx": 14,
+        "lines": 1,
+        "len": 384,
+        "preview": "description: \"Generate 3D printable STL files for woodworking jigs and fixtures using CadQuery. Use when the user requests lampshade jigs, circle cutting guides, angle wedges, spacing blocks, alignment fixtures, router jigs, or any custom 3D-printed woodworking aid. Optimized for Elegoo Neptune 4 Pro (225x225x265mm build volume, 0.2mm layer height). Always use metric measurements.\""
+      },
+      {
+        "idx": 15,
+        "lines": 1,
+        "len": 31,
+        "preview": "(Bash completed with no output)"
+      },
+      {
+        "idx": 16,
+        "lines": 1,
+        "len": 31,
+        "preview": "(Bash completed with no output)"
+      },
+      {
+        "idx": 17,
+        "lines": 1,
+        "len": 31,
+        "preview": "(Bash completed with no output)"
+      },
+      {
+        "idx": 18,
+        "lines": 10,
+        "len": 1963,
+        "preview": "/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/design__build123d-rawwerks-vibecad/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/design__sfh-gen/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/design__sfh-viz-toneron2-sfh-os-9bfba50a/SKILL.md.skill-router-disabled\n/Users/bytedance/github/s"
+      },
+      {
+        "idx": 19,
+        "lines": 12,
+        "len": 2737,
+        "preview": "=== design__build123d-rawwerks-vibecad ===\ndescription: \"CAD modeling with build123d Python library. Use when creating 3D models, exporting to GLB/STEP/STL, or doing boolean operations (union, difference, intersection). Triggers on: CAD, 3D modeling, sphere, box, cylinder, mesh export, GLB, STEP, STL, solid modeling, parametric design, threads, fasteners, bolts, nuts, screws, gears, pipes, flanges, bearings, bd_warehouse, spur gear, helical gear, bevel gear, planetary gear, ring gear, cycloid gear, rack and pinion, gggears, herringbone, gear mesh, gear train.\"\n=== design__sfh-gen ===\ndescripti"
+      },
+      {
+        "idx": 20,
+        "lines": 10,
+        "len": 2038,
+        "preview": "/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/design__home-organization-racurry-neat-little-package-6f0a67fd/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/design__fullstack-validation/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-full/.claude/skills/design__gcode-to-text-letta-ai-skills-fa019add/SKILL.md."
+      }
+    ],
+    "finalText": "{\"matched_skill_name\":\"design__build123d-rawwerks-vibecad\"}"
+  }
+}

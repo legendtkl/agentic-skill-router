@@ -1,0 +1,61 @@
+{
+  "queryId": "3d-scan-calc",
+  "gt": "gt/mesh-analysis",
+  "expectedShort": "gt__mesh-analysis",
+  "forceIncludeIds": [
+    "gt/mesh-analysis",
+    "degraded/mesh-analysis_steps-removed_162",
+    "degraded/mesh-analysis_constraints-corrupted_163"
+  ],
+  "variant": "J-bounded-v2",
+  "scale": 1000,
+  "scaleLabel": "1k",
+  "timestamp": "2026-05-24T07:29:14.380Z",
+  "summary": {
+    "model": "claude-opus-4-7[1m]",
+    "skillsExposed": 12,
+    "numTurns": 7,
+    "durationMs": 31263,
+    "cost": 0.172985,
+    "startCtx": 27218,
+    "endCtx": 29640,
+    "bashCalls": 4,
+    "skillFired": true,
+    "matched": "gt__mesh-analysis",
+    "expected": "gt__mesh-analysis",
+    "correct": true,
+    "bashResults": [
+      {
+        "idx": 0,
+        "lines": 1,
+        "len": 49,
+        "preview": "Launching skill: skill-router:skill-router-skills"
+      },
+      {
+        "idx": 1,
+        "lines": 1,
+        "len": 13,
+        "preview": "Exit code 123"
+      },
+      {
+        "idx": 2,
+        "lines": 2,
+        "len": 190,
+        "preview": "Exit code 123\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-1k/.claude/skills/gt__mesh-analysis/SKILL.md.skill-router-disabled"
+      },
+      {
+        "idx": 3,
+        "lines": 2,
+        "len": 190,
+        "preview": "Exit code 123\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-1k/.claude/skills/gt__mesh-analysis/SKILL.md.skill-router-disabled"
+      },
+      {
+        "idx": 4,
+        "lines": 12,
+        "len": 423,
+        "preview": "---\nname: gt__mesh-analysis\ndescription: \"Analyzes 3D mesh files (STL) to calculate geometric properties (volume, components) and extract attribute data. Use this skill to process noisy 3D scan data and filter debris.\"\n---\n\n# Mesh Analysis\n\nThis skill provides the `MeshAnalyzer` tool for robustly processing 3D STL files. It handles Binary STL parsing and connected component analysis.\n\n## When to Use\n\nUse this skill for:"
+      }
+    ],
+    "finalText": "{\"matched_skill_name\":\"gt__mesh-analysis\"}"
+  }
+}
