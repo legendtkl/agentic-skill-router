@@ -28,6 +28,7 @@ import { mkdir, rm, writeFile, readFile, readdir } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { skillRouterEvalCorePath } from "../skillrouter-dataset.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const args = parseArgs(process.argv.slice(2));
@@ -41,9 +42,9 @@ const QUERIES_OUT = join(OUT_BASE, "queries.json");
 const MANIFEST_OUT = join(OUT_BASE, "corpus-manifest.json");
 
 function parseArgs(argv) {
-  const out = { src: "/tmp/sr-probe/data/eval_core", cap: 150, outDir: null };
+  const out = { src: skillRouterEvalCorePath(), cap: 150, outDir: null };
   for (const a of argv) {
-    if (a.startsWith("--src=")) out.src = a.slice(6);
+    if (a.startsWith("--src=")) out.src = skillRouterEvalCorePath(a.slice(6));
     else if (a.startsWith("--cap=")) out.cap = Number(a.slice(6));
     else if (a.startsWith("--out-dir=")) out.outDir = a.slice(10);
     else throw new Error(`unknown arg: ${a}`);
