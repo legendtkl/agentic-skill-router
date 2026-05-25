@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStrict } from "../args.ts";
@@ -39,13 +39,21 @@ interface WebServerOptions {
   hostName: HostName;
   port?: number;
   bind?: string;
+  dangerouslyBindPublic?: boolean;
 }
 
 export async function cmdWeb(argv: string[], hostName: HostName): Promise<number> {
   if (argv.includes("-h") || argv.includes("--help")) {
-    console.log(`agentic-skill-router skills web [--port=N] [--bind=ADDR]
+    console.log(`agentic-skill-router skills web [--port=N] [--bind=ADDR] [--dangerously-bind-public]
 
 Starts a localhost web UI for viewing, disabling, and enabling skills.
+
+By default --bind is restricted to loopback addresses (127.0.0.1, ::1, localhost).
+Pass --dangerously-bind-public together with a non-loopback --bind to expose the
+UI on a public or LAN interface. Doing so allows anyone on the network to read
+and mutate local skill files; --dangerously-bind-public also requires the
+mutation token for read endpoints and enforces Origin/Referer/Host checks on
+mutations.
 `);
     return 0;
   }
@@ -57,6 +65,7 @@ Starts a localhost web UI for viewing, disabling, and enabling skills.
       options: {
         port: { type: "string", short: "p" },
         bind: { type: "string" },
+        "dangerously-bind-public": { type: "boolean" },
       },
     },
   });
@@ -64,20 +73,76 @@ Starts a localhost web UI for viewing, disabling, and enabling skills.
   const port = parsePort(values.port as string | undefined);
   if (port === null) return 2;
   const bind = (values.bind as string | undefined) ?? "127.0.0.1";
+  const dangerouslyBindPublic = values["dangerously-bind-public"] === true;
 
-  const { server, url } = await startWebServer({ hostName, port: port ?? 8787, bind });
-  console.log(`agentic-skill-router web UI listening on ${url}`);
-  console.log("Press Ctrl+C to stop.");
+  try {
+    const { server, url } = await startWebServer({
+      hostName,
+      port: port ?? 8787,
+      bind,
+      dangerouslyBindPublic,
+    });
+    console.log(`agentic-skill-router web UI listening on ${url}`);
+    console.log("Press Ctrl+C to stop.");
 
-  await waitForShutdown(server);
-  return 0;
+    await waitForShutdown(server);
+    return 0;
+  } catch (err) {
+    if (err instanceof PublicBindRefusedError) {
+      console.error(err.message);
+      return 2;
+    }
+    throw err;
+  }
 }
 
-export async function startWebServer(opts: WebServerOptions): Promise<{ server: Server; url: string }> {
+export interface StartWebServerResult {
+  server: Server;
+  url: string;
+  basicAuth: BasicAuthCredential | null;
+}
+
+export async function startWebServer(opts: WebServerOptions): Promise<StartWebServerResult> {
   const bind = opts.bind ?? "127.0.0.1";
+  const dangerouslyBindPublic = opts.dangerouslyBindPublic === true;
+  const loopback = isLoopbackBind(bind);
+  if (!loopback && !dangerouslyBindPublic) {
+    throw new PublicBindRefusedError(
+      `refusing to bind \`${bind}\`: only loopback addresses (127.0.0.1, ::1, localhost) are allowed by default. ` +
+        `Re-run with --dangerously-bind-public if you really want to expose the local skill manager to the network.`,
+    );
+  }
+  const basicAuth: BasicAuthCredential | null = !loopback
+    ? { username: "agentic-skill-router", password: randomBytes(24).toString("base64url") }
+    : null;
+  if (!loopback && dangerouslyBindPublic) {
+    process.stderr.write(
+      "WARNING: --dangerously-bind-public is set.\n" +
+        `         The web UI is binding ${bind}, which is reachable from other hosts on the network.\n` +
+        "         Anyone who can reach this port can read your installed skill metadata and, with\n" +
+        "         the in-page mutation token, disable or restore skill files on this machine.\n" +
+        "         Run on a trusted network only, and stop the server when you are done.\n",
+    );
+    if (basicAuth) {
+      process.stderr.write(
+        `         HTTP Basic auth is required for every request.\n` +
+          `         username: ${basicAuth.username}\n` +
+          `         password: ${basicAuth.password}\n`,
+      );
+    }
+  }
+
   const mutationToken = randomBytes(32).toString("base64url");
+  const requireTokenForReads = !loopback;
+  const enforceOriginChecks = !loopback;
+  const security: SecurityOptions = {
+    requireTokenForReads,
+    enforceOriginChecks,
+    expectedHosts: enforceOriginChecks ? computeExpectedHosts(bind, opts.port ?? 8787) : null,
+    basicAuth,
+  };
   const server = createServer((req, res) => {
-    void handleRequest(req, res, opts.hostName, mutationToken);
+    void handleRequest(req, res, opts.hostName, mutationToken, security);
   });
 
   await new Promise<void>((resolveListen, rejectListen) => {
@@ -96,8 +161,62 @@ export async function startWebServer(opts: WebServerOptions): Promise<{ server: 
 
   const address = server.address();
   const actualPort = typeof address === "object" && address ? address.port : opts.port ?? 8787;
+  if (enforceOriginChecks) {
+    // Refresh expected host set with the actual bound port for ephemeral-port cases.
+    security.expectedHosts = computeExpectedHosts(bind, actualPort);
+  }
   const displayHost = bind === "0.0.0.0" || bind === "::" ? "localhost" : bind;
-  return { server, url: `http://${displayHost}:${actualPort}` };
+  return { server, url: `http://${displayHost}:${actualPort}`, basicAuth };
+}
+
+interface SecurityOptions {
+  requireTokenForReads: boolean;
+  enforceOriginChecks: boolean;
+  expectedHosts: Set<string> | null;
+  basicAuth: BasicAuthCredential | null;
+}
+
+interface BasicAuthCredential {
+  username: string;
+  password: string;
+}
+
+function isLoopbackBind(bind: string): boolean {
+  // NOTE: empty string is intentionally treated as non-loopback. Node's
+  // `server.listen(port, "")` binds the wildcard (`0.0.0.0`), which would
+  // silently expose the UI to the network if we treated "" as loopback.
+  const normalized = bind.trim().toLowerCase();
+  if (normalized === "") return false;
+  if (normalized === "localhost") return true;
+  if (normalized === "127.0.0.1") return true;
+  if (normalized === "::1") return true;
+  if (normalized === "[::1]") return true;
+  return false;
+}
+
+function computeExpectedHosts(bind: string, port: number): Set<string> {
+  // Only include `host:port` forms. A bare `host` entry would let a request
+  // whose Host/Origin header omitted the port (i.e. targeted a different
+  // process on port 80) pass the same-origin check.
+  const hosts = new Set<string>();
+  const portSuffix = `:${port}`;
+  const candidates = new Set<string>();
+  candidates.add(bind.toLowerCase());
+  if (bind === "0.0.0.0" || bind === "::") {
+    candidates.add("localhost");
+  }
+  for (const candidate of candidates) {
+    const host = candidate.includes(":") && !candidate.startsWith("[") ? `[${candidate}]` : candidate;
+    hosts.add(`${host}${portSuffix}`);
+  }
+  return hosts;
+}
+
+class PublicBindRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PublicBindRefusedError";
+  }
 }
 
 async function handleRequest(
@@ -105,8 +224,13 @@ async function handleRequest(
   res: ServerResponse,
   hostName: HostName,
   mutationToken: string,
+  security: SecurityOptions,
 ): Promise<void> {
   try {
+    if (security.basicAuth && !checkBasicAuth(req, security.basicAuth)) {
+      sendBasicAuthChallenge(res);
+      return;
+    }
     const url = new URL(req.url ?? "/", "http://localhost");
     if (req.method === "GET" && url.pathname === "/") {
       sendHtml(res, pageHtml(hostName, mutationToken));
@@ -117,6 +241,7 @@ async function handleRequest(
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/skills") {
+      if (security.requireTokenForReads) assertReadToken(req, mutationToken);
       const requestedHost = parseWebHost(url.searchParams.get("agent") ?? url.searchParams.get("host"), hostName);
       const scope = parseScope(url.searchParams.get("scope"));
       const projectPath = url.searchParams.get("projectPath") ?? "";
@@ -125,14 +250,14 @@ async function handleRequest(
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/skills/disable") {
-      assertMutationRequest(req, mutationToken);
+      assertMutationRequest(req, mutationToken, security);
       const body = await readJsonBody(req);
       const result = await mutateWebSkill(hostName, body, "disable");
       sendJson(res, 200, result);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/skills/enable") {
-      assertMutationRequest(req, mutationToken);
+      assertMutationRequest(req, mutationToken, security);
       const body = await readJsonBody(req);
       const result = await mutateWebSkill(hostName, body, "enable");
       sendJson(res, 200, result);
@@ -215,7 +340,7 @@ function canMutateSymlink(skill: Skill): boolean {
   return skill.outOfRoot === true && skill.source !== "builtin";
 }
 
-function assertMutationRequest(req: IncomingMessage, expectedToken: string): void {
+function assertMutationRequest(req: IncomingMessage, expectedToken: string, security: SecurityOptions): void {
   const contentType = req.headers["content-type"] ?? "";
   const rawContentType = Array.isArray(contentType) ? contentType.join(",") : contentType;
   if (!rawContentType.toLowerCase().startsWith("application/json")) {
@@ -223,6 +348,88 @@ function assertMutationRequest(req: IncomingMessage, expectedToken: string): voi
   }
   const token = req.headers["x-agentic-skill-router-token"];
   if (token !== expectedToken) throw new WebHttpError(403, "invalid mutation token");
+  if (security.enforceOriginChecks) assertSameOriginRequest(req, security);
+}
+
+function assertReadToken(req: IncomingMessage, expectedToken: string): void {
+  const token = req.headers["x-agentic-skill-router-token"];
+  if (token !== expectedToken) throw new WebHttpError(403, "invalid mutation token");
+}
+
+function assertSameOriginRequest(req: IncomingMessage, security: SecurityOptions): void {
+  const expected = security.expectedHosts;
+  if (!expected) return;
+  const hostHeader = singleHeader(req.headers["host"]);
+  if (!hostHeader || !expected.has(hostHeader.toLowerCase())) {
+    throw new WebHttpError(403, "Host header missing or does not match the bound address");
+  }
+  const origin = singleHeader(req.headers["origin"]);
+  const referer = singleHeader(req.headers["referer"]);
+  if (!origin && !referer) {
+    throw new WebHttpError(403, "Origin or Referer header is required for cross-network requests");
+  }
+  if (origin && !originMatches(origin, expected)) {
+    throw new WebHttpError(403, "Origin header does not match the bound address");
+  }
+  if (!origin && referer && !originMatches(referer, expected)) {
+    throw new WebHttpError(403, "Referer header does not match the bound address");
+  }
+}
+
+function singleHeader(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+function checkBasicAuth(req: IncomingMessage, credential: BasicAuthCredential): boolean {
+  const header = singleHeader(req.headers["authorization"]);
+  if (!header) return false;
+  const match = /^Basic\s+(.+)$/i.exec(header.trim());
+  if (!match) return false;
+  let decoded: string;
+  try {
+    decoded = Buffer.from(match[1]!, "base64").toString("utf8");
+  } catch {
+    return false;
+  }
+  const sep = decoded.indexOf(":");
+  if (sep < 0) return false;
+  const user = decoded.slice(0, sep);
+  const pass = decoded.slice(sep + 1);
+  return constantTimeEquals(user, credential.username) && constantTimeEquals(pass, credential.password);
+}
+
+function constantTimeEquals(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) {
+    // Still do a comparison against bufA to keep timing roughly stable.
+    timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
+}
+
+function sendBasicAuthChallenge(res: ServerResponse): void {
+  const body = "Authentication required.";
+  res.writeHead(401, {
+    "www-authenticate": 'Basic realm="agentic-skill-router", charset="UTF-8"',
+    "content-type": "text/plain; charset=utf-8",
+    "cache-control": "no-store",
+    "content-length": Buffer.byteLength(body),
+  });
+  res.end(body);
+}
+
+function originMatches(raw: string, expected: Set<string>): boolean {
+  const value = raw.trim();
+  if (value === "" || value === "null") return false;
+  try {
+    const parsed = new URL(value);
+    return expected.has(parsed.host.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 function statusForDomainError(err: unknown): number {
@@ -1115,7 +1322,9 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       const params = new URLSearchParams({ agent: state.agent, scope: state.scope });
       if (state.scope === "project") params.set("projectPath", state.projectPath);
       try {
-        const res = await fetch("/api/skills?" + params.toString());
+        const res = await fetch("/api/skills?" + params.toString(), {
+          headers: { "x-agentic-skill-router-token": mutationToken },
+        });
         const data = await readResponse(res);
         if (requestId !== state.requestId) return;
         state.skills = data.skills || [];
