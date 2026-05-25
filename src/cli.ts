@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { ParseArgsError, reportParseArgsError } from "./args.ts";
 import { cmdDisable, cmdEnable } from "./commands/apply.ts";
 import { cmdConfig } from "./commands/config.ts";
+import { cmdCorpus } from "./commands/corpus.ts";
 import { cmdDci } from "./commands/dci.ts";
 import { cmdList } from "./commands/list.ts";
 import { cmdRoute } from "./commands/route.ts";
@@ -27,6 +28,7 @@ export async function run(argv: string[]): Promise<number> {
         case "list": return await cmdList(rest, hostName);
         case "suggest": return await cmdSuggest(rest, hostName);
         case "route": return await cmdRoute(rest, hostName);
+        case "corpus": return await cmdCorpus(rest, hostName);
         case "dci": return await cmdDci(rest, hostName);
         case "body": return await cmdDci(rest, hostName);
         case "disable": return await cmdDisable(rest, hostName);

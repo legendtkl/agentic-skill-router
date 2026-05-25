@@ -2,7 +2,7 @@
 // Codex port of the routing-only bench, 4 variants x 5 queries.
 //
 // Strategies covered: G-native (no router, corpus enabled), C-lite, I-meta,
-// J-bounded. Queries are 5 picked from queries.json (3 overlap with the
+// J-bounded, and K-bounded. Queries are 5 picked from queries.json (3 overlap with the
 // Claude Code 9x3 set for cross-host comparison + 2 new). Model is gpt-5.5
 // with reasoning_effort=high, served through the host's OpenAI subscription
 // (the codex CLI reads ~/.codex/auth.json which is copied into each per-
@@ -12,12 +12,14 @@
 
 import { spawn, execFile } from "node:child_process";
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { copyFile, cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { createGunzip } from "node:zlib";
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -35,7 +37,12 @@ const REAL_CODEX_AUTH = join(homedir(), ".codex", "auth.json");
 const MODEL = "gpt-5.5";
 const REASONING_EFFORT = "high";
 const QUERY_SET = process.env.CODEX_QUERY_SET || "subset";
+const SYNTHETIC_CORPUS_SIZE = Number(process.env.CODEX_SYNTHETIC_CORPUS_SIZE || "0");
+const SKILLROUTER_EVAL_CORE = process.env.CODEX_SKILLROUTER_EVAL_CORE || "";
+const SKILLROUTER_EVAL_TIER = process.env.CODEX_SKILLROUTER_EVAL_TIER || "hard";
+const CORPUS_CACHE_VERSION = 2;
 let pluginVersionPromise = null;
+let originalSkillRouterCorpusPromise = null;
 
 const ALL_VARIANTS = [
   { id: "G-native", mode: "native" },
@@ -47,6 +54,11 @@ const ALL_VARIANTS = [
   { id: "H-bounded", mode: "router" },
   { id: "I-meta", mode: "router" },
   { id: "J-bounded", mode: "router" },
+  { id: "J-bounded-v2", mode: "router" },
+  { id: "K-bounded", mode: "router" },
+  { id: "K-lite", mode: "router" },
+  { id: "L-agentic", mode: "router" },
+  { id: "M-bm25", mode: "router" },
 ];
 const DEFAULT_VARIANT_IDS = ["G-native", "C-lite", "I-meta", "J-bounded"];
 const VARIANTS = (process.env.CODEX_VARIANT_SET === "all"
@@ -184,6 +196,318 @@ async function hashCorpus(root) {
   return h.digest("hex");
 }
 
+async function loadRealCorpusSkillsForCache() {
+  const entries = (await readdir(CORPUS_DIR, { withFileTypes: true }))
+    .filter((ent) => ent.isDirectory())
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const skills = [];
+  for (const ent of entries) {
+    const skillMdPath = join(CORPUS_DIR, ent.name, "SKILL.md");
+    const body = await readFile(skillMdPath, "utf8");
+    const metadata = parseSkillFrontmatter(body);
+    const name = metadata.name || ent.name;
+    const description = metadata.description || "";
+    skills.push(cacheSkill({
+      id: `user:codex:${ent.name}`,
+      name,
+      description,
+      metadata: {
+        name,
+        description,
+        aliases: [],
+        tags: [],
+        tools: [],
+        domains: [],
+        intents: [],
+        examples: [],
+      },
+      skillMdPath: `corpus-cache:${ent.name}`,
+    }));
+  }
+  return skills;
+}
+
+function parseSkillFrontmatter(body) {
+  if (!body.startsWith("---\n")) return {};
+  const end = body.indexOf("\n---", 4);
+  if (end < 0) return {};
+  const out = {};
+  for (const line of body.slice(4, end).split("\n")) {
+    const idx = line.indexOf(":");
+    if (idx <= 0) continue;
+    const key = line.slice(0, idx).trim();
+    if (key !== "name" && key !== "description") continue;
+    out[key] = parseYamlScalar(line.slice(idx + 1).trim());
+  }
+  return out;
+}
+
+function parseYamlScalar(raw) {
+  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+    return raw.slice(1, -1);
+  }
+  return raw;
+}
+
+function cacheSkill({ id, name, description, metadata, skillMdPath }) {
+  return {
+    id,
+    name,
+    description,
+    metadata,
+    source: "user",
+    pluginKey: null,
+    skillMdPath,
+    isDisabled: true,
+    isPluginDisabled: false,
+    canDisable: true,
+    conflict: false,
+  };
+}
+
+function opaqueSkillRouterId(originalId) {
+  return `sr-${createHash("sha256").update(originalId).digest("hex").slice(0, 12)}`;
+}
+
+async function loadOriginalSkillRouterCorpus() {
+  if (!SKILLROUTER_EVAL_CORE) return null;
+  originalSkillRouterCorpusPromise ??= loadOriginalSkillRouterCorpusUncached();
+  return originalSkillRouterCorpusPromise;
+}
+
+async function loadOriginalSkillRouterCorpusUncached() {
+  const root = resolve(SKILLROUTER_EVAL_CORE);
+  const tierDir = join(root, SKILLROUTER_EVAL_TIER);
+  const relevance = JSON.parse(await readFile(join(root, "relevance.json"), "utf8"));
+  const { tasksById, paperCoreSingleQueryIds } = await loadOriginalSkillRouterTasks(root, relevance);
+  const entries = (await readdir(tierDir, { withFileTypes: true }))
+    .filter((ent) => ent.isFile() && ent.name.endsWith(".jsonl.gz"))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  if (entries.length === 0) throw new Error(`no *.jsonl.gz shards under ${tierDir}`);
+
+  const skills = [];
+  const idMap = {};
+  const sourceCounts = {};
+  for (const ent of entries) {
+    const shardPath = join(tierDir, ent.name);
+    for await (const rec of readGzipJsonl(shardPath)) {
+      const originalId = String(rec.skill_id || "");
+      if (!originalId) continue;
+      const opaqueId = opaqueSkillRouterId(originalId);
+      idMap[originalId] = opaqueId;
+      const frontmatter = parseSkillFrontmatter(rec.body || "");
+      const originalName = stringValue(rec.name) || originalId.split("/").pop() || originalId;
+      const frontmatterDescription = descriptionValue(frontmatter.description);
+      const description = isMeaningfulDescription(frontmatterDescription)
+        ? frontmatterDescription
+        : descriptionValue(rec.description);
+      const name = opaqueId;
+      const source = stringValue(rec.source) || "unknown";
+      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+      skills.push(cacheSkill({
+        id: `user:codex:${opaqueId}`,
+        name,
+        description,
+        metadata: {
+          name,
+          description,
+          aliases: originalName && originalName !== name ? [originalName] : [],
+          tags: [],
+          tools: [],
+          domains: [],
+          intents: [],
+          examples: [],
+        },
+        skillMdPath: `corpus-cache:${opaqueId}`,
+      }));
+    }
+  }
+
+  const expectedByQueryId = {};
+  const expectedOriginalByQueryId = {};
+  for (const [queryId, rel] of Object.entries(relevance)) {
+    const gt = singleExpectedSkillId(rel);
+    if (!gt) continue;
+    const mapped = idMap[gt];
+    if (!mapped) throw new Error(`ground-truth skill ${gt} for ${queryId} missing from ${tierDir}`);
+    expectedByQueryId[queryId] = mapped;
+    expectedOriginalByQueryId[queryId] = gt;
+  }
+
+  log(`loaded SkillRouter original ${SKILLROUTER_EVAL_TIER} corpus: ${skills.length} skills (${Object.entries(sourceCounts).map(([k, v]) => `${k}=${v}`).join(", ")})`);
+  return {
+    root,
+    tier: SKILLROUTER_EVAL_TIER,
+    skills,
+    idMap,
+    sourceCounts,
+    expectedByQueryId,
+    expectedOriginalByQueryId,
+    tasksById,
+    paperCoreSingleQueryIds,
+  };
+}
+
+async function* readGzipJsonl(path) {
+  const chunks = [];
+  for await (const chunk of createReadStream(path).pipe(createGunzip())) {
+    chunks.push(Buffer.from(chunk));
+  }
+  const text = Buffer.concat(chunks).toString("utf8");
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    yield JSON.parse(line);
+  }
+}
+
+function stringValue(value) {
+  return typeof value === "string" ? value : "";
+}
+
+function descriptionValue(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.filter((v) => typeof v === "string").join(", ");
+  return "";
+}
+
+function isMeaningfulDescription(value) {
+  const trimmed = value.trim();
+  return trimmed !== "" && trimmed !== "|" && trimmed !== ">";
+}
+
+async function loadOriginalSkillRouterTasks(root, relevance) {
+  const text = await readFile(join(root, "tasks.jsonl"), "utf8");
+  const tasks = text.split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line));
+  const tasksById = {};
+  for (const task of tasks) {
+    const id = stringValue(task.task_id) || stringValue(task.id);
+    if (id) tasksById[id] = task;
+  }
+  const paperCoreSingleQueryIds = tasks
+    .map((task) => stringValue(task.task_id) || stringValue(task.id))
+    .filter((id) => id && relevance[id]?.core_gt_ids?.length === 1);
+  return { tasksById, paperCoreSingleQueryIds };
+}
+
+function singleExpectedSkillId(rel) {
+  if (rel?.core_gt_ids?.length === 1) return rel.core_gt_ids[0];
+  if (rel?.gt_skill_ids?.length === 1) return rel.gt_skill_ids[0];
+  return null;
+}
+
+async function preseedOriginalSkillRouterCorpusCache(home) {
+  const corpus = await loadOriginalSkillRouterCorpus();
+  if (!corpus) return;
+  const stateDir = join(home, ".skill-router");
+  await mkdir(stateDir, { recursive: true });
+  await rm(join(stateDir, "corpus-bm25-index-codex.json"), { force: true });
+  await writeFile(join(stateDir, "corpus-cache-codex.json"), JSON.stringify({
+    version: CORPUS_CACHE_VERSION,
+    host: "codex",
+    createdAtMs: Date.now(),
+    fingerprint: `skillrouter-${corpus.tier}-${corpus.skills.length}`,
+    skills: corpus.skills,
+  }));
+  log(`preseeded Codex corpus cache with SkillRouter ${corpus.tier} corpus (${corpus.skills.length} skills) at ${stateDir}`);
+}
+
+function yamlQuoted(value) {
+  return JSON.stringify(String(value ?? ""));
+}
+
+async function materializeOriginalSkillRouterSkillFiles(home) {
+  const corpus = await loadOriginalSkillRouterCorpus();
+  if (!corpus) return;
+  const root = join(home, ".codex", "skills");
+  await rm(root, { recursive: true, force: true });
+  await mkdir(root, { recursive: true });
+  let index = 0;
+  const workers = Array.from({ length: 64 }, async () => {
+    while (index < corpus.skills.length) {
+      const skill = corpus.skills[index++];
+      const dir = join(root, skill.name);
+      const displayName = skill.metadata?.aliases?.[0] || skill.name;
+      const body = [
+        "---",
+        `name: ${yamlQuoted(displayName)}`,
+        `description: ${yamlQuoted(skill.description || "")}`,
+        "---",
+        "",
+      ].join("\n");
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, "SKILL.md.skill-router-disabled"), body);
+    }
+  });
+  await Promise.all(workers);
+  log(`materialized SkillRouter ${corpus.tier} metadata files for shell routing (${corpus.skills.length} disabled skills)`);
+}
+
+const NOISE_DOMAINS = [
+  "analytics", "documents", "finance", "media", "planning", "search", "workflow", "visualization",
+  "forms", "simulation", "biology", "education", "operations", "compliance", "translation", "database",
+  "security", "deployment", "monitoring", "research", "customer support", "legal", "geospatial", "design",
+];
+const NOISE_TOOLS = [
+  "json", "csv", "xlsx", "pdf", "api", "sql", "python", "markdown", "browser", "dashboard",
+  "calendar", "email", "images", "video", "charts", "logs", "yaml", "webhook", "notebook", "cli",
+];
+const NOISE_ACTIONS = [
+  "extract", "generate", "summarize", "validate", "transform", "classify", "merge", "compare",
+  "index", "search", "report", "calculate", "review", "clean", "monitor", "configure",
+];
+
+function makeSyntheticNoiseSkills(count) {
+  const skills = [];
+  for (let i = 0; i < count; i++) {
+    const n = String(i + 1).padStart(5, "0");
+    const domain = NOISE_DOMAINS[i % NOISE_DOMAINS.length];
+    const secondary = NOISE_DOMAINS[(i * 17) % NOISE_DOMAINS.length];
+    const tool = NOISE_TOOLS[(i * 7) % NOISE_TOOLS.length];
+    const action = NOISE_ACTIONS[(i * 13) % NOISE_ACTIONS.length];
+    const name = `noise-${n}`;
+    const description = `${action} ${domain} ${tool} workflow helper for ${secondary} data reports and operational tasks.`;
+    skills.push(cacheSkill({
+      id: `user:codex:${name}`,
+      name,
+      description,
+      metadata: {
+        name,
+        description,
+        aliases: [`${domain} ${action}`],
+        tags: [domain, action],
+        tools: [tool],
+        domains: [domain, secondary],
+        intents: [`${action} ${tool}`],
+        examples: [],
+      },
+      skillMdPath: `corpus-cache:${name}`,
+    }));
+  }
+  return skills;
+}
+
+async function preseedSyntheticCorpusCache(home, size) {
+  const realSkills = await loadRealCorpusSkillsForCache();
+  if (size < realSkills.length) {
+    throw new Error(`CODEX_SYNTHETIC_CORPUS_SIZE=${size} is smaller than real corpus size ${realSkills.length}`);
+  }
+  const skills = [
+    ...realSkills,
+    ...makeSyntheticNoiseSkills(size - realSkills.length),
+  ];
+  const stateDir = join(home, ".skill-router");
+  await mkdir(stateDir, { recursive: true });
+  await rm(join(stateDir, "corpus-bm25-index-codex.json"), { force: true });
+  await writeFile(join(stateDir, "corpus-cache-codex.json"), JSON.stringify({
+    version: CORPUS_CACHE_VERSION,
+    host: "codex",
+    createdAtMs: Date.now(),
+    fingerprint: `synthetic-${size}`,
+    skills,
+  }));
+  log(`preseeded Codex corpus cache with ${skills.length} skills at ${stateDir}`);
+}
+
 async function setCorpusState(home, target) {
   const root = join(home, ".codex", "skills");
   const dirs = (await readdir(root, { withFileTypes: true }))
@@ -208,6 +532,15 @@ async function prepareVariantHome(variant) {
   log(`[${variant.id}] HOME ready, corpus=${target} (${n} renames)`);
 
   if (variant.mode === "router") {
+    if (SKILLROUTER_EVAL_CORE) {
+      await preseedOriginalSkillRouterCorpusCache(home);
+      if (variant.id === "J-bounded-v2") {
+        await materializeOriginalSkillRouterSkillFiles(home);
+      }
+    } else if (SYNTHETIC_CORPUS_SIZE > 0) {
+      await preseedSyntheticCorpusCache(home, SYNTHETIC_CORPUS_SIZE);
+    }
+
     const variantPath = join(VARIANTS_DIR, `${variant.id}.SKILL.md`);
     if (!await pathExists(variantPath)) {
       throw new Error(`missing variant SKILL.md: ${variantPath}`);
@@ -252,6 +585,9 @@ async function runOne(variant, home, queryObj) {
     CODEX_HOME: join(home, ".codex"),
     TMPDIR: join(home, "tmp"),
   };
+  if ((SYNTHETIC_CORPUS_SIZE > 0 || SKILLROUTER_EVAL_CORE) && !env.SKILL_ROUTER_CORPUS_CACHE_TTL_MS) {
+    env.SKILL_ROUTER_CORPUS_CACHE_TTL_MS = "3600000";
+  }
   delete env.SKILL_ROUTER_HOST;
   delete env.AGENTS_HOME;
 
@@ -423,21 +759,62 @@ async function findRolloutByThreadId(sessionsRoot, threadId) {
 
 async function main() {
   const allQueries = JSON.parse(await readFile(join(EXP_DIR, "queries.json"), "utf8")).queries;
-  const selectedQueryIds = QUERY_SET === "all" ? allQueries.map((q) => q.id) : QUERY_IDS;
+  const originalCorpus = await loadOriginalSkillRouterCorpus();
+  const querySource = originalCorpus && QUERY_SET === "paper-core-single"
+    ? originalCorpus.paperCoreSingleQueryIds.map((id) => {
+        const task = originalCorpus.tasksById[id];
+        if (!task) throw new Error(`task id not found in tasks.jsonl: ${id}`);
+        return {
+          id,
+          expected: "",
+          domain: stringValue(task.domain),
+          hasTargetedDistractors: true,
+          kind: "skillrouter",
+          tier: "paper-core-single",
+          query: stringValue(task.instruction_text),
+        };
+      })
+    : allQueries;
+  const selectedQueryIds = QUERY_SET === "all" || QUERY_SET === "paper-core-single"
+    ? querySource.map((q) => q.id)
+    : QUERY_IDS;
   const queries = selectedQueryIds.map((id) => {
-    const q = allQueries.find((x) => x.id === id);
-    if (!q) throw new Error(`query id not found in queries.json: ${id}`);
+    const q = querySource.find((x) => x.id === id);
+    if (!q) throw new Error(`query id not found in ${QUERY_SET === "paper-core-single" ? "tasks.jsonl" : "queries.json"}: ${id}`);
     // Strip "user:" prefix from expected so it matches what the codex agent
     // emits (raw skill-NNN). The corpus uses opaque ids.
+    if (originalCorpus) {
+      const expected = originalCorpus.expectedByQueryId[id];
+      if (!expected) throw new Error(`query ${id} has no single-skill expected id in SkillRouter original corpus`);
+      return {
+        ...q,
+        expected,
+        expectedOriginal: originalCorpus.expectedOriginalByQueryId[id],
+      };
+    }
     return { ...q, expected: (q.expected || "").replace(/^user:/, "") };
   });
   // ONLY_VARIANTS / ONLY_QUERIES env vars filter the grid for smoke runs.
   const variantFilter = (process.env.ONLY_VARIANTS || "").split(",").map((s) => s.trim()).filter(Boolean);
   const queryFilter = (process.env.ONLY_QUERIES || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const runVariants = variantFilter.length ? VARIANTS.filter((v) => variantFilter.includes(v.id)) : VARIANTS;
+  const variantPool = variantFilter.length ? ALL_VARIANTS : VARIANTS;
+  const runVariants = variantFilter.length ? variantPool.filter((v) => variantFilter.includes(v.id)) : variantPool;
   const runQueries = queryFilter.length ? queries.filter((q) => queryFilter.includes(q.id)) : queries;
-  const partialRun = runVariants.length < VARIANTS.length || runQueries.length < queries.length;
-  const defaultRunName = QUERY_SET === "all" ? "codex-routing-only-4x24" : "codex-routing-only-4x5";
+  const missingVariants = variantFilter.filter((id) => !ALL_VARIANTS.some((v) => v.id === id));
+  const missingQueries = queryFilter.filter((id) => !queries.some((q) => q.id === id));
+  if (missingVariants.length > 0) throw new Error(`unknown ONLY_VARIANTS: ${missingVariants.join(", ")}`);
+  if (missingQueries.length > 0) throw new Error(`unknown ONLY_QUERIES: ${missingQueries.join(", ")}`);
+  if (runVariants.length === 0) throw new Error("no variants selected");
+  if (runQueries.length === 0) throw new Error("no queries selected");
+  if (originalCorpus && runVariants.some((v) => v.mode !== "router")) {
+    throw new Error("CODEX_SKILLROUTER_EVAL_CORE currently supports router variants only; native variants would still see the 150-skill installed corpus");
+  }
+  const partialRun = runVariants.length < variantPool.length || runQueries.length < queries.length;
+  const defaultRunName = QUERY_SET === "paper-core-single"
+    ? "codex-routing-only-paper-core-single"
+    : QUERY_SET === "all"
+      ? "codex-routing-only-4x24"
+      : "codex-routing-only-4x5";
   const runName = process.env.CODEX_RUN_NAME || (partialRun ? `${defaultRunName}-partial` : defaultRunName);
   OUT_DIR = process.env.CODEX_OUT_DIR ? resolve(process.env.CODEX_OUT_DIR) : join(EXP_DIR, "runs", runName);
 
@@ -476,6 +853,19 @@ async function main() {
     finishedAt,
     model: MODEL,
     reasoningEffort: REASONING_EFFORT,
+    querySet: QUERY_SET,
+    syntheticCorpusSize: SYNTHETIC_CORPUS_SIZE || null,
+    originalSkillRouter: originalCorpus ? {
+      root: originalCorpus.root,
+      tier: originalCorpus.tier,
+      corpusSize: originalCorpus.skills.length,
+      sourceCounts: originalCorpus.sourceCounts,
+      queryExpected: runQueries.map((q) => ({
+        id: q.id,
+        expected: q.expected,
+        expectedOriginal: q.expectedOriginal,
+      })),
+    } : null,
     homesDir: HOMES_DIR,
     outDir: OUT_DIR,
     timeoutMs: TIMEOUT_MS,

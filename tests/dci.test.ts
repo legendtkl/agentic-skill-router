@@ -158,6 +158,47 @@ test("DCI search finds body-only evidence that lexical route cannot select", asy
   }
 });
 
+test("DCI metadata-only search does not read or match skill body content", async () => {
+  const corpus = await makeCorpus();
+  try {
+    const bodyOnly = await dciSearchDisabledSkills(
+      corpus.skills,
+      "Please handle dci-orchid-ledger-repair now.",
+      { topK: 5, maxSnippets: 2, metadataOnly: true },
+    );
+    assert.equal(bodyOnly.metadataOnly, true);
+    assert.equal(bodyOnly.action, "no-candidates");
+    assert.equal(bodyOnly.budget.maxSkillBytes, 0);
+    assert.equal(bodyOnly.budget.maxCorpusBytes, 0);
+    assert.equal(bodyOnly.corpus.bytesRead, 0);
+    assert.equal(bodyOnly.corpus.truncated, 0);
+    assert.equal(bodyOnly.warnings.length, 0);
+    assert.equal(bodyOnly.matches.length, 0);
+
+    const described = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:metadata-only-probe",
+      name: "metadata-only-probe",
+      description: "dci magnolia invoice metadata helper",
+      body: "The body is intentionally irrelevant.",
+      isDisabled: true,
+    });
+    const metadata = await dciSearchDisabledSkills(
+      [described],
+      "dci magnolia invoice",
+      { topK: 1, maxSnippets: 2, metadataOnly: true },
+    );
+    assert.equal(metadata.metadataOnly, true);
+    assert.equal(metadata.action, "inspect-candidates");
+    assert.equal(metadata.budget.maxSkillBytes, 0);
+    assert.equal(metadata.budget.maxCorpusBytes, 0);
+    assert.equal(metadata.corpus.bytesRead, 0);
+    assert.equal(metadata.matches[0]?.id, "user:codex:metadata-only-probe");
+    assert.match(metadata.matches[0]?.snippets[0]?.text ?? "", /description: dci magnolia invoice metadata helper/);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI search supports bounded multi-query retrieval with stable candidate refs", async () => {
   const corpus = await makeCorpus();
   try {
@@ -550,7 +591,7 @@ test("DCI inspect and read reject non-routable skills", async () => {
   const corpus = await makeCorpus();
   try {
     const inspected = dciInspectSkill(corpus.skills, "user:codex:body-only-probe");
-    assert.equal(inspected.action, "read-skill-file");
+    assert.equal(inspected.action, "inspect-skill");
     assert.match(inspected.skillMdPath, /SKILL\.md\.skill-router-disabled$/);
 
     await assert.rejects(() => dciReadSkill(corpus.skills, "user:codex:enabled-probe"), /not a routable disabled skill/);

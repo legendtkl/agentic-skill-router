@@ -1,0 +1,801 @@
+{
+  "startedAt": "2026-05-24T13:41:02.481Z",
+  "finishedAt": "2026-05-24T13:53:21.116Z",
+  "model": "gpt-5.5",
+  "reasoningEffort": "high",
+  "homesDir": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex",
+  "outDir": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/runs/codex-routing-only-k-24-20260524",
+  "timeoutMs": 240000,
+  "variants": [
+    {
+      "id": "K-bounded",
+      "mode": "router"
+    }
+  ],
+  "queries": [
+    {
+      "id": "3d-scan-calc",
+      "expected": "skill-079",
+      "domain": "engineering"
+    },
+    {
+      "id": "azure-bgp-oscillation-route-leak",
+      "expected": "skill-070",
+      "domain": "bgp-route"
+    },
+    {
+      "id": "citation-check",
+      "expected": "skill-043",
+      "domain": "research"
+    },
+    {
+      "id": "court-form-filling",
+      "expected": "skill-003",
+      "domain": "document-processing"
+    },
+    {
+      "id": "data-to-d3",
+      "expected": "skill-037",
+      "domain": "Data Visualization"
+    },
+    {
+      "id": "dialogue-parser",
+      "expected": "skill-009",
+      "domain": "game"
+    },
+    {
+      "id": "earthquake-plate-calculation",
+      "expected": "skill-135",
+      "domain": "geophysics"
+    },
+    {
+      "id": "econ-detrending-correlation",
+      "expected": "skill-080",
+      "domain": "economics"
+    },
+    {
+      "id": "enterprise-information-search",
+      "expected": "skill-049",
+      "domain": "enterprise-search"
+    },
+    {
+      "id": "gh-repo-analytics",
+      "expected": "skill-021",
+      "domain": "devops-analytics"
+    },
+    {
+      "id": "jax-computing-basics",
+      "expected": "skill-042",
+      "domain": "research"
+    },
+    {
+      "id": "lab-unit-harmonization",
+      "expected": "skill-123",
+      "domain": "healthcare"
+    },
+    {
+      "id": "offer-letter-generator",
+      "expected": "skill-116",
+      "domain": "document-generation"
+    },
+    {
+      "id": "pddl-tpp-planning",
+      "expected": "skill-117",
+      "domain": "research"
+    },
+    {
+      "id": "pptx-reference-formatting",
+      "expected": "skill-140",
+      "domain": "office-suite"
+    },
+    {
+      "id": "protein-expression-analysis",
+      "expected": "skill-105",
+      "domain": "data-analysis"
+    },
+    {
+      "id": "quantum-numerical-simulation",
+      "expected": "skill-033",
+      "domain": "quantum-simulation"
+    },
+    {
+      "id": "reserves-at-risk-calc",
+      "expected": "skill-105",
+      "domain": "financial-analysis"
+    },
+    {
+      "id": "shock-analysis-demand",
+      "expected": "skill-105",
+      "domain": "financial-analysis"
+    },
+    {
+      "id": "shock-analysis-supply",
+      "expected": "skill-105",
+      "domain": "financial-analysis"
+    },
+    {
+      "id": "taxonomy-tree-merge",
+      "expected": "skill-068",
+      "domain": "ML/NLP"
+    },
+    {
+      "id": "video-tutorial-indexer",
+      "expected": "skill-113",
+      "domain": "multimodal-processing"
+    },
+    {
+      "id": "virtualhome-agent-planning",
+      "expected": "skill-117",
+      "domain": "research"
+    },
+    {
+      "id": "weighted-gdp-calc",
+      "expected": "skill-105",
+      "domain": "financial-analysis"
+    }
+  ],
+  "variantStats": [
+    {
+      "variant": "K-bounded",
+      "mode": "router",
+      "n": 24,
+      "correct": 24,
+      "routerTriggered": 24,
+      "totalDurMs": 725855,
+      "totalTokensIn": 1821251,
+      "totalTokensOut": 18830,
+      "totalReasoning": 6446
+    }
+  ],
+  "runs": [
+    {
+      "variant": "K-bounded",
+      "queryId": "3d-scan-calc",
+      "expected": "skill-079",
+      "matched": "skill-079",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 28201,
+      "usage": {
+        "input_tokens": 63881,
+        "cached_input_tokens": 36864,
+        "output_tokens": 739,
+        "reasoning_output_tokens": 230
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17197,
+        "cached_input_tokens": 3456,
+        "output_tokens": 27,
+        "reasoning_output_tokens": 12,
+        "total_tokens": 17224
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a37-c382-79e2-8b38-ecf3d8030bf0",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-41-04-019e5a37-c382-79e2-8b38-ecf3d8030bf0.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "azure-bgp-oscillation-route-leak",
+      "expected": "skill-070",
+      "matched": "skill-070",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 28356,
+      "usage": {
+        "input_tokens": 65166,
+        "cached_input_tokens": 49152,
+        "output_tokens": 758,
+        "reasoning_output_tokens": 120
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17113,
+        "cached_input_tokens": 16768,
+        "output_tokens": 13,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 17126
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a38-2ef5-7842-ab15-89087df36e92",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-41-32-019e5a38-2ef5-7842-ab15-89087df36e92.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "citation-check",
+      "expected": "skill-043",
+      "matched": "skill-043",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 37249,
+      "usage": {
+        "input_tokens": 63753,
+        "cached_input_tokens": 60416,
+        "output_tokens": 515,
+        "reasoning_output_tokens": 130
+      },
+      "lastTokenUsage": {
+        "input_tokens": 16533,
+        "cached_input_tokens": 16256,
+        "output_tokens": 33,
+        "reasoning_output_tokens": 18,
+        "total_tokens": 16566
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a38-9faa-79c1-8f33-7738417dddef",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-42-00-019e5a38-9faa-79c1-8f33-7738417dddef.jsonl",
+      "events": 10
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "court-form-filling",
+      "expected": "skill-003",
+      "matched": "skill-003",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 28673,
+      "usage": {
+        "input_tokens": 65349,
+        "cached_input_tokens": 45056,
+        "output_tokens": 863,
+        "reasoning_output_tokens": 249
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17400,
+        "cached_input_tokens": 9600,
+        "output_tokens": 29,
+        "reasoning_output_tokens": 14,
+        "total_tokens": 17429
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a39-3325-7612-bb56-63930edd4381",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-42-38-019e5a39-3325-7612-bb56-63930edd4381.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "data-to-d3",
+      "expected": "skill-037",
+      "matched": "skill-037",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24133,
+      "usage": {
+        "input_tokens": 65794,
+        "cached_input_tokens": 40448,
+        "output_tokens": 669,
+        "reasoning_output_tokens": 285
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17440,
+        "cached_input_tokens": 4992,
+        "output_tokens": 42,
+        "reasoning_output_tokens": 27,
+        "total_tokens": 17482
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a39-a51d-73b3-b6ad-322505c71ec2",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-43-07-019e5a39-a51d-73b3-b6ad-322505c71ec2.jsonl",
+      "events": 10
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "dialogue-parser",
+      "expected": "skill-009",
+      "matched": "skill-009",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 34615,
+      "usage": {
+        "input_tokens": 65407,
+        "cached_input_tokens": 50176,
+        "output_tokens": 708,
+        "reasoning_output_tokens": 328
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17229,
+        "cached_input_tokens": 16256,
+        "output_tokens": 36,
+        "reasoning_output_tokens": 21,
+        "total_tokens": 17265
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3a-0558-79b0-b741-350ce18b937d",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-43-32-019e5a3a-0558-79b0-b741-350ce18b937d.jsonl",
+      "events": 10
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "earthquake-plate-calculation",
+      "expected": "skill-135",
+      "matched": "skill-135",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 47958,
+      "usage": {
+        "input_tokens": 64689,
+        "cached_input_tokens": 29184,
+        "output_tokens": 750,
+        "reasoning_output_tokens": 235
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17128,
+        "cached_input_tokens": 16256,
+        "output_tokens": 33,
+        "reasoning_output_tokens": 18,
+        "total_tokens": 17161
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3a-90af-7b10-b9dc-23770be787e4",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-44-08-019e5a3a-90af-7b10-b9dc-23770be787e4.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "econ-detrending-correlation",
+      "expected": "skill-080",
+      "matched": "skill-080",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30803,
+      "usage": {
+        "input_tokens": 65782,
+        "cached_input_tokens": 52736,
+        "output_tokens": 775,
+        "reasoning_output_tokens": 234
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17326,
+        "cached_input_tokens": 16768,
+        "output_tokens": 47,
+        "reasoning_output_tokens": 32,
+        "total_tokens": 17373
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3b-4bcb-79b0-b7e7-b9dfa5b0057f",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-44-56-019e5a3b-4bcb-79b0-b7e7-b9dfa5b0057f.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "enterprise-information-search",
+      "expected": "skill-049",
+      "matched": "skill-049",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 33570,
+      "usage": {
+        "input_tokens": 82231,
+        "cached_input_tokens": 45952,
+        "output_tokens": 1298,
+        "reasoning_output_tokens": 686
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17521,
+        "cached_input_tokens": 16768,
+        "output_tokens": 221,
+        "reasoning_output_tokens": 206,
+        "total_tokens": 17742
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3b-c61c-7ad1-9d4d-29e8bda92fe0",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-45-27-019e5a3b-c61c-7ad1-9d4d-29e8bda92fe0.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "gh-repo-analytics",
+      "expected": "skill-021",
+      "matched": "skill-021",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 37652,
+      "usage": {
+        "input_tokens": 82954,
+        "cached_input_tokens": 67456,
+        "output_tokens": 1084,
+        "reasoning_output_tokens": 478
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17810,
+        "cached_input_tokens": 16768,
+        "output_tokens": 241,
+        "reasoning_output_tokens": 226,
+        "total_tokens": 18051
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3c-4b29-7813-bb78-48140eb266c6",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-46-01-019e5a3c-4b29-7813-bb78-48140eb266c6.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "jax-computing-basics",
+      "expected": "skill-042",
+      "matched": "skill-042",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21258,
+      "usage": {
+        "input_tokens": 64173,
+        "cached_input_tokens": 47616,
+        "output_tokens": 642,
+        "reasoning_output_tokens": 263
+      },
+      "lastTokenUsage": {
+        "input_tokens": 16730,
+        "cached_input_tokens": 13696,
+        "output_tokens": 58,
+        "reasoning_output_tokens": 43,
+        "total_tokens": 16788
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3c-e02f-70c2-a210-52480dab57f3",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-46-39-019e5a3c-e02f-70c2-a210-52480dab57f3.jsonl",
+      "events": 10
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "lab-unit-harmonization",
+      "expected": "skill-123",
+      "matched": "skill-123",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 21877,
+      "usage": {
+        "input_tokens": 65195,
+        "cached_input_tokens": 60928,
+        "output_tokens": 514,
+        "reasoning_output_tokens": 135
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17045,
+        "cached_input_tokens": 16256,
+        "output_tokens": 31,
+        "reasoning_output_tokens": 16,
+        "total_tokens": 17076
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3d-3535-74a0-bd3f-a95995f217fd",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-47-01-019e5a3d-3535-74a0-bd3f-a95995f217fd.jsonl",
+      "events": 10
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "offer-letter-generator",
+      "expected": "skill-116",
+      "matched": "skill-116",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 22524,
+      "usage": {
+        "input_tokens": 81039,
+        "cached_input_tokens": 54656,
+        "output_tokens": 665,
+        "reasoning_output_tokens": 170
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17250,
+        "cached_input_tokens": 16256,
+        "output_tokens": 13,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 17263
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3d-8ca8-7e82-8eef-f38f766a43ce",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-47-23-019e5a3d-8ca8-7e82-8eef-f38f766a43ce.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "pddl-tpp-planning",
+      "expected": "skill-117",
+      "matched": "skill-117",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25115,
+      "usage": {
+        "input_tokens": 81943,
+        "cached_input_tokens": 54144,
+        "output_tokens": 745,
+        "reasoning_output_tokens": 262
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17252,
+        "cached_input_tokens": 16256,
+        "output_tokens": 13,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 17265
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3d-e688-7391-adb1-7b080ec5cec2",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-47-46-019e5a3d-e688-7391-adb1-7b080ec5cec2.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "pptx-reference-formatting",
+      "expected": "skill-140",
+      "matched": "skill-140",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29138,
+      "usage": {
+        "input_tokens": 81639,
+        "cached_input_tokens": 55168,
+        "output_tokens": 914,
+        "reasoning_output_tokens": 329
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17337,
+        "cached_input_tokens": 15744,
+        "output_tokens": 31,
+        "reasoning_output_tokens": 16,
+        "total_tokens": 17368
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3e-4aa4-7d83-a12f-32eae71c5b09",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-48-12-019e5a3e-4aa4-7d83-a12f-32eae71c5b09.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "protein-expression-analysis",
+      "expected": "skill-105",
+      "matched": "skill-105",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30762,
+      "usage": {
+        "input_tokens": 99631,
+        "cached_input_tokens": 90368,
+        "output_tokens": 800,
+        "reasoning_output_tokens": 163
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17344,
+        "cached_input_tokens": 16768,
+        "output_tokens": 28,
+        "reasoning_output_tokens": 13,
+        "total_tokens": 17372
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3e-be6c-7a22-89b5-eb102e107cc6",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-48-42-019e5a3e-be6c-7a22-89b5-eb102e107cc6.jsonl",
+      "events": 13
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "quantum-numerical-simulation",
+      "expected": "skill-033",
+      "matched": "skill-033",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 25023,
+      "usage": {
+        "input_tokens": 65667,
+        "cached_input_tokens": 58368,
+        "output_tokens": 725,
+        "reasoning_output_tokens": 338
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17163,
+        "cached_input_tokens": 13696,
+        "output_tokens": 32,
+        "reasoning_output_tokens": 17,
+        "total_tokens": 17195
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3f-388d-7fe3-b1d1-12709bc58916",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-49-13-019e5a3f-388d-7fe3-b1d1-12709bc58916.jsonl",
+      "events": 10
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "reserves-at-risk-calc",
+      "expected": "skill-105",
+      "matched": "skill-105",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 38293,
+      "usage": {
+        "input_tokens": 82701,
+        "cached_input_tokens": 56704,
+        "output_tokens": 784,
+        "reasoning_output_tokens": 202
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17548,
+        "cached_input_tokens": 4480,
+        "output_tokens": 13,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 17561
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a3f-9c34-72e3-92ca-c2c9f9984d81",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-49-38-019e5a3f-9c34-72e3-92ca-c2c9f9984d81.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "shock-analysis-demand",
+      "expected": "skill-105",
+      "matched": "skill-105",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 33730,
+      "usage": {
+        "input_tokens": 117822,
+        "cached_input_tokens": 78464,
+        "output_tokens": 999,
+        "reasoning_output_tokens": 314
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17986,
+        "cached_input_tokens": 17280,
+        "output_tokens": 27,
+        "reasoning_output_tokens": 12,
+        "total_tokens": 18013
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a40-33c5-7030-a18e-f7cc8c72730e",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-50-17-019e5a40-33c5-7030-a18e-f7cc8c72730e.jsonl",
+      "events": 14
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "shock-analysis-supply",
+      "expected": "skill-105",
+      "matched": "skill-105",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 30329,
+      "usage": {
+        "input_tokens": 84096,
+        "cached_input_tokens": 75648,
+        "output_tokens": 837,
+        "reasoning_output_tokens": 232
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17867,
+        "cached_input_tokens": 16768,
+        "output_tokens": 13,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 17880
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a40-b977-7d41-a6e8-e6f6ae1bcba5",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-50-51-019e5a40-b977-7d41-a6e8-e6f6ae1bcba5.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "taxonomy-tree-merge",
+      "expected": "skill-068",
+      "matched": "skill-068",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 23900,
+      "usage": {
+        "input_tokens": 65509,
+        "cached_input_tokens": 51200,
+        "output_tokens": 713,
+        "reasoning_output_tokens": 330
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17113,
+        "cached_input_tokens": 16768,
+        "output_tokens": 44,
+        "reasoning_output_tokens": 29,
+        "total_tokens": 17157
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a41-31ef-7390-be7f-54f10b52b5ef",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-51-22-019e5a41-31ef-7390-be7f-54f10b52b5ef.jsonl",
+      "events": 10
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "video-tutorial-indexer",
+      "expected": "skill-113",
+      "matched": "skill-113",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 33059,
+      "usage": {
+        "input_tokens": 99668,
+        "cached_input_tokens": 78592,
+        "output_tokens": 825,
+        "reasoning_output_tokens": 217
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17434,
+        "cached_input_tokens": 16768,
+        "output_tokens": 32,
+        "reasoning_output_tokens": 17,
+        "total_tokens": 17466
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a41-9143-7f53-ab2c-347edc85b05a",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-51-47-019e5a41-9143-7f53-ab2c-347edc85b05a.jsonl",
+      "events": 12
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "virtualhome-agent-planning",
+      "expected": "skill-117",
+      "matched": "skill-117",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24324,
+      "usage": {
+        "input_tokens": 65150,
+        "cached_input_tokens": 56832,
+        "output_tokens": 661,
+        "reasoning_output_tokens": 277
+      },
+      "lastTokenUsage": {
+        "input_tokens": 16976,
+        "cached_input_tokens": 16256,
+        "output_tokens": 48,
+        "reasoning_output_tokens": 33,
+        "total_tokens": 17024
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a42-1463-7f90-8d4a-8e8571e59810",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-52-20-019e5a42-1463-7f90-8d4a-8e8571e59810.jsonl",
+      "events": 10
+    },
+    {
+      "variant": "K-bounded",
+      "queryId": "weighted-gdp-calc",
+      "expected": "skill-105",
+      "matched": "skill-105",
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 35313,
+      "usage": {
+        "input_tokens": 82012,
+        "cached_input_tokens": 63360,
+        "output_tokens": 847,
+        "reasoning_output_tokens": 239
+      },
+      "lastTokenUsage": {
+        "input_tokens": 17411,
+        "cached_input_tokens": 16256,
+        "output_tokens": 13,
+        "reasoning_output_tokens": 0,
+        "total_tokens": 17424
+      },
+      "modelContextWindow": 258400,
+      "routerTriggered": true,
+      "threadId": "019e5a42-754b-7a50-b47c-c9e9ef528fee",
+      "rolloutPath": "/Users/bytedance/github/skill-router/.claude/worktrees/codex/experiments/dci-compare/.tmp-home-codex/K-bounded/.codex/sessions/2026/05/24/rollout-2026-05-24T21-52-45-019e5a42-754b-7a50-b47c-c9e9ef528fee.jsonl",
+      "events": 12
+    }
+  ],
+  "note": "Routing-only Codex bench. STOP_TAIL appended to each query; matched_skill_name is the routing decision only."
+}

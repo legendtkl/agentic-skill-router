@@ -16,7 +16,9 @@ USAGE
   skill-router skills list [--json]
   skill-router skills suggest [--unused-for=<dur>] [--json]
   skill-router skills route --query=<text> [--mode=auto|metadata|body|lexical|dci] [--json] [--top-k=N] [--no-record]
-  skill-router skills dci search --query=<text> [--query=<text>...] [--json] [--top-k=N]
+  skill-router skills corpus search (--any=<term>... | --all=<term>...) [--ranker=weighted|bm25] [--limit=N] [--json]
+  skill-router skills corpus inspect <id-or-name-or-ref...> [--json]
+  skill-router skills dci search --query=<text> [--query=<text>...] [--metadata-only] [--json] [--top-k=N]
   skill-router skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
   skill-router skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]
   skill-router skills dci open <id-or-ref> [--line=N] [--window=N] [--json]
@@ -197,6 +199,58 @@ export function printDciInspect(result: { id: string; name: string; description:
   console.log(`name: ${result.name}`);
   console.log(`path: ${result.skillMdPath}`);
   if (result.description) console.log(`description: ${result.description}`);
+}
+
+export function printCorpusSearch(result: {
+  ranker: string;
+  corpus: { scanned: number; totalMatches: number; returned: number; truncated: boolean };
+  matches: Array<{
+    ref: string;
+    id: string;
+    shortId: string;
+    name: string;
+    score: number;
+    reason: string;
+    description: string;
+    snippets: Array<{ field: string; text: string }>;
+  }>;
+}): void {
+  console.log(
+    `ranker=${result.ranker} scanned=${result.corpus.scanned} totalMatches=${result.corpus.totalMatches} returned=${result.corpus.returned} truncated=${result.corpus.truncated}`,
+  );
+  if (result.matches.length === 0) {
+    console.log("no disabled-skill metadata candidates found.");
+    return;
+  }
+  for (const match of result.matches) {
+    console.log(`${match.ref}  ${match.shortId}  ${match.id} (${match.score})`);
+    console.log(`  ${match.reason}`);
+    if (match.description) console.log(`  description: ${match.description}`);
+    for (const snippet of match.snippets) {
+      if (snippet.field === "description") continue;
+      console.log(`  ${snippet.field}: ${snippet.text}`);
+    }
+  }
+}
+
+export function printCorpusInspect(result: {
+  inspected: Array<{
+    ref: string;
+    id: string;
+    shortId: string;
+    name: string;
+    description: string;
+    metadata: Record<string, string[]>;
+  }>;
+}): void {
+  for (const item of result.inspected) {
+    console.log(`${item.ref}  ${item.shortId}  ${item.id}`);
+    console.log(`name: ${item.name}`);
+    if (item.description) console.log(`description: ${item.description}`);
+    for (const [key, values] of Object.entries(item.metadata)) {
+      if (values.length > 0) console.log(`${key}: ${values.join(", ")}`);
+    }
+  }
 }
 
 export function printSkillTable(skills: Skill[], usage: Map<string, UsageStat>): void {
