@@ -90,7 +90,9 @@ export async function cmdDisable(argv: string[], hostName: HostName): Promise<nu
   const results: Array<{ id: string; instanceKey: string; alreadyDisabled: boolean }> = [];
   for (const t of targets) {
     try {
-      const r = await disableSkill(t, reason, { statePath, host: host.name });
+      const allowOutOfRoot = canMutateSymlink(t);
+      warnIfSymlinkMutation(t, "disable");
+      const r = await disableSkill(t, reason, { statePath, host: host.name, allowOutOfRoot });
       results.push({
         id: t.id,
         instanceKey: skillInstanceKey(t.id, t.skillMdPath),
@@ -193,7 +195,9 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
       if (resolvedKey && inventoryByInstanceKey.has(resolvedKey)) {
         // Inventory path: we have a live Skill to operate on.
         const s = inventoryByInstanceKey.get(resolvedKey)!;
-        const r = await enableSkill(s, { statePath, host: host.name });
+        const allowOutOfRoot = canMutateSymlink(s);
+        warnIfSymlinkMutation(s, "enable");
+        const r = await enableSkill(s, { statePath, host: host.name, allowOutOfRoot });
         results.push({
           id: s.id,
           instanceKey: skillInstanceKey(s.id, s.skillMdPath),
@@ -226,4 +230,15 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
     console.log(`enabled ${results.length} skill(s). Restart ${displayHost(host.name)} for changes to take effect.`);
   }
   return 0;
+}
+
+function canMutateSymlink(skill: Skill): boolean {
+  return skill.outOfRoot === true && skill.source !== "builtin";
+}
+
+function warnIfSymlinkMutation(skill: Skill, operation: "disable" | "enable"): void {
+  if (!canMutateSymlink(skill)) return;
+  console.error(
+    `warning: ${skill.id} is a symlink outside this host's skills root; ${operation} will modify the linked target at ${skill.skillMdPath}`,
+  );
 }

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -16,6 +16,9 @@ const CLI_PATH = join(REPO_ROOT, "src", "cli.ts");
 
 async function makeFakeCodexUser(): Promise<{
   env: NodeJS.ProcessEnv;
+  root: string;
+  codexHome: string;
+  adminSkillsRoot: string;
   disabledSkillId: string;
   stateDir: string;
   cleanup: () => Promise<void>;
@@ -61,6 +64,9 @@ async function makeFakeCodexUser(): Promise<{
 
   return {
     env,
+    root,
+    codexHome,
+    adminSkillsRoot,
     disabledSkillId: "user:codex:lark-mail",
     stateDir,
     cleanup: () => rm(root, { recursive: true, force: true }),
@@ -337,6 +343,63 @@ test("skills enable rejects unknown option", async () => {
     const ok = await runCli(["skills", "enable", fake.disabledSkillId, "--json"], fake.env);
     const parsed = JSON.parse(ok.stdout) as Array<{ id: string }>;
     assert.equal(parsed[0]?.id, fake.disabledSkillId);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills disable and enable allow non-builtin out-of-root symlink skills", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "linked-skill");
+    await mkdir(externalSkillDir, { recursive: true });
+    await writeFile(
+      join(externalSkillDir, "SKILL.md"),
+      "---\nname: linked-skill\ndescription: linked user skill\n---\n",
+    );
+    await symlink(externalSkillDir, join(fake.codexHome, "skills", "linked-skill"));
+
+    const listed = await runCli(["skills", "list", "--json"], fake.env);
+    const parsed = JSON.parse(listed.stdout) as Array<{ id: string; outOfRoot: boolean; canDisable: boolean }>;
+    const linked = parsed.find((skill) => skill.id === "user:codex:linked-skill");
+    assert.ok(linked);
+    assert.equal(linked!.outOfRoot, true);
+    assert.equal(linked!.canDisable, false);
+
+    const disabled = await runCli(["skills", "disable", "user:codex:linked-skill", "--yes"], fake.env);
+    assert.match(disabled.stderr, /warning: user:codex:linked-skill is a symlink/);
+    await stat(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
+
+    const enabled = await runCli(["skills", "enable", "user:codex:linked-skill"], fake.env);
+    assert.match(enabled.stderr, /warning: user:codex:linked-skill is a symlink/);
+    await stat(join(externalSkillDir, "SKILL.md"));
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills disable still rejects builtin out-of-root symlink skills", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "admin-linked");
+    await mkdir(externalSkillDir, { recursive: true });
+    await writeFile(
+      join(externalSkillDir, "SKILL.md"),
+      "---\nname: admin-linked\ndescription: protected admin symlink\n---\n",
+    );
+    await mkdir(fake.adminSkillsRoot, { recursive: true });
+    await symlink(externalSkillDir, join(fake.adminSkillsRoot, "admin-linked"));
+
+    let caught: unknown;
+    try {
+      await runCli(["skills", "disable", "builtin:codex-admin:admin-linked", "--yes"], fake.env);
+    } catch (err) {
+      caught = err;
+    }
+    assert.ok(caught);
+    assert.equal((caught as { code?: number }).code, 1);
+    assert.match((caught as { stderr?: string }).stderr ?? "", /resolves outside the skills root|Cannot disable builtin/);
+    await stat(join(externalSkillDir, "SKILL.md"));
   } finally {
     await fake.cleanup();
   }

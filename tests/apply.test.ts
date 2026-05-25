@@ -665,6 +665,34 @@ test("disableSkill refuses skills flagged outOfRoot and leaves SKILL.md alone", 
   }
 });
 
+test("disableSkill allowOutOfRoot permits non-builtin symlink targets only", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    const userSymlink: Skill = { ...skill, outOfRoot: true, canDisable: false };
+    await disableSkill(userSymlink, "web", { statePath, allowOutOfRoot: true });
+    assert.equal(await fileExists(skill.skillMdPath), false);
+    assert.equal(await fileExists(skill.skillMdPath + ".agentic-skill-router-disabled"), true);
+
+    const builtinSymlink: Skill = {
+      ...userSymlink,
+      id: "builtin:admin-linked",
+      source: "builtin",
+      skillMdPath: skill.skillMdPath + ".agentic-skill-router-disabled",
+      isDisabled: true,
+    };
+    await assert.rejects(
+      () => disableSkill(builtinSymlink, "web", { statePath, allowOutOfRoot: true }),
+      /Cannot disable builtin/,
+    );
+    await assert.rejects(
+      () => enableSkill(builtinSymlink, { statePath, allowOutOfRoot: true }),
+      /Cannot disable builtin/,
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
 async function setupTwoInstances(): Promise<{
   workdir: string;
   statePath: string;
