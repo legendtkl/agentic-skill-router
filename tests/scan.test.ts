@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { ClaudeCodeHost } from "../src/hosts/claude-code.ts";
 import { disableSkill, enableSkill } from "../src/apply.ts";
+import { readSkillFrontmatterBlock, readSkillFrontmatterDetailed } from "../src/scan.ts";
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -368,6 +369,37 @@ test("listSkills attaches frontmatterWarnings for nested mappings", async () => 
     assert.ok(nested!.frontmatterWarnings && nested!.frontmatterWarnings.length === 1);
     assert.match(nested!.frontmatterWarnings![0]!, /skipped nested mapping under `metadata`/);
     assert.equal(clean!.frontmatterWarnings, undefined);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("readSkillFrontmatterDetailed stops after closed frontmatter", async () => {
+  const home = await mkdtemp(join(tmpdir(), "skill-router-frontmatter-prefix-"));
+  try {
+    const skillDir = join(home, "skills", "frontmatter-prefix");
+    await mkdir(skillDir, { recursive: true });
+    const skillPath = join(skillDir, "SKILL.md");
+    await writeFile(
+      skillPath,
+      [
+        "---",
+        "name: frontmatter-prefix",
+        "description: metadata only",
+        "---",
+        "",
+        "BODY_SENTINEL_SHOULD_NOT_BE_READ",
+        "x".repeat(256_000),
+      ].join("\n"),
+    );
+
+    const block = await readSkillFrontmatterBlock(skillPath);
+    assert.match(block, /description: metadata only/);
+    assert.doesNotMatch(block, /BODY_SENTINEL_SHOULD_NOT_BE_READ/);
+
+    const { metadata } = await readSkillFrontmatterDetailed(skillPath);
+    assert.equal(metadata.name, "frontmatter-prefix");
+    assert.equal(metadata.description, "metadata only");
   } finally {
     await rm(home, { recursive: true, force: true });
   }

@@ -1,11 +1,13 @@
 import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { buildSkillCorpusBm25Index } from "../src/corpus.ts";
+import type { Skill } from "../src/types.ts";
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -15,6 +17,7 @@ const CLI_PATH = join(REPO_ROOT, "src", "cli.ts");
 async function makeFakeCodexUser(): Promise<{
   env: NodeJS.ProcessEnv;
   disabledSkillId: string;
+  stateDir: string;
   cleanup: () => Promise<void>;
 }> {
   const root = await mkdtemp(join(tmpdir(), "skill-router-cli-args-"));
@@ -59,6 +62,7 @@ async function makeFakeCodexUser(): Promise<{
   return {
     env,
     disabledSkillId: "user:codex:lark-mail",
+    stateDir,
     cleanup: () => rm(root, { recursive: true, force: true }),
   };
 }
@@ -162,9 +166,122 @@ test("skills dci search rejects unknown option", async () => {
       { option: "--qurey", suggestion: "--query", commandName: "skill-router skills dci search" },
     );
     // Happy path: positional query for DCI search.
-    const ok = await runCli(["skills", "dci", "search", "lark mail", "--json"], fake.env);
-    const parsed = JSON.parse(ok.stdout) as { matches: unknown[] };
+    const ok = await runCli(["skills", "dci", "search", "lark mail", "--metadata-only", "--json"], fake.env);
+    const parsed = JSON.parse(ok.stdout) as {
+      metadataOnly: boolean;
+      budget: { maxSkillBytes: number; maxCorpusBytes: number };
+      corpus: { bytesRead: number };
+      matches: unknown[];
+    };
+    assert.equal(parsed.metadataOnly, true);
+    assert.equal(parsed.budget.maxSkillBytes, 0);
+    assert.equal(parsed.budget.maxCorpusBytes, 0);
+    assert.equal(parsed.corpus.bytesRead, 0);
     assert.ok(Array.isArray(parsed.matches));
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills corpus search and inspect expose agentic metadata primitives", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    await expectUnknownOption(
+      ["skills", "corpus", "search", "--anny=lark"],
+      fake.env,
+      { option: "--anny", suggestion: "--any", commandName: "skill-router skills corpus search" },
+    );
+
+    const search = await runCli([
+      "skills",
+      "corpus",
+      "search",
+      "--any=lark",
+      "--all=mail",
+      "--ranker=bm25",
+      "--limit=5",
+      "--json",
+    ], fake.env);
+    const parsed = JSON.parse(search.stdout) as {
+      mode: string;
+      ranker: string;
+      query: { any: string[]; all: string[] };
+      budget: { readsBody: boolean; maxResults: number };
+      corpus: { totalMatches: number; returned: number; truncated: boolean };
+      matches: Array<{ shortId: string; skillMdPath?: string }>;
+    };
+    assert.equal(parsed.mode, "disabled-skill-metadata");
+    assert.equal(parsed.ranker, "bm25");
+    assert.deepEqual(parsed.query.any, ["lark"]);
+    assert.deepEqual(parsed.query.all, ["mail"]);
+    assert.equal(parsed.budget.readsBody, false);
+    assert.equal(parsed.budget.maxResults, 5);
+    assert.equal(parsed.corpus.totalMatches, 1);
+    assert.equal(parsed.corpus.returned, 1);
+    assert.equal(parsed.corpus.truncated, false);
+    assert.equal(parsed.matches[0]?.shortId, "lark-mail");
+    assert.equal(parsed.matches[0]?.skillMdPath, undefined);
+    const cacheRaw = await readFile(join(fake.stateDir, "corpus-cache-codex.json"), "utf8");
+    assert.ok(!cacheRaw.includes("SKILL.md"), "corpus cache should not expose skill file paths");
+
+    const noMatch = await runCli(["skills", "corpus", "search", "--any=does-not-exist", "--json"], fake.env);
+    const noMatchParsed = JSON.parse(noMatch.stdout) as { corpus: { totalMatches: number }; matches: unknown[] };
+    assert.equal(noMatchParsed.corpus.totalMatches, 0);
+    assert.deepEqual(noMatchParsed.matches, []);
+
+    const inspect = await runCli(["skills", "corpus", "inspect", "lark-mail", "--json"], fake.env);
+    const inspected = JSON.parse(inspect.stdout) as {
+      inspected: Array<{ id: string; shortId: string; skillMdPath?: string }>;
+    };
+    assert.equal(inspected.inspected[0]?.id, fake.disabledSkillId);
+    assert.equal(inspected.inspected[0]?.shortId, "lark-mail");
+    assert.equal(inspected.inspected[0]?.skillMdPath, undefined);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills corpus inspect can resolve a fresh bm25 index snapshot", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const cachedSkill: Skill = {
+      id: "user:codex:sr-cached",
+      name: "sr-cached",
+      description: "Cached 80K corpus skill metadata",
+      metadata: {
+        name: "sr-cached",
+        description: "Cached 80K corpus skill metadata",
+        aliases: [],
+        tags: [],
+        tools: [],
+        domains: [],
+        intents: [],
+        examples: [],
+      },
+      source: "user",
+      pluginKey: null,
+      skillMdPath: "corpus-cache:sr-cached",
+      isDisabled: true,
+      isPluginDisabled: false,
+      canDisable: true,
+      conflict: false,
+    };
+    await writeFile(join(fake.stateDir, "corpus-bm25-index-codex.json"), JSON.stringify({
+      version: 1,
+      host: "codex",
+      createdAtMs: Date.now(),
+      fingerprint: "external-corpus-snapshot",
+      index: buildSkillCorpusBm25Index([cachedSkill]),
+    }));
+
+    const inspect = await runCli(["skills", "corpus", "inspect", "sr-cached", "--json"], fake.env);
+    const parsed = JSON.parse(inspect.stdout) as {
+      inspected: Array<{ id: string; shortId: string; skillMdPath?: string }>;
+    };
+
+    assert.equal(parsed.inspected[0]?.id, "user:codex:sr-cached");
+    assert.equal(parsed.inspected[0]?.shortId, "sr-cached");
+    assert.equal(parsed.inspected[0]?.skillMdPath, undefined);
   } finally {
     await fake.cleanup();
   }

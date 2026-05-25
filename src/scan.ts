@@ -1,4 +1,4 @@
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { open as openFile, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { parseFrontmatterWithWarnings } from "./frontmatter.ts";
 import type { Skill, SkillMetadata } from "./types.ts";
@@ -9,6 +9,7 @@ export interface FrontmatterReadResult {
 }
 
 export const DISABLED_SUFFIX = ".skill-router-disabled";
+const MAX_FRONTMATTER_BYTES = 32_000;
 
 interface InstalledPlugin {
   pluginKey: string;
@@ -424,7 +425,7 @@ export async function readSkillFrontmatter(
 export async function readSkillFrontmatterDetailed(
   skillMdPath: string,
 ): Promise<FrontmatterReadResult> {
-  const raw = await readFile(skillMdPath, "utf8");
+  const raw = await readSkillFrontmatterBlock(skillMdPath);
   const { data: fm, warnings } = parseFrontmatterWithWarnings(raw);
   const name = scalar(fm["name"]) ?? basename(dirname(skillMdPath)) ?? "";
   const description = scalar(fm["description"]) ?? "";
@@ -439,6 +440,47 @@ export async function readSkillFrontmatterDetailed(
     ...optionalArray("examples", fm["examples"]),
   };
   return { metadata, warnings };
+}
+
+export async function readSkillFrontmatterBlock(skillMdPath: string): Promise<string> {
+  const handle = await openFile(skillMdPath, "r");
+  const bytes: number[] = [];
+  let lineBytes: number[] = [];
+  let bytesReadTotal = 0;
+  let sawOpening = false;
+  const buffer = Buffer.allocUnsafe(Math.min(4096, MAX_FRONTMATTER_BYTES));
+  try {
+    while (bytesReadTotal < MAX_FRONTMATTER_BYTES) {
+      const bytesToRead = Math.min(buffer.length, MAX_FRONTMATTER_BYTES - bytesReadTotal);
+      const { bytesRead } = await handle.read(buffer, 0, bytesToRead, bytesReadTotal);
+      if (bytesRead === 0) break;
+
+      for (let i = 0; i < bytesRead; i++) {
+        const byte = buffer[i]!;
+        bytes.push(byte);
+        lineBytes.push(byte);
+        if (byte !== 0x0a) continue;
+
+        const trimmed = Buffer.from(lineBytes).toString("utf8").trim();
+        if (!sawOpening) {
+          if (trimmed === "") {
+            lineBytes = [];
+            continue;
+          }
+          if (trimmed !== "---") return Buffer.from(bytes).toString("utf8");
+          sawOpening = true;
+          lineBytes = [];
+          continue;
+        }
+        if (trimmed === "---") return Buffer.from(bytes).toString("utf8");
+        lineBytes = [];
+      }
+      bytesReadTotal += bytesRead;
+    }
+    return Buffer.from(bytes).toString("utf8");
+  } finally {
+    await handle.close();
+  }
 }
 
 function scalar(value: string | string[] | undefined): string | undefined {

@@ -9,9 +9,10 @@ export interface DciOptions {
   maxSnippets?: number;
   maxChars?: number;
   maxQueries?: number;
+  metadataOnly?: boolean;
 }
 
-export interface DciRouteOptions extends DciOptions {}
+export interface DciRouteOptions extends Omit<DciOptions, "metadataOnly"> {}
 
 export interface DciGrepOptions extends DciOptions {
   regex?: boolean;
@@ -83,7 +84,8 @@ export interface DciSearchMatch extends DciSkillRef {
 export interface DciSearchResult {
   query: string;
   queries: string[];
-  action: "inspect-or-read-candidates" | "no-candidates";
+  metadataOnly: boolean;
+  action: "inspect-candidates" | "inspect-or-read-candidates" | "no-candidates";
   budget: DciBudget;
   corpus: DciCorpusSummary;
   warnings: DciCorpusWarning[];
@@ -125,7 +127,7 @@ export interface DciOpenResult extends DciSkillRef {
 }
 
 export interface DciInspectResult extends DciSkillRef {
-  action: "read-skill-file";
+  action: "inspect-skill";
   isDisabled: boolean;
   canDisable: boolean;
   conflict: boolean;
@@ -247,15 +249,17 @@ export async function dciSearchDisabledSkills(
   const trimmedQuery = queries.join("\n");
   const candidates = routableDisabledSkills(skills);
   if (queries.length === 0) {
-    return emptySearchResult("", [], candidates.length);
+    return emptySearchResult("", [], candidates.length, Boolean(opts.metadataOnly));
   }
 
-  const loaded = await loadSkills(candidates);
+  const loaded = opts.metadataOnly ? loadSkillMetadata(candidates) : await loadSkills(candidates);
   const scored: ScoredLoadedSkill[] = [];
   const maxSnippets = normalizePositiveInt(opts.maxSnippets, DEFAULT_MAX_SNIPPETS, MAX_SNIPPETS);
 
   for (const item of loaded.skills) {
-    const haystack = `${item.skill.id}\n${item.skill.name}\n${item.skill.description}\n${item.content}`;
+    const haystack = opts.metadataOnly
+      ? skillMetadataText(item.skill)
+      : `${item.skill.id}\n${item.skill.name}\n${item.skill.description}\n${item.content}`;
     const haystackTerms = termsFor(haystack);
     const haystackPhrase = compact(haystack);
     let best: ScoredLoadedSkill | null = null;
@@ -291,8 +295,11 @@ export async function dciSearchDisabledSkills(
   return {
     query: trimmedQuery,
     queries,
-    action: matches.length > 0 ? "inspect-or-read-candidates" : "no-candidates",
-    budget: DCI_BUDGET,
+    metadataOnly: Boolean(opts.metadataOnly),
+    action: matches.length > 0
+      ? (opts.metadataOnly ? "inspect-candidates" : "inspect-or-read-candidates")
+      : "no-candidates",
+    budget: searchBudget(Boolean(opts.metadataOnly)),
     corpus: corpusSummary(candidates.length, scored.length, loaded),
     warnings: loaded.warnings,
     matches,
@@ -425,7 +432,7 @@ export function dciInspectSkill(skills: Skill[], idOrRef: string): DciInspectRes
   const skill = findRoutableSkillOrThrow(skills, idOrRef);
   return {
     ...skillRef(skill),
-    action: "read-skill-file",
+    action: "inspect-skill",
     isDisabled: skill.isDisabled,
     canDisable: skill.canDisable,
     conflict: skill.conflict,
@@ -501,12 +508,13 @@ export function routableDisabledSkills(skills: Skill[]): Skill[] {
   return skills.filter(isRoutableDisabledSkill);
 }
 
-function emptySearchResult(query: string, queries: string[], scanned: number): DciSearchResult {
+function emptySearchResult(query: string, queries: string[], scanned: number, metadataOnly = false): DciSearchResult {
   return {
     query,
     queries,
+    metadataOnly,
     action: "no-candidates",
-    budget: DCI_BUDGET,
+    budget: searchBudget(metadataOnly),
     corpus: emptyCorpusSummary(scanned),
     warnings: [],
     matches: [],
@@ -519,6 +527,39 @@ interface LoadedSkillSet {
   truncated: number;
   skipped: number;
   warnings: DciCorpusWarning[];
+}
+
+function loadSkillMetadata(skills: Skill[]): LoadedSkillSet {
+  return {
+    skills: skills.map((skill) => {
+      const content = `---\nname: ${skill.name}\ndescription: ${skill.description}\n---\n`;
+      return {
+        skill,
+        content,
+        lines: content.split(/\r?\n/),
+        bytesRead: 0,
+        fileBytes: 0,
+        truncated: false,
+      };
+    }),
+    bytesRead: 0,
+    truncated: 0,
+    skipped: 0,
+    warnings: [],
+  };
+}
+
+function searchBudget(metadataOnly: boolean): DciBudget {
+  return metadataOnly
+    ? {
+      ...DCI_BUDGET,
+      maxSkillBytes: 0,
+      maxCorpusBytes: 0,
+      maxFindsOrOpens: 0,
+      maxFullReads: 0,
+      maxOpenChars: 0,
+    }
+    : DCI_BUDGET;
 }
 
 async function loadSkills(skills: Skill[]): Promise<LoadedSkillSet> {
@@ -579,6 +620,14 @@ async function loadSkills(skills: Skill[]): Promise<LoadedSkillSet> {
     }
   }
   return { skills: out, bytesRead, truncated, skipped, warnings };
+}
+
+function skillMetadataText(skill: Skill): string {
+  return [
+    skill.id,
+    skill.name,
+    skill.description,
+  ].join("\n");
 }
 
 async function readSkillPrefix(

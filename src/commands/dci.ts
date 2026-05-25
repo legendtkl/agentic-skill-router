@@ -55,6 +55,7 @@ async function cmdDciSearch(argv: string[], hostName: HostName): Promise<number>
       options: {
         query: { type: "string", short: "q", multiple: true },
         json: { type: "boolean" },
+        "metadata-only": { type: "boolean" },
         "top-k": { type: "string" },
         "max-snippets": { type: "string" },
         "max-queries": { type: "string" },
@@ -81,6 +82,7 @@ async function cmdDciSearch(argv: string[], hostName: HostName): Promise<number>
     ...(topK === undefined ? {} : { topK }),
     ...(maxSnippets === undefined ? {} : { maxSnippets }),
     ...(maxQueries === undefined ? {} : { maxQueries }),
+    metadataOnly: Boolean(values["metadata-only"]),
   });
   if (values.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
