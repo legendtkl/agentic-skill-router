@@ -2,11 +2,11 @@
 name: skill-router-skills
 description: MUST be used FIRST, before any other tool, for EVERY user request that mentions a specific tool, API, file format, service, framework, library, CLI, platform, dataset, or domain workflow -- e.g. parsing/operating/querying/configuring/deploying/transcribing/analyzing/debugging/generating/refactoring/troubleshooting a named technology. A large catalog of disabled Agent Skills is installed locally; one of them likely specializes in this exact task. Invoke this skill FIRST to identify which one before attempting the task.
 metadata:
-  skill-router.version: "3"
+  skill-router.version: "2"
   skill-router.variant: "L-agentic"
 ---
 
-# skill-router - Variant L (agentic corpus primitives, v3)
+# skill-router - Variant L (agentic corpus primitives, v2)
 
 Use the `skill-router` corpus primitives as an AgenticRAG-style retrieval
 harness. Do not call `skills route` and do not call `skills dci`. Do not read
@@ -42,19 +42,21 @@ CLI: `<abs-path-to-skill-router>`.
      terms (still as `--any`, not `--all`) and retry;
    - never use `--all` unless three consecutive searches return >30 each.
 
-3. The search response already includes each candidate's full `description`,
-   `name`, `metadata.aliases`, `metadata.tags`, `metadata.tools`,
-   `metadata.domains`, `metadata.intents`, `matchedTerms`, and `score` — no
-   `corpus inspect` call is needed. **Before committing, evaluate the top-3
-   candidates against the user's required operation**, even if one looks
-   obvious from rank or score: when scores are tied or close (Δ < 1.0),
-   ranking alone is unreliable, and the distinguishing operation often
-   appears later in the `description` text rather than in the score.
+3. **Always inspect the top-3 candidates** before committing — even if the
+   top-1 looks obvious from the search snippet. The search response only
+   shows truncated description snippets; the full `description` from
+   `corpus inspect` often contains the distinguishing operation that
+   distractors lack.
 
-   Do not call `corpus inspect`. Do not re-run search just to look at the
-   same candidates again.
+   ```bash
+   <abs-path-to-skill-router> skills corpus inspect <ref1> <ref2> <ref3> --json
+   ```
 
-4. Choose by metadata evidence from the search response:
+   If the shortlist has fewer than 3 candidates, inspect all of them. Skip
+   inspect only if there is exactly 1 candidate in the shortlist.
+
+4. Choose by metadata evidence from the inspect result (not the search
+   snippet):
    - Prefer explicit operation coverage over nearby topic similarity.
    - Prefer a dedicated file-format/tool skill when the task is to operate
      that file format or tool.

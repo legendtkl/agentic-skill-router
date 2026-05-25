@@ -1,0 +1,24 @@
+{
+  "rows": [
+    {
+      "variant": "L-agentic",
+      "total": 24,
+      "triggered": 24,
+      "correct": 23,
+      "hallucinated": 0,
+      "sumCost": 3.4673522500000002,
+      "sumTurns": 96,
+      "sumDur": 469860,
+      "meanCtxEnd": 32608.583333333332,
+      "misses": [
+        {
+          "queryId": "pptx-reference-formatting",
+          "expected": "skill-140",
+          "matched": "skill-103",
+          "timedOut": false,
+          "triggered": true
+        }
+      ]
+    }
+  ]
+}

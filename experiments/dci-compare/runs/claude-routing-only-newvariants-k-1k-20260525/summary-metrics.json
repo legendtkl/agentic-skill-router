@@ -1,0 +1,31 @@
+{
+  "rows": [
+    {
+      "variant": "K-bounded",
+      "total": 24,
+      "triggered": 24,
+      "correct": 22,
+      "hallucinated": 0,
+      "sumCost": 3.7389714999999994,
+      "sumTurns": 116,
+      "sumDur": 889834,
+      "meanCtxEnd": 31165.208333333332,
+      "misses": [
+        {
+          "queryId": "data-to-d3",
+          "expected": "skill-037",
+          "matched": "skill-060",
+          "timedOut": false,
+          "triggered": true
+        },
+        {
+          "queryId": "gh-repo-analytics",
+          "expected": "skill-021",
+          "matched": "skill-046",
+          "timedOut": false,
+          "triggered": true
+        }
+      ]
+    }
+  ]
+}
