@@ -348,7 +348,10 @@ test("skills enable rejects unknown option", async () => {
   }
 });
 
-test("skills disable and enable allow non-builtin out-of-root symlink skills", async () => {
+test("skills disable on out-of-root symlink refuses without --allow-symlink-target-mutation", async () => {
+  // `--yes` alone confirms intent to disable, not intent to rename files
+  // outside the host's skills root. Out-of-root symlink targets must require
+  // the explicit `--allow-symlink-target-mutation` flag (issue #94).
   const fake = await makeFakeCodexUser();
   try {
     const externalSkillDir = join(fake.root, "external-skills", "linked-skill");
@@ -366,13 +369,121 @@ test("skills disable and enable allow non-builtin out-of-root symlink skills", a
     assert.equal(linked!.outOfRoot, true);
     assert.equal(linked!.canDisable, false);
 
-    const disabled = await runCli(["skills", "disable", "user:codex:linked-skill", "--yes"], fake.env);
+    // Default: refuses with a clear error mentioning the linked target path
+    // and the required flag. SKILL.md must NOT be renamed.
+    let refused: unknown;
+    try {
+      await runCli(["skills", "disable", "user:codex:linked-skill", "--yes"], fake.env);
+    } catch (err) {
+      refused = err;
+    }
+    assert.ok(refused, "disable without --allow-symlink-target-mutation must fail");
+    assert.equal((refused as { code?: number }).code, 1);
+    const refusedStderr = (refused as { stderr?: string }).stderr ?? "";
+    assert.match(refusedStderr, /refusing to disable user:codex:linked-skill/);
+    assert.match(refusedStderr, /symlink target outside this host's skills root/);
+    assert.match(refusedStderr, /--allow-symlink-target-mutation/);
+    assert.ok(
+      refusedStderr.includes(externalSkillDir),
+      `error should disclose the linked target path; got: ${refusedStderr}`,
+    );
+    // The live SKILL.md under the external dir is untouched.
+    await stat(join(externalSkillDir, "SKILL.md"));
+    let stillNotRenamed = false;
+    try {
+      await stat(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
+    } catch {
+      stillNotRenamed = true;
+    }
+    assert.ok(stillNotRenamed, "linked target must not have been renamed");
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills disable on out-of-root symlink with --allow-symlink-target-mutation modifies the target", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "linked-skill");
+    await mkdir(externalSkillDir, { recursive: true });
+    await writeFile(
+      join(externalSkillDir, "SKILL.md"),
+      "---\nname: linked-skill\ndescription: linked user skill\n---\n",
+    );
+    await symlink(externalSkillDir, join(fake.codexHome, "skills", "linked-skill"));
+
+    const disabled = await runCli(
+      ["skills", "disable", "user:codex:linked-skill", "--yes", "--allow-symlink-target-mutation"],
+      fake.env,
+    );
     assert.match(disabled.stderr, /warning: user:codex:linked-skill is a symlink/);
     await stat(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
 
-    const enabled = await runCli(["skills", "enable", "user:codex:linked-skill"], fake.env);
+    // enable also requires the flag.
+    let enableRefused: unknown;
+    try {
+      await runCli(["skills", "enable", "user:codex:linked-skill"], fake.env);
+    } catch (err) {
+      enableRefused = err;
+    }
+    assert.ok(enableRefused, "enable without flag must fail too");
+    assert.equal((enableRefused as { code?: number }).code, 1);
+    const enableStderr = (enableRefused as { stderr?: string }).stderr ?? "";
+    assert.match(enableStderr, /refusing to enable user:codex:linked-skill/);
+    assert.match(enableStderr, /--allow-symlink-target-mutation/);
+
+    const enabled = await runCli(
+      ["skills", "enable", "user:codex:linked-skill", "--allow-symlink-target-mutation"],
+      fake.env,
+    );
     assert.match(enabled.stderr, /warning: user:codex:linked-skill is a symlink/);
     await stat(join(externalSkillDir, "SKILL.md"));
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills disable --all-suggested --yes never mutates out-of-root symlinks and still disables in-root ones", async () => {
+  // End-to-end guard for issue #94: the batch path must NOT silently rename
+  // SKILL.md files outside the host's skills root. Today `policy.suggest`
+  // already filters them out via `canDisable=false`, and the CLI also carries
+  // a defensive skip for the same case in case that policy ever relaxes. This
+  // test verifies the net effect: the external target is untouched while
+  // in-root suggestions still get disabled.
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "linked-stale");
+    await mkdir(externalSkillDir, { recursive: true });
+    await writeFile(
+      join(externalSkillDir, "SKILL.md"),
+      "---\nname: linked-stale\ndescription: stale linked skill\n---\n",
+    );
+    await symlink(externalSkillDir, join(fake.codexHome, "skills", "linked-stale"));
+
+    const inRootDir = join(fake.codexHome, "skills", "in-root-stale");
+    await mkdir(inRootDir, { recursive: true });
+    await writeFile(
+      join(inRootDir, "SKILL.md"),
+      "---\nname: in-root-stale\ndescription: in-root stale skill\n---\n",
+    );
+
+    await runCli(
+      ["skills", "disable", "--all-suggested", "--yes", "--unused-for=1d"],
+      fake.env,
+    );
+
+    // The external (out-of-root) target must NOT have been renamed.
+    await stat(join(externalSkillDir, "SKILL.md"));
+    let linkedUntouched = false;
+    try {
+      await stat(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
+    } catch {
+      linkedUntouched = true;
+    }
+    assert.ok(linkedUntouched, "linked target must remain live");
+
+    // In-root suggestion did get disabled.
+    await stat(join(inRootDir, "SKILL.md.agentic-skill-router-disabled"));
   } finally {
     await fake.cleanup();
   }

@@ -29,8 +29,8 @@ USAGE
   agentic-skill-router skills dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
   agentic-skill-router skills dci budget [--json]
   agentic-skill-router skills body <search|grep|find|open|inspect|read|select|budget> ...  (alias for dci)
-  agentic-skill-router skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>]
-  agentic-skill-router skills enable <id...>
+  agentic-skill-router skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>] [--allow-symlink-target-mutation]
+  agentic-skill-router skills enable <id...> [--allow-symlink-target-mutation]
   agentic-skill-router skills status [--json]
   agentic-skill-router skills config get [--json]
   agentic-skill-router skills config set <key> <value>
