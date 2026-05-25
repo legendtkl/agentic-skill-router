@@ -396,7 +396,9 @@ function checkBasicAuth(req: IncomingMessage, credential: BasicAuthCredential): 
   if (sep < 0) return false;
   const user = decoded.slice(0, sep);
   const pass = decoded.slice(sep + 1);
-  return constantTimeEquals(user, credential.username) && constantTimeEquals(pass, credential.password);
+  const userMatches = constantTimeEquals(user, credential.username);
+  const passwordMatches = constantTimeEquals(pass, credential.password);
+  return userMatches && passwordMatches;
 }
 
 function constantTimeEquals(a: string, b: string): boolean {

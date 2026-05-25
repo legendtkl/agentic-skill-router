@@ -409,6 +409,13 @@ test("startWebServer with --dangerously-bind-public warns, requires basic auth, 
           assert.equal(noAuthApi.status, 401);
 
           const authHeaders = basicAuthHeader(basicAuth);
+          const badUserAuthHeaders = basicAuthHeader({
+            username: `${basicAuth!.username}-bad`,
+            password: basicAuth!.password,
+          });
+
+          const badUserAuthApi = await fetch(`${url}/api/skills?scope=global`, { headers: badUserAuthHeaders });
+          assert.equal(badUserAuthApi.status, 401);
 
           // With basic auth but without the mutation token, /api/skills still 403.
           const noToken = await fetch(`${url}/api/skills?scope=global`, { headers: authHeaders });
