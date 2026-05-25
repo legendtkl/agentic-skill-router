@@ -24,6 +24,12 @@ export interface ApplyDeps {
   now?: () => Date;
   /** Current inventory, used to reconcile state records after plugin upgrades. */
   skills?: Skill[];
+  /**
+   * Allow acting through an out-of-root symlink. Kept opt-in so CLI callers
+   * retain the default safety behavior unless an interactive surface has
+   * explicitly warned the user.
+   */
+  allowOutOfRoot?: boolean;
 }
 
 export async function disableSkill(
@@ -38,8 +44,10 @@ export async function disableSkill(
   // only safety gates protecting SKILL.md from being renamed outside the
   // discovered skills root or on a builtin; hosts intentionally do NOT
   // expose disable/enable, so this check is the single source of truth.
-  if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
-  if (!skill.canDisable) throw new BuiltinSkillCannotDisableError(skill.id);
+  if (skill.outOfRoot && !deps.allowOutOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
+  if (!skill.canDisable && !(skill.outOfRoot && deps.allowOutOfRoot && skill.source !== "builtin")) {
+    throw new BuiltinSkillCannotDisableError(skill.id);
+  }
 
   return withStateLock(deps.statePath, async () => {
     const { livePath, disabledPath } = pathsForSkill(skill);
@@ -107,7 +115,10 @@ export async function enableSkill(
   skill: Skill,
   deps: ApplyDeps = {},
 ): Promise<{ state: State; alreadyEnabled: boolean }> {
-  if (skill.outOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
+  if (skill.outOfRoot && !deps.allowOutOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
+  if (skill.outOfRoot && deps.allowOutOfRoot && skill.source === "builtin") {
+    throw new BuiltinSkillCannotDisableError(skill.id);
+  }
   return withStateLock(deps.statePath, async () => {
     const { livePath, disabledPath } = pathsForSkill(skill);
     const instanceKey = skillInstanceKey(skill.id, livePath);
