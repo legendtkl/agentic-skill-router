@@ -28,6 +28,49 @@ agentic-skill-router init claude-code project
 agentic-skill-router init claude-code global
 ```
 
+For `claude-code`, `init` also writes a small routing-trigger block into
+`CLAUDE.md` (project scope: `<projectRoot>/CLAUDE.md`; global scope:
+`$CLAUDE_HOME/CLAUDE.md`, defaulting to `~/.claude/CLAUDE.md`). The exact
+block written is:
+
+```markdown
+<!-- agentic-skill-router:claude-md:begin -->
+## Skill routing
+
+`agentic-skill-router-skills` is a routing Skill that searches a catalog of
+locally-installed disabled skills.
+
+When the `agentic-skill-router-skills` Skill is available and no other
+enabled Skill clearly matches the user's query, call
+`agentic-skill-router-skills` before answering. Do not invent a Skill name
+or fabricate a routing result without a Skill/tool result. If
+`agentic-skill-router-skills` is not installed in this environment, this
+section does not apply.
+```
+
+(closed with `<!-- agentic-skill-router:claude-md:end -->`)
+
+The HTML-comment fence makes the block idempotent: re-running `init` replaces
+the first existing fenced block in place (preserving its position in your
+file) and strips any duplicate blocks elsewhere. Fence markers must appear
+on their own line — markers quoted inline inside a paragraph or code block
+are ignored, so the parser cannot be tricked by user-authored prose.
+Existing CLAUDE.md content outside the fence is preserved. Line endings
+follow the file's dominant style (CRLF only when CRLF lines outnumber bare
+LF lines, otherwise LF). If `CLAUDE.md` is found with an unbalanced fence
+(`:begin` without a matching `:end`), `init` aborts before touching the
+skill directory, so a malformed file never produces a partial install.
+The conditional wording (`If ... is not installed ... this section does
+not apply`) is intentional: if the plugin is later uninstalled, a stale
+block left in CLAUDE.md is harmless rather than driving the agent to call
+a nonexistent Skill.
+
+The wording mirrors the validated `claudemd-policy-probe` in
+`experiments/dci-compare/`, which lifted router trigger rate from 78% to
+97.6% and routing accuracy from 69% to 86.9% on the 150-skill paired Claude
+Code run. Pass `--no-claude-md` to skip this write. Codex `init` never
+touches CLAUDE.md.
+
 After init, restart the target agent if it was already running, then ask the
 installed `agentic-skill-router-skills` skill to audit, slim, or route installed skills.
 

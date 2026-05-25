@@ -1,4 +1,4 @@
-import { cp, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { stdin as input, stdout as output } from "node:process";
@@ -17,7 +17,33 @@ interface InitResult {
   skillDir: string;
   skillMdPath: string;
   cliPath: string;
+  claudeMdPath?: string;
+  claudeMdAction?: "created" | "replaced" | "appended" | "skipped";
 }
+
+const CLAUDE_MD_BEGIN = "<!-- agentic-skill-router:claude-md:begin -->";
+const CLAUDE_MD_END = "<!-- agentic-skill-router:claude-md:end -->";
+
+/**
+ * Routing-trigger guidance injected into Claude Code's CLAUDE.md. The wording
+ * mirrors the validated probe in experiments/dci-compare/claudemd-policy-probe.mjs
+ * (which raised router trigger rate from 78% to 97.6% and accuracy from 69% to
+ * 86.9% on the 150-skill paired Claude Code run) with the skill id rewritten
+ * for this package.
+ */
+const CLAUDE_MD_BODY = [
+  "## Skill routing",
+  "",
+  "`agentic-skill-router-skills` is a routing Skill that searches a catalog of",
+  "locally-installed disabled skills.",
+  "",
+  "When the `agentic-skill-router-skills` Skill is available and no other",
+  "enabled Skill clearly matches the user's query, call",
+  "`agentic-skill-router-skills` before answering. Do not invent a Skill name",
+  "or fabricate a routing result without a Skill/tool result. If",
+  "`agentic-skill-router-skills` is not installed in this environment, this",
+  "section does not apply.",
+].join("\n");
 
 /**
  * `agentic-skill-router init` creates a router skill for one supported code agent.
@@ -38,6 +64,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
         "  --cli <path>",
         "  --force",
         "  --json",
+        "  --no-claude-md            (claude-code only) skip writing the routing-trigger block into CLAUDE.md",
         "",
       ].join("\n"),
     );
@@ -55,6 +82,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
         cli: { type: "string" },
         force: { type: "boolean" },
         json: { type: "boolean" },
+        "no-claude-md": { type: "boolean" },
       },
       allowPositionals: true,
     },
@@ -113,6 +141,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
       sourceDir,
       cliPath,
       force: Boolean(values.force),
+      writeClaudeMd: !values["no-claude-md"],
     });
   } catch (err) {
     process.stderr.write(`${(err as Error).message}\n`);
@@ -127,6 +156,11 @@ export async function cmdInit(argv: string[]): Promise<number> {
   process.stdout.write(`initialized agentic-skill-router for ${displayAgent(agent)} (${result.scope})\n`);
   process.stdout.write(`skill: ${result.skillMdPath}\n`);
   process.stdout.write(`cli:   ${result.cliPath}\n`);
+  if (result.claudeMdPath && result.claudeMdAction) {
+    process.stdout.write(`claudemd: ${result.claudeMdPath} (${result.claudeMdAction})\n`);
+  } else if (result.claudeMdAction === "skipped") {
+    process.stdout.write("claudemd: skipped\n");
+  }
   return 0;
 }
 
@@ -158,22 +192,33 @@ async function initializeSkill(opts: {
   sourceDir: string;
   cliPath: string;
   force: boolean;
+  writeClaudeMd: boolean;
 }): Promise<InitResult> {
   const targetRoot = skillRootFor(opts.agent, opts.scope, opts.projectRoot);
   const skillRoot = join(targetRoot, "skills");
   const skillDir = join(skillRoot, "agentic-skill-router-skills");
-  if (await pathExists(skillDir)) {
-    if (!opts.force) {
-      throw new Error(`${skillDir} already exists; re-run with --force to replace it`);
-    }
-    await rm(skillDir, { recursive: true, force: true });
+  const skillDirExists = await pathExists(skillDir);
+  if (skillDirExists && !opts.force) {
+    throw new Error(`${skillDir} already exists; re-run with --force to replace it`);
   }
 
+  // Pre-flight validate CLAUDE.md BEFORE we touch the skill dir. If the file
+  // exists with an unbalanced fence we want to fail without leaving a
+  // half-installed skill behind on disk.
+  let claudeMdPath: string | null = null;
+  if (opts.agent === "claude-code" && opts.writeClaudeMd) {
+    claudeMdPath = claudeMdPathFor(opts.scope, opts.projectRoot);
+    await validateClaudeMdFormat(claudeMdPath);
+  }
+
+  if (skillDirExists) {
+    await rm(skillDir, { recursive: true, force: true });
+  }
   await mkdir(skillRoot, { recursive: true });
   await cp(opts.sourceDir, skillDir, { recursive: true });
   await writeLocalCliReference(skillDir, opts.agent, opts.scope, opts.cliPath);
 
-  return {
+  const result: InitResult = {
     action: "initialized-agentic-skill-router-skill",
     agent: opts.agent,
     scope: opts.scope,
@@ -182,6 +227,171 @@ async function initializeSkill(opts: {
     skillMdPath: join(skillDir, "SKILL.md"),
     cliPath: opts.cliPath,
   };
+
+  if (opts.agent === "claude-code") {
+    if (!opts.writeClaudeMd) {
+      result.claudeMdAction = "skipped";
+    } else if (claudeMdPath) {
+      result.claudeMdPath = claudeMdPath;
+      result.claudeMdAction = await upsertClaudeMdBlock(claudeMdPath);
+    }
+  }
+
+  return result;
+}
+
+function claudeMdPathFor(scope: InitScope, projectRoot: string): string {
+  if (scope === "project") return join(projectRoot, "CLAUDE.md");
+  const home = process.env["CLAUDE_HOME"] ?? join(homedir(), ".claude");
+  return join(home, "CLAUDE.md");
+}
+
+// Fence markers must appear as a full line (column 0, optional trailing
+// whitespace) so a marker quoted inside a paragraph or code block cannot
+// close the fence early. The trailing `\r?` handles CRLF files: with the
+// `m` flag `$` matches before `\n`, so on `<!-- ...:begin -->\r\n` the `\r`
+// would otherwise sit between the marker text and `$` and block the match.
+const BEGIN_LINE = new RegExp(`^${escapeForRegex(CLAUDE_MD_BEGIN)}[ \\t]*\\r?$`, "m");
+const END_LINE = new RegExp(`^${escapeForRegex(CLAUDE_MD_END)}[ \\t]*\\r?$`, "m");
+
+interface FenceSpan {
+  start: number;
+  end: number;
+}
+
+/**
+ * Pre-flight read of CLAUDE.md to fail fast on an unbalanced fence before
+ * the skill dir is touched. The subsequent `upsertClaudeMdBlock` re-reads
+ * the file; the pair is intentionally not atomic. For a local CLI driven
+ * by one user at a time, the TOCTOU window between these two reads is
+ * acceptable — concurrent edits to CLAUDE.md during `init` are not a
+ * supported scenario.
+ */
+async function validateClaudeMdFormat(path: string): Promise<void> {
+  let existing: string | null = null;
+  try {
+    existing = await readFile(path, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  if (existing === null) return;
+  findAllFenceSpans(existing, path);
+}
+
+async function upsertClaudeMdBlock(
+  path: string,
+): Promise<"created" | "replaced" | "appended"> {
+  let existing: string | null = null;
+  try {
+    existing = await readFile(path, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+
+  const eol = pickEol(existing);
+  const block = renderClaudeMdBlock(eol);
+
+  if (existing === null) {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, block);
+    return "created";
+  }
+
+  if (existing.length === 0) {
+    await writeFile(path, block);
+    return "appended";
+  }
+
+  const spans = findAllFenceSpans(existing, path);
+
+  if (spans.length === 0) {
+    const separator = existing.endsWith(eol + eol)
+      ? ""
+      : existing.endsWith(eol)
+        ? eol
+        : eol + eol;
+    const next = existing + separator + block;
+    if (next !== existing) await writeFile(path, next);
+    return "appended";
+  }
+
+  // Replace the first fence in place (preserves user-chosen position) and
+  // strip any duplicate fences in the tail. Iterating tail-first keeps the
+  // earlier span indices valid in the mutating string.
+  let next = existing;
+  for (let i = spans.length - 1; i >= 1; i -= 1) {
+    const span = spans[i]!;
+    let removeStart = span.start;
+    if (
+      removeStart >= 2 &&
+      next.charAt(removeStart - 2) === "\r" &&
+      next.charAt(removeStart - 1) === "\n"
+    ) {
+      removeStart -= 2;
+    } else if (removeStart >= 1 && next.charAt(removeStart - 1) === "\n") {
+      removeStart -= 1;
+    }
+    next = next.slice(0, removeStart) + next.slice(span.end);
+  }
+  const first = spans[0]!;
+  next = next.slice(0, first.start) + block + next.slice(first.end);
+  if (next !== existing) await writeFile(path, next);
+  return "replaced";
+}
+
+function renderClaudeMdBlock(eol: string): string {
+  const lf = `${CLAUDE_MD_BEGIN}\n${CLAUDE_MD_BODY}\n${CLAUDE_MD_END}\n`;
+  return eol === "\r\n" ? lf.replace(/\n/g, "\r\n") : lf;
+}
+
+/** Pick CRLF only when it is at least as common as bare LF in the source. */
+function pickEol(source: string | null): string {
+  if (source === null || source.length === 0) return "\n";
+  const crlfCount = (source.match(/\r\n/g) ?? []).length;
+  const totalLfCount = (source.match(/\n/g) ?? []).length;
+  const bareLfCount = totalLfCount - crlfCount;
+  return crlfCount > 0 && crlfCount >= bareLfCount ? "\r\n" : "\n";
+}
+
+/**
+ * Return spans for every fence pair in `source` in document order. Each
+ * span runs from the first character of the begin marker to one position
+ * past the trailing line terminator (so removing or replacing the span
+ * does not leave the surrounding line broken). Throws on an unbalanced
+ * begin marker so a hand-edited file fails loudly instead of being
+ * silently rewritten.
+ */
+function findAllFenceSpans(source: string, path: string): FenceSpan[] {
+  const spans: FenceSpan[] = [];
+  let offset = 0;
+  while (offset < source.length) {
+    const remaining = source.slice(offset);
+    const beginMatch = BEGIN_LINE.exec(remaining);
+    if (!beginMatch) break;
+    const beginStart = offset + beginMatch.index;
+    const beginEnd = beginStart + beginMatch[0].length;
+
+    const endMatch = END_LINE.exec(source.slice(beginEnd));
+    if (!endMatch) {
+      throw new Error(
+        `${path} contains ${CLAUDE_MD_BEGIN} without a matching ${CLAUDE_MD_END}; edit the file by hand or remove the stray marker`,
+      );
+    }
+    const endStop = beginEnd + endMatch.index + endMatch[0].length;
+    let spanEnd = endStop;
+    if (source.charAt(spanEnd) === "\r" && source.charAt(spanEnd + 1) === "\n") {
+      spanEnd += 2;
+    } else if (source.charAt(spanEnd) === "\n") {
+      spanEnd += 1;
+    }
+    spans.push({ start: beginStart, end: spanEnd });
+    offset = spanEnd;
+  }
+  return spans;
+}
+
+function escapeForRegex(value: string): string {
+  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
 
 function skillRootFor(agent: InitAgent, scope: InitScope, projectRoot: string): string {
