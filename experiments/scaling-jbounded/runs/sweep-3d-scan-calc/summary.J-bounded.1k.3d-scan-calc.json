@@ -1,0 +1,43 @@
+{
+  "queryId": "3d-scan-calc",
+  "gt": "gt/mesh-analysis",
+  "expectedShort": "gt__mesh-analysis",
+  "forceIncludeIds": [
+    "gt/mesh-analysis",
+    "degraded/mesh-analysis_steps-removed_162",
+    "degraded/mesh-analysis_constraints-corrupted_163"
+  ],
+  "variant": "J-bounded",
+  "scale": 1000,
+  "scaleLabel": "1k",
+  "timestamp": "2026-05-24T07:28:29.492Z",
+  "summary": {
+    "model": "claude-opus-4-7[1m]",
+    "skillsExposed": 11,
+    "numTurns": 4,
+    "durationMs": 17737,
+    "cost": 0.2764445,
+    "startCtx": 24938,
+    "endCtx": 30709,
+    "bashCalls": 1,
+    "skillFired": true,
+    "matched": "gt__mesh-analysis",
+    "expected": "gt__mesh-analysis",
+    "correct": true,
+    "bashResults": [
+      {
+        "idx": 0,
+        "lines": 1,
+        "len": 49,
+        "preview": "Launching skill: skill-router:skill-router-skills"
+      },
+      {
+        "idx": 1,
+        "lines": 13,
+        "len": 6366,
+        "preview": "/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-1k/.claude/skills/design__beads-issue-tracking-shaneholloman-beads-59f3df10/SKILL.md.skill-router-disabled:description: \"Track complex, multi-session work with dependency graphs using beads (beads) issue tracker. Use when work spans multiple sessions, has complex dependencies, or requires persistent context across compaction cycles. For simple single-session linear tasks, TodoWrite remains appropriate.\"\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/"
+      }
+    ],
+    "finalText": "{\"matched_skill_name\":\"gt__mesh-analysis\"}"
+  }
+}

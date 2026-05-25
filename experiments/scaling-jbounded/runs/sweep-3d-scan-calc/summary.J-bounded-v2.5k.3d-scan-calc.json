@@ -1,0 +1,49 @@
+{
+  "queryId": "3d-scan-calc",
+  "gt": "gt/mesh-analysis",
+  "expectedShort": "gt__mesh-analysis",
+  "forceIncludeIds": [
+    "gt/mesh-analysis",
+    "degraded/mesh-analysis_steps-removed_162",
+    "degraded/mesh-analysis_constraints-corrupted_163"
+  ],
+  "variant": "J-bounded-v2",
+  "scale": 5000,
+  "scaleLabel": "5k",
+  "timestamp": "2026-05-24T07:30:55.643Z",
+  "summary": {
+    "model": "claude-opus-4-7[1m]",
+    "skillsExposed": 12,
+    "numTurns": 5,
+    "durationMs": 29516,
+    "cost": 0.14282849999999997,
+    "startCtx": 27218,
+    "endCtx": 30138,
+    "bashCalls": 2,
+    "skillFired": true,
+    "matched": "gt__mesh-analysis",
+    "expected": "gt__mesh-analysis",
+    "correct": true,
+    "bashResults": [
+      {
+        "idx": 0,
+        "lines": 1,
+        "len": 49,
+        "preview": "Launching skill: skill-router:skill-router-skills"
+      },
+      {
+        "idx": 1,
+        "lines": 10,
+        "len": 1806,
+        "preview": "Exit code 123\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-5k/.claude/skills/devops__collective-intelligence-nikhilvallishayee-universal-pattern-sp/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-5k/.claude/skills/design__build123d-rawwerks-vibecad/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-5k/.claude/skills/design__data-products-vivekgana-da"
+      },
+      {
+        "idx": 2,
+        "lines": 3,
+        "len": 545,
+        "preview": "gt__mesh-analysis\tdescription: \"Analyzes 3D mesh files (STL) to calculate geometric properties (volume, components) and extract attribute data. Use this skill to process noisy 3D scan data and filter debris.\"\n\ndesign__build123d-rawwerks-vibecad\tdescription: \"CAD modeling with build123d Python library. Use when creating 3D models, exporting to GLB/STEP/STL, or doing boolean operations (union, difference, intersection). Triggers on: CAD, 3D modeling, sphere, box, cylinder, mesh export, GLB, STEP, STL, solid modeling, parametric design, threa"
+      }
+    ],
+    "finalText": "{\"matched_skill_name\":\"gt__mesh-analysis\"}"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "queryId": "3d-scan-calc",
+  "gt": "gt/mesh-analysis",
+  "expectedShort": "gt__mesh-analysis",
+  "forceIncludeIds": [
+    "gt/mesh-analysis",
+    "degraded/mesh-analysis_steps-removed_162",
+    "degraded/mesh-analysis_constraints-corrupted_163"
+  ],
+  "variant": "J-bounded-v2",
+  "scale": 20000,
+  "scaleLabel": "20k",
+  "timestamp": "2026-05-24T07:36:45.038Z",
+  "summary": {
+    "model": "claude-opus-4-7[1m]",
+    "skillsExposed": 12,
+    "numTurns": 6,
+    "durationMs": 33284,
+    "cost": 0.20852074999999998,
+    "startCtx": 27218,
+    "endCtx": 35447,
+    "bashCalls": 3,
+    "skillFired": true,
+    "matched": "gt__mesh-analysis",
+    "expected": "gt__mesh-analysis",
+    "correct": true,
+    "bashResults": [
+      {
+        "idx": 0,
+        "lines": 1,
+        "len": 49,
+        "preview": "Launching skill: skill-router:skill-router-skills"
+      },
+      {
+        "idx": 1,
+        "lines": 55,
+        "len": 10039,
+        "preview": "Exit code 123\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-20k/.claude/skills/design__istio/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-20k/.claude/skills/design__microservices-architecture/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-20k/.claude/skills/design__build123d-rawwerks-vibecad/SKILL.md.skill-router-disabled\n/Users/bytedance/githu"
+      },
+      {
+        "idx": 2,
+        "lines": 6,
+        "len": 971,
+        "preview": "Exit code 123\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-20k/.claude/skills/design__gcode-to-text-letta-ai-skills-fa019add/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-20k/.claude/skills/design__gcode-to-text/SKILL.md.skill-router-disabled\n/Users/bytedance/github/skill-router/.claude/worktrees/large-skill-set/experiments/scaling-jbounded/.tmp-home-20k/.claude/skills/devops__manyfold/SKILL.md.skill-router-disabled\n/Users/bytedance/git"
+      },
+      {
+        "idx": 3,
+        "lines": 13,
+        "len": 2020,
+        "preview": "gt__mesh-analysis\tdescription: \"Analyzes 3D mesh files (STL) to calculate geometric properties (volume, components) and extract attribute data. Use this skill to process noisy 3D scan data and filter debris.\"\n\ndevelopment__stl-generator-ihistand-claude-skills\tdescription: \"Generate 3D printable STL files for woodworking jigs and fixtures using CadQuery. Use when the user requests lampshade jigs, circle cutting guides, angle wedges, spacing blocks, alignment fixtures, router jigs, or any custom 3D-printed woodworking aid. Optimized for Elegoo Neptune 4 Pr\n\ndevops__manyfold\tdescription: \"Self-ho"
+      }
+    ],
+    "finalText": "{\"matched_skill_name\":\"gt__mesh-analysis\"}"
+  }
+}
