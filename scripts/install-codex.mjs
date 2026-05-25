@@ -3,7 +3,8 @@
  * Install skill-router as a local Codex plugin plus slash command.
  *
  * - builds the bundle before copying
- * - copies the Codex manifest plus shared bin/lib/skills to
+ * - copies the shared bin/lib runtime to ~/.skill-router/runtime/<version>/
+ * - copies the Codex manifest plus skills and a host wrapper to
  *   ~/.codex/plugins/cache/local/skill-router/<version>/
  * - enables [plugins."skill-router@local"] in ~/.codex/config.toml
  * - copies prompts/skill-router-skills.md -> ~/.codex/prompts/
@@ -20,7 +21,9 @@ import { PLUGIN_KEY, PLUGIN_NAME, MARKETPLACE, ensureBuild, log } from "./lib/co
 import {
   cleanupOldVersions,
   copyPluginAssets,
+  copyRuntimeAssets,
   normalizeManifestSkills,
+  writeHostWrapper,
 } from "./lib/plugin-install.mjs";
 import { setPluginEnabled } from "./lib/toml-plugin.mjs";
 import { isManagedUnchanged } from "./prompt-marker.mjs";
@@ -34,6 +37,9 @@ const version = pluginManifest.version;
 const codexHome = process.env["CODEX_HOME"] || join(homedir(), ".codex");
 const cacheRoot = join(codexHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME);
 const installPath = join(cacheRoot, version);
+const runtimeCacheRoot = process.env["SKILL_ROUTER_RUNTIME_ROOT"] || join(homedir(), ".skill-router", "runtime");
+const runtimePath = join(runtimeCacheRoot, version);
+const runtimeBin = join(runtimePath, "bin", "skill-router");
 const configPath = join(codexHome, "config.toml");
 const promptSrc = join(pluginSrc, "prompts/skill-router-skills.md");
 const promptPath = join(codexHome, "prompts/skill-router-skills.md");
@@ -44,8 +50,16 @@ async function main() {
   log(`  target: ${installPath}`);
 
   ensureBuild({ repoRoot, log });
+  await copyRuntimeAssets({ repoRoot, runtimePath });
+  log(`  runtime -> ${runtimePath}`);
   await copyPluginAssets({ pluginSrc, repoRoot, installPath });
   await normalizeManifestSkills(join(installPath, ".codex-plugin/plugin.json"));
+  await writeHostWrapper({
+    wrapperPath: join(installPath, "bin", "skill-router"),
+    runtimeBin,
+    hostName: "codex",
+    assetRoot: installPath,
+  });
   log(`  copied -> ${installPath}`);
   await enablePlugin();
   await installSlashCommand();

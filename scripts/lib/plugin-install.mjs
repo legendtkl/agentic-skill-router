@@ -2,8 +2,9 @@
  * Host-neutral helpers for the install/uninstall scripts. These cover the
  * parts that look identical between the Claude Code and Codex paths:
  *
- *   - copy plugin assets (manifest dir + shared bin/lib/skills) into a
- *     versioned cache directory
+ *   - copy shared bin/lib runtime assets into ~/.skill-router/runtime/<version>
+ *   - copy plugin entry assets (manifest dir + skills) into a versioned cache
+ *     directory and add a host-specific bin wrapper
  *   - normalize the manifest's "skills" path so the installed copy points at
  *     the sibling skills/ directory
  *   - clean up stale sibling versions in the cache root (with a containment
@@ -21,10 +22,10 @@ import { dirname, join, sep } from "node:path";
 import { isPlainObject, log as defaultLog } from "./common.mjs";
 
 /**
- * The shared top-level directories that every host plugin install copies
- * verbatim from the repo root into its versioned cache directory.
+ * The shared top-level directories copied into the versioned runtime cache.
  */
-export const SHARED_ASSET_DIRS = ["bin", "lib", "skills"];
+export const RUNTIME_ASSET_DIRS = ["bin", "lib"];
+export const HOST_ENTRY_ASSET_DIRS = ["skills"];
 
 /**
  * Copy the host plugin manifest tree plus the shared asset dirs into
@@ -39,13 +40,13 @@ export const SHARED_ASSET_DIRS = ["bin", "lib", "skills"];
  * @param {string} options.installPath Versioned cache directory to install
  *   into.
  * @param {string[]} [options.sharedAssetDirs] Top-level directories to copy
- *   from `repoRoot` into `installPath`. Defaults to `SHARED_ASSET_DIRS`.
+ *   from `repoRoot` into `installPath`. Defaults to `HOST_ENTRY_ASSET_DIRS`.
  */
 export async function copyPluginAssets({
   pluginSrc,
   repoRoot,
   installPath,
-  sharedAssetDirs = SHARED_ASSET_DIRS,
+  sharedAssetDirs = HOST_ENTRY_ASSET_DIRS,
 }) {
   await rm(installPath, { recursive: true, force: true });
   await mkdir(dirname(installPath), { recursive: true });
@@ -53,7 +54,58 @@ export async function copyPluginAssets({
   for (const dir of sharedAssetDirs) {
     await cp(join(repoRoot, dir), join(installPath, dir), { recursive: true });
   }
-  await chmod(join(installPath, "bin/skill-router"), 0o755);
+}
+
+/**
+ * Copy the shared CLI runtime once into ~/.skill-router/runtime/<version>/.
+ * Host plugin installs then create tiny wrappers that set SKILL_ROUTER_HOST
+ * before delegating to this runtime.
+ *
+ * @param {object} options
+ * @param {string} options.repoRoot Project root that contains bin/ and lib/.
+ * @param {string} options.runtimePath Versioned shared runtime directory.
+ * @param {string[]} [options.runtimeAssetDirs] Top-level runtime directories
+ *   copied from the repo root. Defaults to bin/ and lib/.
+ */
+export async function copyRuntimeAssets({
+  repoRoot,
+  runtimePath,
+  runtimeAssetDirs = RUNTIME_ASSET_DIRS,
+}) {
+  await rm(runtimePath, { recursive: true, force: true });
+  await mkdir(dirname(runtimePath), { recursive: true });
+  for (const dir of runtimeAssetDirs) {
+    await cp(join(repoRoot, dir), join(runtimePath, dir), { recursive: true });
+  }
+  await chmod(join(runtimePath, "bin/skill-router"), 0o755);
+}
+
+/**
+ * Create a host-specific wrapper inside the installed plugin bundle.
+ *
+ * The wrapper is intentionally small: the plugin bundle remains discoverable
+ * by the host, while all executable logic lives in the shared runtime. The
+ * host name is injected via SKILL_ROUTER_HOST so the runtime does not need to
+ * infer the caller from its own filesystem location.
+ *
+ * @param {object} options
+ * @param {string} options.wrapperPath Absolute path to write.
+ * @param {string} options.runtimeBin Absolute path to the shared runtime bin.
+ * @param {"claude-code" | "codex"} options.hostName Host selected by wrapper.
+ * @param {string} [options.assetRoot] Host entry asset root for init/template lookup.
+ */
+export async function writeHostWrapper({ wrapperPath, runtimeBin, hostName, assetRoot }) {
+  await mkdir(dirname(wrapperPath), { recursive: true });
+  const script = [
+    "#!/usr/bin/env sh",
+    "set -eu",
+    `export SKILL_ROUTER_HOST=${shellQuote(hostName)}`,
+    ...(assetRoot ? [`export SKILL_ROUTER_ASSET_ROOT=${shellQuote(assetRoot)}`] : []),
+    `exec ${shellQuote(runtimeBin)} "$@"`,
+    "",
+  ].join("\n");
+  await writeFile(wrapperPath, script);
+  await chmod(wrapperPath, 0o755);
 }
 
 /**
@@ -68,6 +120,10 @@ export async function normalizeManifestSkills(manifestPath) {
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   manifest.skills = "./skills/";
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
 /**

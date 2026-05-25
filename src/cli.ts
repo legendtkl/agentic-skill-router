@@ -5,6 +5,7 @@ import { cmdDisable, cmdEnable } from "./commands/apply.ts";
 import { cmdConfig } from "./commands/config.ts";
 import { cmdCorpus } from "./commands/corpus.ts";
 import { cmdDci } from "./commands/dci.ts";
+import { cmdInit } from "./commands/init.ts";
 import { cmdList } from "./commands/list.ts";
 import { cmdRoute } from "./commands/route.ts";
 import { cmdStatus } from "./commands/status.ts";
@@ -13,16 +14,17 @@ import { findDeprecatedHostFlag, resolveHostName } from "./host-resolve.ts";
 import { usage } from "./output.ts";
 
 export async function run(argv: string[]): Promise<number> {
-  const deprecatedHostFlag = findDeprecatedHostFlag(argv);
-  if (deprecatedHostFlag) {
-    console.error(`${deprecatedHostFlag} has been removed; use the installed host-specific plugin CLI instead.`);
-    return usage(2);
-  }
-  const [command, subcommand, ...rest] = argv;
-  if (command === undefined || command === "-h" || command === "--help") return usage();
-  const hostName = resolveHostName();
-  if (!hostName) return usage(2);
   try {
+    const deprecatedHostFlag = findDeprecatedHostFlag(argv);
+    if (deprecatedHostFlag) {
+      console.error(`${deprecatedHostFlag} has been removed; use the installed host-specific plugin CLI instead.`);
+      return usage(2);
+    }
+    const [command, subcommand, ...rest] = argv;
+    if (command === undefined || command === "-h" || command === "--help") return usage();
+    if (command === "init") return await cmdInit(subcommand === undefined ? rest : [subcommand, ...rest]);
+    const hostName = resolveHostName();
+    if (!hostName) return usage(2);
     if (command === "skills") {
       switch (subcommand) {
         case "list": return await cmdList(rest, hostName);

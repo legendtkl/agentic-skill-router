@@ -14,11 +14,14 @@ import {
   stripProxy,
 } from "../scripts/lib/common.mjs";
 import {
-  SHARED_ASSET_DIRS,
+  HOST_ENTRY_ASSET_DIRS,
+  RUNTIME_ASSET_DIRS,
   cleanupOldVersions,
   copyPluginAssets,
+  copyRuntimeAssets,
   normalizeManifestSkills,
   warnAboutDisabledSkills,
+  writeHostWrapper,
 } from "../scripts/lib/plugin-install.mjs";
 import { setPluginEnabled } from "../scripts/lib/toml-plugin.mjs";
 
@@ -105,7 +108,7 @@ test("normalizeManifestSkills rewrites skills field to ./skills/", async () => {
   }
 });
 
-test("copyPluginAssets copies manifest + shared dirs and marks bin executable", async () => {
+test("copyPluginAssets copies manifest + host entry dirs only", async () => {
   const root = await mkdtemp(join(tmpdir(), "sr-copy-"));
   try {
     const repoRoot = join(root, "repo");
@@ -118,7 +121,7 @@ test("copyPluginAssets copies manifest + shared dirs and marks bin executable", 
       join(pluginSrc, ".host-plugin/plugin.json"),
       JSON.stringify({ name: "x", version: "1.0.0", skills: "../../skills/" }, null, 2),
     );
-    for (const dir of SHARED_ASSET_DIRS) {
+    for (const dir of [...HOST_ENTRY_ASSET_DIRS, ...RUNTIME_ASSET_DIRS]) {
       await mkdir(join(repoRoot, dir), { recursive: true });
     }
     await writeFile(join(repoRoot, "bin", "skill-router"), "#!/bin/sh\necho hi\n", { mode: 0o644 });
@@ -136,18 +139,68 @@ test("copyPluginAssets copies manifest + shared dirs and marks bin executable", 
       "x",
       "plugin manifest copied",
     );
-    for (const dir of SHARED_ASSET_DIRS) {
+    for (const dir of HOST_ENTRY_ASSET_DIRS) {
       const entries = await readdir(join(installPath, dir));
       assert.ok(entries.length > 0, `${dir} copied with content`);
     }
-    const binStat = await stat(join(installPath, "bin", "skill-router"));
-    assert.ok((binStat.mode & 0o111) !== 0, "bin/skill-router is executable");
+    await assert.rejects(stat(join(installPath, "bin")), /ENOENT/);
+    await assert.rejects(stat(join(installPath, "lib")), /ENOENT/);
     try {
       await stat(join(installPath, "stale.txt"));
       assert.fail("install path should have been wiped before copy");
     } catch {
       // expected
     }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("copyRuntimeAssets copies shared runtime dirs and marks bin executable", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sr-runtime-"));
+  try {
+    const repoRoot = join(root, "repo");
+    const runtimePath = join(root, "runtime", "1.0.0");
+
+    await mkdir(join(repoRoot, "bin"), { recursive: true });
+    await mkdir(join(repoRoot, "lib"), { recursive: true });
+    await writeFile(join(repoRoot, "bin", "skill-router"), "#!/bin/sh\necho hi\n", { mode: 0o644 });
+    await writeFile(join(repoRoot, "lib", "skill-router.mjs"), "// bundle\n");
+    await mkdir(runtimePath, { recursive: true });
+    await writeFile(join(runtimePath, "stale.txt"), "stale");
+
+    await copyRuntimeAssets({ repoRoot, runtimePath });
+
+    for (const dir of RUNTIME_ASSET_DIRS) {
+      const entries = await readdir(join(runtimePath, dir));
+      assert.ok(entries.length > 0, `${dir} copied with content`);
+    }
+    const binStat = await stat(join(runtimePath, "bin", "skill-router"));
+    assert.ok((binStat.mode & 0o111) !== 0, "runtime bin is executable");
+    await assert.rejects(stat(join(runtimePath, "stale.txt")), /ENOENT/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("writeHostWrapper delegates to shared runtime with host and asset root", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sr-wrapper-"));
+  try {
+    const wrapperPath = join(root, "plugin", "bin", "skill-router");
+    await writeHostWrapper({
+      wrapperPath,
+      runtimeBin: "/tmp/runtime bin/skill-router",
+      hostName: "codex",
+      assetRoot: "/tmp/plugin assets",
+    });
+
+    const content = await readFile(wrapperPath, "utf8");
+    assert.match(content, /^#!\/usr\/bin\/env sh/);
+    assert.match(content, /export SKILL_ROUTER_HOST='codex'/);
+    assert.match(content, /export SKILL_ROUTER_ASSET_ROOT='\/tmp\/plugin assets'/);
+    assert.match(content, /exec '\/tmp\/runtime bin\/skill-router' "\$@"/);
+    const wrapperStat = await stat(wrapperPath);
+    assert.ok((wrapperStat.mode & 0o111) !== 0, "wrapper is executable");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
