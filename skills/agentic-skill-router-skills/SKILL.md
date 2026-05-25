@@ -1,6 +1,6 @@
 ---
 name: agentic-skill-router-skills
-description: MUST be used FIRST, before other tools, when a user request mentions a specific tool, API, file format, service, framework, library, CLI, platform, dataset, or domain workflow, and use when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills across supported hosts.
+description: Use as a fallback after enabled skills have been considered and none clearly match a skill-shaped request, and use directly when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills across supported hosts.
 metadata:
   agentic-skill-router.version: "1"
   agentic-skill-router.variant: "L-agentic"
@@ -67,10 +67,11 @@ If the user wants to adjust the staleness threshold, mention
 
 ## Route disabled skills
 
-Use this FIRST when the user request looks skill-shaped: operating, querying,
-configuring, deploying, inspecting, or troubleshooting a named tool, API,
-service, dashboard, datastore, CLI, DSL, URL, file format, platform workflow,
-or domain method.
+Use this as a fallback after enabled skills have been considered and none
+clearly match a skill-shaped request: operating, querying, configuring,
+deploying, inspecting, or troubleshooting a named tool, API, service,
+dashboard, datastore, CLI, DSL, URL, file format, platform workflow, or domain
+method.
 
 Use the `agentic-skill-router` corpus primitives as an AgenticRAG-style retrieval
 harness. Do not call `skills route`. Do not call `skills dci` or `skills body`.

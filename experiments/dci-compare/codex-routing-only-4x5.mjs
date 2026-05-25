@@ -26,6 +26,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXP_DIR = __dirname;
 const REPO_ROOT = resolve(EXP_DIR, "..", "..");
 const CODEX_PLUGIN_MANIFEST = join(REPO_ROOT, "plugins", "codex", ".codex-plugin", "plugin.json");
+const CODEX_PLUGIN_NAME = "agentic-skill-router";
+const CODEX_PLUGIN_SKILL_DIR = "agentic-skill-router-skills";
+const CODEX_PLUGIN_BIN = "agentic-skill-router";
+const DISABLED_SUFFIX = ".agentic-skill-router-disabled";
 const CORPUS_DIR = join(EXP_DIR, "skillrouter-skills");
 const VARIANTS_DIR = join(EXP_DIR, "variants", "routing-only-codex");
 const BASE_HOME = join(EXP_DIR, ".tmp-home-codex", "_base");
@@ -435,7 +439,7 @@ async function materializeOriginalSkillRouterSkillFiles(home) {
         "",
       ].join("\n");
       await mkdir(dir, { recursive: true });
-      await writeFile(join(dir, "SKILL.md.skill-router-disabled"), body);
+      await writeFile(join(dir, `SKILL.md${DISABLED_SUFFIX}`), body);
     }
   });
   await Promise.all(workers);
@@ -515,7 +519,7 @@ async function setCorpusState(home, target) {
   let n = 0;
   for (const id of dirs) {
     const en = join(root, id, "SKILL.md");
-    const dis = join(root, id, "SKILL.md.skill-router-disabled");
+    const dis = join(root, id, `SKILL.md${DISABLED_SUFFIX}`);
     if (target === "enabled" && existsSync(dis) && !existsSync(en)) { await rename(dis, en); n++; }
     else if (target === "disabled" && existsSync(en) && !existsSync(dis)) { await rename(en, dis); n++; }
   }
@@ -547,12 +551,12 @@ async function prepareVariantHome(variant) {
     }
     const pluginVersion = await getCodexPluginVersion();
     const pluginRoot = join(home, ".codex", "plugins", "cache", "local",
-                            "skill-router", pluginVersion);
-    const dst = join(pluginRoot, "skills", "skill-router-skills", "SKILL.md");
+                            CODEX_PLUGIN_NAME, pluginVersion);
+    const dst = join(pluginRoot, "skills", CODEX_PLUGIN_SKILL_DIR, "SKILL.md");
     if (!await pathExists(dirname(dst))) {
       throw new Error(`plugin skills dir missing in HOME: ${dirname(dst)}`);
     }
-    const routerBin = join(pluginRoot, "bin", "skill-router");
+    const routerBin = join(pluginRoot, "bin", CODEX_PLUGIN_BIN);
     let body = await readFile(variantPath, "utf8");
     body = body.replaceAll("<abs-path-to-skill-router>", routerBin);
     await writeFile(dst, body);
@@ -676,7 +680,8 @@ async function runOne(variant, home, queryObj) {
   const routerTriggered = variant.mode === "router"
     ? events.some((e) => e?.type === "item.completed" &&
         e.item?.type === "command_execution" &&
-        String(e.item.command || "").includes("/skills/skill-router-skills/SKILL.md"))
+        (String(e.item.command || "").includes("/skills/skill-router-skills/SKILL.md") ||
+         String(e.item.command || "").includes(`/skills/${CODEX_PLUGIN_SKILL_DIR}/SKILL.md`)))
     : null;
   let rolloutLastUsage = null;
   let rolloutModelCtxWindow = null;
