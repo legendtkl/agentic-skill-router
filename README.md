@@ -34,22 +34,28 @@ Restart Codex, then run:
 /skill-router:skills
 ```
 
+Project or global skill init from an npm/package CLI:
+
+```bash
+skill-router init
+skill-router init codex project
+skill-router init claude-code global
+```
+
 ## CLI
 
-Installed plugin bundles also expose `bin/skill-router`. Run these commands
-from the installed plugin root, or use the absolute path printed by the
-installer.
+Installed plugin bundles expose a thin `bin/skill-router` wrapper. Run these
+commands from the installed plugin root, or use the absolute path printed by
+the installer.
 
 Installed Claude Code plugin:
 
 ```bash
 bin/skill-router skills list
 bin/skill-router skills suggest --json
-bin/skill-router skills route --query "draft a Lark mail reply" --json
-bin/skill-router skills route --mode=metadata --query "draft a Lark mail reply" --json
-bin/skill-router skills route --mode=body --query "draft a Lark mail reply" --json
-bin/skill-router skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
-bin/skill-router skills dci open dci-abc123def0 --line=20 --window=80 --json
+bin/skill-router skills corpus search --all mail --any lark --limit 30 --json
+bin/skill-router skills corpus inspect corpus-abc123def0 --json
+bin/skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
 bin/skill-router skills disable user:lark-mail --yes
 bin/skill-router skills enable user:lark-mail
 bin/skill-router skills status
@@ -60,11 +66,9 @@ Installed Codex plugin:
 ```bash
 bin/skill-router skills list
 bin/skill-router skills suggest --json
-bin/skill-router skills route --query "draft a Lark mail reply" --json
-bin/skill-router skills route --mode=metadata --query "draft a Lark mail reply" --json
-bin/skill-router skills route --mode=body --query "draft a Lark mail reply" --json
-bin/skill-router skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
-bin/skill-router skills dci open dci-abc123def0 --line=20 --window=80 --json
+bin/skill-router skills corpus search --all mail --any lark --limit 30 --json
+bin/skill-router skills corpus inspect corpus-abc123def0 --json
+bin/skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
 bin/skill-router skills disable user:codex:lark-mail --yes
 bin/skill-router skills enable user:codex:lark-mail
 bin/skill-router skills status
@@ -74,7 +78,7 @@ bin/skill-router skills status
 The persistent default lives at `~/.skill-router/config.json`:
 
 ```json
-{ "unusedForDays": 60, "routeMode": "auto" }
+{ "unusedForDays": 60 }
 ```
 
 Installed plugin CLIs auto-detect their host. Repository checkout CLI runs
@@ -90,11 +94,14 @@ points:
 - `bin/skill-router` and `lib/skill-router.mjs` are the shared CLI runtime.
 - `plugins/claude-code/` and `plugins/codex/` only provide host manifests and
   host-specific entry points.
-- The install scripts copy the same `skills/`, `bin/`, and `lib/` directories
-  into the selected host's local plugin cache, then normalize the installed
-  manifest to `./skills/`.
+- The install scripts copy the shared runtime once to
+  `~/.skill-router/runtime/<version>/`, then copy host manifests, skills, and a
+  tiny host-specific wrapper into the selected host's local plugin cache. The
+  wrapper sets `SKILL_ROUTER_HOST` before delegating to the shared runtime.
 - `plugins/codex/prompts/skill-router-skills.md` is a generated slash-command
   shim for Codex.
+- `skill-router init` can create a project or global skill entry for Codex or
+  Claude Code without installing a host plugin.
 
 Do not create host-specific copies of `SKILL.md`; update the unified skill
 source and reinstall or rebuild the package.
@@ -125,36 +132,20 @@ Built-in and system skills are listed but cannot be disabled.
 
 Disabled-skill routing:
 
-- `skills route --query "<request>" --json` searches disabled skills only.
-- Route mode can be set with `--mode=auto|metadata|body|lexical|dci`, `SKILL_ROUTER_ROUTE_MODE`,
-  or `~/.skill-router/config.json` as `"routeMode": "auto"`.
-- `metadata` is the primary router. It searches only disabled skill metadata
-  (`id`, `name`, `description`, aliases, tags, tools, domains, intents, and examples),
-  returns field-level evidence, and does not use embeddings or free-form bash.
-- `lexical` is the fast description/name matcher.
-- `body` searches disabled skill instruction bodies and selects only a confident top candidate.
-- `dci` is the compatibility command group for bounded body search and verification.
-- `auto` is the default: run metadata first, then use bounded body verification when
-  metadata is low confidence, ambiguous, or points at a broad umbrella skill.
-- A confident route returns `action: "read-skill-file"` and `selected.skillMdPath`.
-- The returned path may end in `SKILL.md.skill-router-disabled`; it is still safe to read as instructions.
-- Routed use is recorded in state so frequently proxied disabled skills can be identified later.
-- If metadata routing is not confident, Skill Router can use bounded body-verification tools:
-  - `skills dci budget --json`
-  - `skills dci search --query "<request>" [--query "<derived query>"] --json`
-  - `skills dci grep --pattern "<phrase>" --json` for literal phrase search; add `--regex` only when intentionally using a regular expression
-  - `skills dci find <id-or-ref> --pattern "<phrase>" --json`
-  - `skills dci open <id-or-ref> --line=N --window=N --json`
-  - `skills dci inspect <id-or-ref> --json`
-  - `skills dci read <id-or-ref> --json`
-  - `skills dci select <id-or-ref...> --query "<request>" --confidence=high --reason "<evidence>" --json`
-- DCI search returns stable candidate refs (`dci-...`) for follow-up `find`, `open`, `read`, and `select` calls.
-- `skills body ...` is accepted as an alias for `skills dci ...`.
-- Body search reads at most 64,000 bytes per disabled `SKILL.md` and at most
-  1,000,000 bytes across the corpus, reporting JSON warnings when a body is
-  truncated or the corpus budget is exhausted.
-- Body tools also use bounded snippets, max 8 candidates, bounded `open` windows,
-  and a fixed prompt budget instead of loading every `SKILL.md` into context.
+- The default agent workflow is L-agentic: the agent builds must/probe terms,
+  searches disabled-skill metadata with `skills corpus search`, optionally
+  inspects a small shortlist with `skills corpus inspect`, then records one
+  choice with `skills corpus select`.
+- During retrieval, the agent must not read disabled skill bodies. Selection is
+  based on metadata only.
+- `skills corpus search` reads `id`, `name`, `description`, aliases, tags,
+  tools, domains, intents, and examples. It returns stable `corpus-...` refs
+  without exposing local file paths.
+- `skills corpus select <ref>` records routed use and returns
+  `selected.skillMdPath`; the returned path may end in
+  `SKILL.md.skill-router-disabled` and is safe to read as instructions.
+- If metadata evidence is weak or ambiguous, the agent should stop the router
+  path and continue normally without selecting a disabled skill.
 
 Skill metadata authoring:
 

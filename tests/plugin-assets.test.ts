@@ -25,7 +25,7 @@ test("shared router skill uses Agent Skills frontmatter as the source of truth",
   assert.match(description, /audit, slim, disable, restore, or route/);
   assert.doesNotMatch(description, /For Codex/);
   assert.deepEqual(topLevelKeys, ["name", "description", "metadata"]);
-  assert.match(frontmatter, /metadata:\n  skill-router\.version: "1"\n  skill-router\.hosts: "claude-code,codex"/);
+  assert.match(frontmatter, /metadata:\n  skill-router\.version: "1"\n  skill-router\.variant: "L-agentic"\n  skill-router\.hosts: "claude-code,codex"/);
 });
 
 test("plugin packages assemble from one unified skill source", async () => {
@@ -210,7 +210,7 @@ test("npm package includes the bin runtime bundle", async () => {
   assert.ok(!files.has("plugins/claude-code/skills/skill-router-skills/SKILL.md"));
 });
 
-test("install scripts assemble self-contained plugin caches from unified assets", async () => {
+test("install scripts assemble host entries and shared runtime from unified assets", async () => {
   const root = await mkdtemp(join(tmpdir(), "skill-router-install-"));
   try {
     const claudeHome = join(root, "claude-home");
@@ -218,23 +218,26 @@ test("install scripts assemble self-contained plugin caches from unified assets"
     const version = JSON.parse(await readFile(join(REPO_ROOT, "package.json"), "utf8")).version;
     const claudeInstallPath = join(claudeHome, "plugins", "cache", "local", "skill-router", version);
     const codexInstallPath = join(codexHome, "plugins", "cache", "local", "skill-router", version);
+    const runtimePath = join(root, ".skill-router", "runtime", version);
 
     await execFileAsync(process.execPath, ["scripts/install.mjs"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, CLAUDE_HOME: claudeHome },
+      env: { ...process.env, HOME: root, CLAUDE_HOME: claudeHome, SKILL_ROUTER_RUNTIME_ROOT: join(root, ".skill-router", "runtime") },
       maxBuffer: 1024 * 1024,
     });
     await assertInstalledPlugin(claudeInstallPath, ".claude-plugin/plugin.json");
 
     const installed = JSON.parse(await readFile(join(claudeHome, "plugins", "installed_plugins.json"), "utf8"));
     assert.equal(installed.plugins["skill-router@local"][0].installPath, claudeInstallPath);
+    await assertInstalledRuntime(runtimePath);
 
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, CODEX_HOME: codexHome },
+      env: { ...process.env, HOME: root, CODEX_HOME: codexHome, SKILL_ROUTER_RUNTIME_ROOT: join(root, ".skill-router", "runtime") },
       maxBuffer: 1024 * 1024,
     });
     await assertInstalledPlugin(codexInstallPath, ".codex-plugin/plugin.json");
+    await assertInstalledRuntime(runtimePath);
     assert.match(await readFile(join(codexHome, "config.toml"), "utf8"), /\[plugins\."skill-router@local"\]\nenabled = true/);
     assert.ok(await pathExists(join(codexHome, "prompts", "skill-router-skills.md")));
   } finally {
@@ -249,22 +252,30 @@ test("install scripts always rebuild before copying plugin assets", async () => 
   const commonLib = await readFile(join(REPO_ROOT, "scripts", "lib", "common.mjs"), "utf8");
   for (const content of [codexInstall, claudeInstall]) {
     assert.match(content, /ensureBuild\(/);
+    assert.match(content, /copyRuntimeAssets\(/);
     assert.match(content, /copyPluginAssets\(/);
     assert.match(content, /normalizeManifestSkills/);
+    assert.match(content, /writeHostWrapper/);
     assert.doesNotMatch(content, /skipping build/);
     assert.doesNotMatch(content, /existsSync/);
   }
   assert.match(commonLib, /building bundle \(npm run build\)/);
-  assert.match(sharedLib, /SHARED_ASSET_DIRS = \["bin", "lib", "skills"\]/);
+  assert.match(sharedLib, /RUNTIME_ASSET_DIRS = \["bin", "lib"\]/);
+  assert.match(sharedLib, /HOST_ENTRY_ASSET_DIRS = \["skills"\]/);
 });
 
 async function assertInstalledPlugin(pluginRoot: string, manifestRelativePath: string): Promise<void> {
   assert.ok(await pathExists(join(pluginRoot, "bin", "skill-router")));
-  assert.ok(await pathExists(join(pluginRoot, "lib", "skill-router.mjs")));
+  assert.equal(await pathExists(join(pluginRoot, "lib", "skill-router.mjs")), false);
   assert.ok(await pathExists(join(pluginRoot, "skills", "skill-router-skills", "SKILL.md")));
 
   const manifest = JSON.parse(await readFile(join(pluginRoot, manifestRelativePath), "utf8"));
   assert.equal(manifest.skills, "./skills/");
+}
+
+async function assertInstalledRuntime(runtimeRoot: string): Promise<void> {
+  assert.ok(await pathExists(join(runtimeRoot, "bin", "skill-router")));
+  assert.ok(await pathExists(join(runtimeRoot, "lib", "skill-router.mjs")));
 }
 
 async function pathExists(path: string): Promise<boolean> {

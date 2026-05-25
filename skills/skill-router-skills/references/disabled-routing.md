@@ -1,73 +1,51 @@
-# Disabled-skill routing
+# Disabled-skill L-agentic routing
 
-Skill Router can route a request to disabled skill instructions when no enabled
-skill clearly matches.
+Skill Router routes to disabled skill instructions through metadata-only
+AgenticRAG primitives. Use the `skill_router` helper from `SKILL.md`.
 
-Use the `skill_router` helper from `SKILL.md`.
+Do not call `skills route`. Do not call `skills dci` or `skills body`. During
+retrieval, do not read disabled skill bodies.
 
-```bash
-skill_router skills route --query "<current user request>" --json
-```
+## Search
 
-If the route result has `action: "read-skill-file"` and a non-null `selected`,
-read the returned `selected.skillMdPath` and follow the instructions. The path
-may end in `SKILL.md.skill-router-disabled`.
+Build two term sets from the user request:
 
-Use explicit modes only for audits or debugging:
+- **must terms**: 1-3 narrow terms the correct skill should mention.
+- **probe terms**: 2-5 additional distinctive terms for recall and ranking.
 
-```bash
-skill_router skills route --mode=metadata --query "<query>" --json
-skill_router skills route --mode=body --query "<query>" --json
-skill_router skills route --mode=lexical --query "<query>" --json
-skill_router skills route --mode=dci --query "<query>" --json
-skill_router skills route --mode=auto --query "<query>" --json
-```
-
-When `auto` cannot select confidently, keep body verification bounded:
-
-- Max queries: 3
-- Max candidates to consider from search: 8
-- Max bytes per disabled skill body read by search: 64,000
-- Max bytes across one disabled-skill corpus search: 1,000,000
-- Max `find` / `open` calls total: 3
-- Max full `read` calls: 2
-- Max selections: 3
-- Max `open` output: 24,000 characters
-
-Search and route JSON include `warnings` when a skill body is truncated or when
-the corpus byte budget is exhausted before all disabled skills are read.
-
-Check the active budget:
+Search with a bounded expression:
 
 ```bash
-skill_router skills dci budget --json
+skill_router skills corpus search \
+  --all "<must1>" --any "<probe1>" --any "<probe2>" --any "<probe3>" \
+  --limit 30 --json
 ```
 
-Search with the raw request plus up to two short derived queries:
+Iterate at most 2-4 searches. If `totalMatches` is 0, broaden or replace one
+must term. If `truncated` is true or `totalMatches` is greater than 30, narrow
+with another `--all` term or more specific probes.
+
+## Inspect
+
+Inspect only plausible metadata records:
 
 ```bash
-skill_router skills dci search --query "<current user request>" --query "<derived query>" --json
+skill_router skills corpus inspect corpus-REF1 corpus-REF2 corpus-REF3 --json
 ```
 
-Use returned `ref` values for follow-up commands:
+Choose by explicit metadata evidence, not nearby topic similarity.
+
+## Select
+
+Record exactly one supported selection:
 
 ```bash
-skill_router skills dci inspect "<skill-id-or-ref>" --json
-skill_router skills dci find "<skill-id-or-ref>" --pattern "<distinctive phrase>" --json
-skill_router skills dci open "<skill-id-or-ref>" --line <line> --window 80 --json
-skill_router skills dci read "<skill-id-or-ref>" --json
+skill_router skills corpus select "<corpus-ref-or-id>" \
+  --query "<current user request>" \
+  --confidence high \
+  --reason "<brief metadata evidence>" \
+  --json
 ```
 
-Use literal grep for visible product, API, or command names:
-
-```bash
-skill_router skills dci grep --pattern "<distinctive phrase>" --json
-```
-
-Record a clearly supported selection before reading the selected file:
-
-```bash
-skill_router skills dci select "<skill-id-or-ref>" --query "<current user request>" --confidence=high --reason "<brief evidence>" --json
-```
-
-If evidence stays weak or ambiguous, stop the router path and continue normally.
+Then read `selected.skillMdPath` and follow that disabled skill. If metadata
+evidence stays weak or ambiguous, stop the router path and continue normally.

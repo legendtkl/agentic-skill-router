@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSkillCorpusBm25Index, inspectSkillCorpus, searchSkillCorpus, searchSkillCorpusBm25Index } from "../src/corpus.ts";
+import {
+  buildSkillCorpusBm25Index,
+  inspectSkillCorpus,
+  searchSkillCorpus,
+  searchSkillCorpusBm25Index,
+  selectSkillCorpus,
+} from "../src/corpus.ts";
 import type { Skill } from "../src/types.ts";
 
 function skill(opts: {
@@ -260,4 +266,24 @@ test("corpus inspect resolves short skill ids and rejects enabled skills", () =>
     () => inspectSkillCorpus([disabled, enabled], ["enabled-skill"]),
     /unknown disabled skill id\/name\/ref/,
   );
+});
+
+test("corpus select resolves a metadata ref and returns the disabled skill path", () => {
+  const disabled = skill({
+    id: "user:codex:skill-079",
+    description: "STL volume helper",
+  });
+  const search = searchSkillCorpus([disabled], { any: ["stl"] });
+  const selected = selectSkillCorpus(
+    [disabled],
+    search.matches[0]!.ref,
+    "high",
+    "metadata explicitly mentions STL volume",
+  );
+
+  assert.equal(selected.action, "read-skill-file");
+  assert.equal(selected.id, disabled.id);
+  assert.equal(selected.skillMdPath, disabled.skillMdPath);
+  assert.equal(selected.confidence, "high");
+  assert.equal(selected.reason, "metadata explicitly mentions STL volume");
 });
