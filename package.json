@@ -7,9 +7,12 @@
     "node": ">=20"
   },
   "type": "module",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
-    "skill-router": "./bin/skill-router"
+    "skill-router": "bin/skill-router"
   },
   "files": [
     "README.md",
