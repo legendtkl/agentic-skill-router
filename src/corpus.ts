@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { boundaryTermsFor, compact, isShortLatinTerm, termsFor } from "./text-match.ts";
+import type { Confidence } from "./types.ts";
 import type { Skill } from "./types.ts";
 import { isRoutableDisabledSkill } from "./route.ts";
 
@@ -48,6 +49,13 @@ export interface CorpusSearchMatch extends CorpusSkillRef {
 export interface CorpusInspectResult {
   action: "inspect-skills";
   inspected: CorpusSkillRef[];
+}
+
+export interface CorpusSelectResult extends CorpusSkillRef {
+  action: "read-skill-file";
+  confidence: Exclude<Confidence, "low">;
+  reason: string;
+  skillMdPath: string;
 }
 
 export interface CorpusBm25Index {
@@ -333,6 +341,22 @@ export function inspectSkillCorpus(skills: Skill[], idsOrNames: string[]): Corpu
     seen.add(key);
   }
   return { action: "inspect-skills", inspected };
+}
+
+export function selectSkillCorpus(
+  skills: Skill[],
+  idOrName: string,
+  confidence: Exclude<Confidence, "low">,
+  reason: string,
+): CorpusSelectResult {
+  const skill = findRoutableSkill(skills, idOrName);
+  return {
+    ...skillRef(skill),
+    action: "read-skill-file",
+    confidence,
+    reason,
+    skillMdPath: skill.skillMdPath,
+  };
 }
 
 function normalizeExpression(opts: CorpusSearchOptions): CorpusQueryExpression {

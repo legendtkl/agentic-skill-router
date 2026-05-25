@@ -13,11 +13,13 @@ export function usage(code = 0): number {
   console.log(`skill-router — manage installed Agent Skills across supported hosts
 
 USAGE
+  skill-router init [codex|claude-code] [project|global] [--cwd=<dir>] [--force] [--json]
   skill-router skills list [--json]
   skill-router skills suggest [--unused-for=<dur>] [--json]
   skill-router skills route --query=<text> [--mode=auto|metadata|body|lexical|dci] [--json] [--top-k=N] [--no-record]
   skill-router skills corpus search (--any=<term>... | --all=<term>...) [--ranker=weighted|bm25] [--limit=N] [--json]
   skill-router skills corpus inspect <id-or-name-or-ref...> [--json]
+  skill-router skills corpus select <id-or-name-or-ref> --query=<text> --confidence=high|medium --reason=<text> [--json]
   skill-router skills dci search --query=<text> [--query=<text>...] [--metadata-only] [--json] [--top-k=N]
   skill-router skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
   skill-router skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]

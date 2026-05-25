@@ -8,13 +8,22 @@ import {
   inspectSkillCorpus,
   searchSkillCorpus,
   searchSkillCorpusBm25Index,
+  selectSkillCorpus,
   type CorpusBm25Index,
   type CorpusRanker,
 } from "../corpus.ts";
 import { createHost } from "../host-resolve.ts";
-import { parsePositiveFlag, printCorpusInspect, printCorpusSearch, stringValues, usage } from "../output.ts";
+import {
+  parseConfidence,
+  parsePositiveFlag,
+  printCorpusInspect,
+  printCorpusSearch,
+  stringValues,
+  usage,
+} from "../output.ts";
 import type { Host } from "../hosts/base.ts";
 import type { HostName, Skill } from "../types.ts";
+import { loadState, recordRoutedSkill, saveState, statePathForHost, withStateLock } from "../state.ts";
 
 /**
  * Agentic corpus primitives for skill routing. These commands intentionally
@@ -26,6 +35,7 @@ export async function cmdCorpus(argv: string[], hostName: HostName): Promise<num
   switch (subcommand) {
     case "search": return cmdCorpusSearch(rest, hostName);
     case "inspect": return cmdCorpusInspect(rest, hostName);
+    case "select": return cmdCorpusSelect(rest, hostName);
     case undefined:
     case "-h":
     case "--help":
@@ -33,6 +43,86 @@ export async function cmdCorpus(argv: string[], hostName: HostName): Promise<num
     default:
       console.error(`unknown corpus subcommand: ${subcommand}`);
       return usage(2);
+  }
+}
+
+async function cmdCorpusSelect(argv: string[], hostName: HostName): Promise<number> {
+  const { values, positionals } = parseStrict({
+    commandName: "skill-router skills corpus select",
+    config: {
+      args: argv,
+      options: {
+        query: { type: "string", short: "q" },
+        confidence: { type: "string" },
+        reason: { type: "string" },
+        json: { type: "boolean" },
+        "no-record": { type: "boolean" },
+      },
+      allowPositionals: true,
+    },
+  });
+  const idOrRef = positionals[0];
+  if (!idOrRef || positionals.length > 1) {
+    console.error("specify exactly one <id-or-name-or-ref>");
+    return 2;
+  }
+  const query = (values.query as string | undefined)?.trim();
+  if (!query) {
+    console.error("specify --query=<text>");
+    return 2;
+  }
+  const confidence = parseConfidence(values.confidence as string | undefined);
+  if (!confidence || confidence === "low") {
+    console.error("--confidence must be high or medium");
+    return 2;
+  }
+  const reason = (values.reason as string | undefined)?.trim();
+  if (!reason) {
+    console.error("specify --reason=<text>");
+    return 2;
+  }
+
+  const host = createHost(hostName);
+  try {
+    const selected = selectSkillCorpus(await host.listSkills(), idOrRef, confidence, reason);
+    const warnings: string[] = [];
+    let recorded = false;
+    if (!values["no-record"]) {
+      try {
+        const statePath = statePathForHost(host.name);
+        await withStateLock(statePath, async () => {
+          const state = await loadState(statePath, host.name);
+          await saveState(recordRoutedSkill(state, {
+            id: selected.id,
+            pluginKey: selected.pluginKey,
+            skillMdPath: selected.skillMdPath,
+            name: selected.name,
+            query,
+            confidence,
+            routedAt: new Date().toISOString(),
+          }), statePath);
+        });
+        recorded = true;
+      } catch (err) {
+        const warning = `routed usage was not recorded: ${(err as Error).message}`;
+        warnings.push(warning);
+        process.stderr.write(`warning: ${warning}\n`);
+      }
+    }
+
+    const result = { action: selected.action, query, recorded, warnings, selected };
+    if (values.json) {
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    } else {
+      console.log(`select: [${selected.confidence}] ${selected.id} (${selected.ref})`);
+      console.log(`read:   ${selected.skillMdPath}`);
+      console.log(`why:    ${selected.reason}`);
+      if (recorded) console.log("usage:  recorded routed use");
+    }
+    return 0;
+  } catch (err) {
+    console.error((err as Error).message);
+    return 2;
   }
 }
 

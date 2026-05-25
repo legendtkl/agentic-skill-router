@@ -30,20 +30,26 @@ npm run install:codex-plugin
 /skill-router:skills
 ```
 
+从 npm/package CLI 初始化项目或全局 skill：
+
+```bash
+skill-router init
+skill-router init codex project
+skill-router init claude-code global
+```
+
 ## CLI
 
-已安装的插件 bundle 也会提供 `bin/skill-router`。在已安装插件根目录下运行以下命令，或使用安装脚本输出的绝对路径。
+已安装的插件 bundle 会提供一个轻量 `bin/skill-router` wrapper。在已安装插件根目录下运行以下命令，或使用安装脚本输出的绝对路径。
 
 已安装的 Claude Code 插件：
 
 ```bash
 bin/skill-router skills list
 bin/skill-router skills suggest --json
-bin/skill-router skills route --query "draft a Lark mail reply" --json
-bin/skill-router skills route --mode=metadata --query "draft a Lark mail reply" --json
-bin/skill-router skills route --mode=body --query "draft a Lark mail reply" --json
-bin/skill-router skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
-bin/skill-router skills dci open dci-abc123def0 --line=20 --window=80 --json
+bin/skill-router skills corpus search --all mail --any lark --limit 30 --json
+bin/skill-router skills corpus inspect corpus-abc123def0 --json
+bin/skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
 bin/skill-router skills disable user:lark-mail --yes
 bin/skill-router skills enable user:lark-mail
 bin/skill-router skills status
@@ -54,11 +60,9 @@ bin/skill-router skills status
 ```bash
 bin/skill-router skills list
 bin/skill-router skills suggest --json
-bin/skill-router skills route --query "draft a Lark mail reply" --json
-bin/skill-router skills route --mode=metadata --query "draft a Lark mail reply" --json
-bin/skill-router skills route --mode=body --query "draft a Lark mail reply" --json
-bin/skill-router skills dci search --query "find a disabled skill for this request" --query "lark mail reply" --json
-bin/skill-router skills dci open dci-abc123def0 --line=20 --window=80 --json
+bin/skill-router skills corpus search --all mail --any lark --limit 30 --json
+bin/skill-router skills corpus inspect corpus-abc123def0 --json
+bin/skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
 bin/skill-router skills disable user:codex:lark-mail --yes
 bin/skill-router skills enable user:codex:lark-mail
 bin/skill-router skills status
@@ -67,7 +71,7 @@ bin/skill-router skills status
 `--unused-for=<duration>` 支持 `30`、`30d`、`2w`、`3m` 和 `1y`。持久化默认配置位于 `~/.skill-router/config.json`：
 
 ```json
-{ "unusedForDays": 60, "routeMode": "auto" }
+{ "unusedForDays": 60 }
 ```
 
 已安装的插件 CLI 会自动识别宿主；从仓库 checkout 直接运行 CLI 时默认目标是 Claude Code，主要用于本地开发。
@@ -80,9 +84,9 @@ bin/skill-router skills status
 - `skills/skill-router-skills/references/` 存放共享工作流细节。
 - `bin/skill-router` 和 `lib/skill-router.mjs` 是共享 CLI runtime。
 - `plugins/claude-code/` 与 `plugins/codex/` 只提供宿主 manifest 和宿主入口。
-- 安装脚本会把同一份 `skills/`、`bin/` 和 `lib/` 复制到目标宿主的本地插件缓存中。
-- 安装后的 manifest 会被规范化为 `./skills/`，源码和 npm 包中的 manifest 则指向顶层统一 `skills/`。
+- 安装脚本会把共享 runtime 复制到 `~/.skill-router/runtime/<version>/`，再把宿主 manifest、skills 和一个很小的宿主 wrapper 复制到目标宿主的本地插件缓存中。wrapper 会设置 `SKILL_ROUTER_HOST`，再转发到共享 runtime。
 - `plugins/codex/prompts/skill-router-skills.md` 是 Codex slash command 的生成 shim。
+- `skill-router init` 可以在不安装宿主插件的情况下，为 Codex 或 Claude Code 创建项目级或全局 skill 入口。
 
 不要创建宿主专属的 `SKILL.md` 副本；应更新统一 skill 源，然后重新安装或构建。
 
@@ -109,28 +113,11 @@ Skill 来源：
 
 已禁用 skill 路由：
 
-- `skills route --query "<request>" --json` 只搜索已禁用 skills。
-- 路由模式可通过 `--mode=auto|metadata|body|lexical|dci`、`SKILL_ROUTER_ROUTE_MODE` 或 `~/.skill-router/config.json` 的 `"routeMode": "auto"` 设置。
-- `metadata` 是主路由器。它只搜索已禁用 skill 元数据（`id`、`name`、`description`、aliases、tags、tools、domains、intents、examples），返回字段级证据，不使用 embeddings 或 free-form bash。
-- `lexical` 是快速 description / name 匹配器。
-- `body` 搜索已禁用 skill 正文，并只选择置信度足够高的 top candidate。
-- `dci` 是有界 body search / body verification 的兼容命令组。
-- `auto` 是默认模式：先运行 metadata；当 metadata 低置信、歧义或指向宽泛 umbrella skill 时，再使用有界正文验证。
-- 高置信路由会返回 `action: "read-skill-file"` 和 `selected.skillMdPath`。
-- 返回路径可能以 `SKILL.md.skill-router-disabled` 结尾；它仍然可以作为指令安全读取。
-- 路由使用会写入状态文件，便于后续识别频繁被代理调用的已禁用 skills。
-- 如果 metadata 路由不够确定，Skill Router 可以使用有界 body-verification 工具：
-  - `skills dci budget --json`
-  - `skills dci search --query "<request>" [--query "<derived query>"] --json`
-  - `skills dci grep --pattern "<phrase>" --json` 用于字面短语搜索；只有明确要使用正则时才加 `--regex`
-  - `skills dci find <id-or-ref> --pattern "<phrase>" --json`
-  - `skills dci open <id-or-ref> --line=N --window=N --json`
-  - `skills dci inspect <id-or-ref> --json`
-  - `skills dci read <id-or-ref> --json`
-  - `skills dci select <id-or-ref...> --query "<request>" --confidence=high --reason "<evidence>" --json`
-- DCI search 返回稳定候选引用（`dci-...`），可用于后续 `find`、`open`、`read` 和 `select`。
-- `skills body ...` 可作为 `skills dci ...` 的别名。
-- Body 工具会以有界 snippet、最多 8 个 candidates、有界 `open` window 和固定 prompt budget 搜索/读取已禁用 skill 正文，避免把所有 `SKILL.md` 都塞进上下文。
+- 默认 agent workflow 是 L-agentic：agent 先从用户请求里构造 must/probe terms，用 `skills corpus search` 搜索已禁用 skill 元数据；必要时用 `skills corpus inspect` 检查小候选集；最后用 `skills corpus select` 记录且只选择一个 skill。
+- 检索阶段不能读取已禁用 skill 正文；选择依据只来自元数据。
+- `skills corpus search` 读取 `id`、`name`、`description`、aliases、tags、tools、domains、intents 和 examples，返回稳定 `corpus-...` refs，不暴露本地文件路径。
+- `skills corpus select <ref>` 会写入路由使用记录，并返回 `selected.skillMdPath`；返回路径可能以 `SKILL.md.skill-router-disabled` 结尾，仍可作为指令安全读取。
+- 如果元数据证据弱或歧义，应停止 router 路径，正常继续处理，不选择已禁用 skill。
 
 Skill metadata 编写建议：
 
