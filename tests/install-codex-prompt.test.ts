@@ -50,7 +50,7 @@ test("install reinstall over managed copy refreshes the file in place", async ()
     const codexHome = join(root, ".codex");
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, CODEX_HOME: codexHome, npm_config_cache: NPM_TEST_CACHE },
+      env: codexInstallEnv(root, codexHome),
       maxBuffer: 4 * 1024 * 1024,
     });
 
@@ -60,7 +60,7 @@ test("install reinstall over managed copy refreshes the file in place", async ()
 
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, CODEX_HOME: codexHome, npm_config_cache: NPM_TEST_CACHE },
+      env: codexInstallEnv(root, codexHome),
       maxBuffer: 4 * 1024 * 1024,
     });
     const second = await readFile(promptPath, "utf8");
@@ -77,7 +77,7 @@ test("install preserves a user-edited prompt and writes a backup", async () => {
     const codexHome = join(root, ".codex");
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, CODEX_HOME: codexHome, npm_config_cache: NPM_TEST_CACHE },
+      env: codexInstallEnv(root, codexHome),
       maxBuffer: 4 * 1024 * 1024,
     });
 
@@ -90,7 +90,7 @@ test("install preserves a user-edited prompt and writes a backup", async () => {
       ["scripts/install-codex.mjs"],
       {
         cwd: REPO_ROOT,
-        env: { ...process.env, CODEX_HOME: codexHome, npm_config_cache: NPM_TEST_CACHE },
+        env: codexInstallEnv(root, codexHome),
         maxBuffer: 4 * 1024 * 1024,
       },
     );
@@ -111,7 +111,7 @@ test("uninstall removes a managed prompt copy", async () => {
     const codexHome = join(root, ".codex");
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, CODEX_HOME: codexHome, npm_config_cache: NPM_TEST_CACHE },
+      env: codexInstallEnv(root, codexHome),
       maxBuffer: 4 * 1024 * 1024,
     });
 
@@ -120,7 +120,7 @@ test("uninstall removes a managed prompt copy", async () => {
 
     await execFileAsync(process.execPath, ["scripts/uninstall-codex.mjs"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, CODEX_HOME: codexHome, npm_config_cache: NPM_TEST_CACHE },
+      env: codexInstallEnv(root, codexHome),
       maxBuffer: 4 * 1024 * 1024,
     });
     assert.equal(await pathExists(promptPath), false);
@@ -135,7 +135,7 @@ test("uninstall preserves a user-edited prompt file", async () => {
     const codexHome = join(root, ".codex");
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, CODEX_HOME: codexHome, npm_config_cache: NPM_TEST_CACHE },
+      env: codexInstallEnv(root, codexHome),
       maxBuffer: 4 * 1024 * 1024,
     });
 
@@ -148,7 +148,7 @@ test("uninstall preserves a user-edited prompt file", async () => {
       ["scripts/uninstall-codex.mjs"],
       {
         cwd: REPO_ROOT,
-        env: { ...process.env, CODEX_HOME: codexHome, npm_config_cache: NPM_TEST_CACHE },
+        env: codexInstallEnv(root, codexHome),
         maxBuffer: 4 * 1024 * 1024,
       },
     );
@@ -168,4 +168,15 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function codexInstallEnv(root: string, codexHome: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    HOME: root,
+    USERPROFILE: root,
+    CODEX_HOME: codexHome,
+    SKILL_ROUTER_RUNTIME_ROOT: join(root, ".skill-router", "runtime"),
+    npm_config_cache: NPM_TEST_CACHE,
+  };
 }

@@ -62,11 +62,21 @@ async function readJson(path: string): Promise<unknown> {
   return JSON.parse(await readFile(path, "utf8"));
 }
 
+async function writeProbeSkill(skillDir: string, name: string, description: string): Promise<void> {
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(
+    join(skillDir, "SKILL.md"),
+    `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n`,
+  );
+}
+
 test("[claude] install creates plugin cache, manifest, bin wrapper, and registers in settings", async () => {
   const root = await mkdtemp(join(tmpdir(), "sr-installer-claude-"));
   try {
     const claudeHome = join(root, ".claude");
     const installPath = join(claudeHome, "plugins", "cache", "local", "skill-router", PKG_VERSION);
+    const runtimePath = join(root, ".skill-router", "runtime", PKG_VERSION);
+    const wrapperPath = join(installPath, "bin", "skill-router");
 
     await execFileAsync(process.execPath, ["scripts/install.mjs"], {
       cwd: REPO_ROOT,
@@ -76,16 +86,51 @@ test("[claude] install creates plugin cache, manifest, bin wrapper, and register
 
     // Plugin cache files
     assert.ok(await pathExists(join(installPath, ".claude-plugin", "plugin.json")), "plugin manifest copied");
-    assert.ok(await pathExists(join(installPath, "bin", "skill-router")), "bin wrapper copied");
-    assert.ok(await pathExists(join(installPath, "lib", "skill-router.mjs")), "lib bundle copied");
+    assert.ok(await pathExists(join(installPath, "bin", "skill-router")), "host bin wrapper copied");
+    assert.equal(await pathExists(join(installPath, "lib", "skill-router.mjs")), false, "plugin cache does not duplicate runtime lib");
     assert.ok(
       await pathExists(join(installPath, "skills", "skill-router-skills", "SKILL.md")),
       "router skill copied",
     );
+    assert.ok(await pathExists(join(runtimePath, "bin", "skill-router")), "shared runtime bin copied");
+    assert.ok(await pathExists(join(runtimePath, "lib", "skill-router.mjs")), "shared runtime lib copied");
 
     // Bin wrapper is executable
-    const binStat = await stat(join(installPath, "bin", "skill-router"));
+    const binStat = await stat(wrapperPath);
     assert.ok((binStat.mode & 0o111) !== 0, "bin wrapper is executable");
+    const wrapper = await readFile(wrapperPath, "utf8");
+    assert.match(wrapper, /SKILL_ROUTER_HOST='claude-code'/);
+    assert.match(wrapper, /SKILL_ROUTER_ASSET_ROOT=/);
+
+    await writeProbeSkill(
+      join(claudeHome, "skills", "wrapper-probe"),
+      "wrapper-probe",
+      "Claude wrapper host probe",
+    );
+    const { stdout: listStdout } = await execFileAsync(wrapperPath, ["skills", "list", "--json"], {
+      cwd: REPO_ROOT,
+      env: sandboxEnv(root, { SKILL_ROUTER_HOST: "codex" }),
+      maxBuffer: MAX_BUFFER,
+    });
+    const listed = JSON.parse(listStdout) as Array<{ id: string }>;
+    assert.ok(listed.some((item) => item.id === "user:wrapper-probe"), "wrapper selects Claude host");
+    assert.equal(listed.some((item) => item.id === "user:codex:wrapper-probe"), false, "wrapper overrides caller host env");
+
+    const initProject = join(root, "init-project");
+    const { stdout: initStdout } = await execFileAsync(
+      wrapperPath,
+      ["init", "claude-code", "project", "--cwd", initProject, "--json"],
+      {
+        cwd: REPO_ROOT,
+        env: sandboxEnv(root, { SKILL_ROUTER_ASSET_ROOT: join(root, "missing-assets") }),
+        maxBuffer: MAX_BUFFER,
+      },
+    );
+    assert.equal(
+      JSON.parse(initStdout).skillMdPath,
+      join(initProject, ".claude", "skills", "skill-router-skills", "SKILL.md"),
+      "wrapper asset root lets init copy the installed skill template",
+    );
 
     // Manifest skills field is normalized to local skills/ dir
     const manifest = (await readJson(join(installPath, ".claude-plugin", "plugin.json"))) as { skills: string };
@@ -235,6 +280,8 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
   try {
     const codexHome = join(root, ".codex");
     const installPath = join(codexHome, "plugins", "cache", "local", "skill-router", PKG_VERSION);
+    const runtimePath = join(root, ".skill-router", "runtime", PKG_VERSION);
+    const wrapperPath = join(installPath, "bin", "skill-router");
 
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
@@ -244,15 +291,50 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
 
     // Plugin cache files
     assert.ok(await pathExists(join(installPath, ".codex-plugin", "plugin.json")), "plugin manifest copied");
-    assert.ok(await pathExists(join(installPath, "bin", "skill-router")), "bin wrapper copied");
-    assert.ok(await pathExists(join(installPath, "lib", "skill-router.mjs")), "lib bundle copied");
+    assert.ok(await pathExists(join(installPath, "bin", "skill-router")), "host bin wrapper copied");
+    assert.equal(await pathExists(join(installPath, "lib", "skill-router.mjs")), false, "plugin cache does not duplicate runtime lib");
     assert.ok(
       await pathExists(join(installPath, "skills", "skill-router-skills", "SKILL.md")),
       "router skill copied",
     );
+    assert.ok(await pathExists(join(runtimePath, "bin", "skill-router")), "shared runtime bin copied");
+    assert.ok(await pathExists(join(runtimePath, "lib", "skill-router.mjs")), "shared runtime lib copied");
 
-    const binStat = await stat(join(installPath, "bin", "skill-router"));
+    const binStat = await stat(wrapperPath);
     assert.ok((binStat.mode & 0o111) !== 0, "bin wrapper is executable");
+    const wrapper = await readFile(wrapperPath, "utf8");
+    assert.match(wrapper, /SKILL_ROUTER_HOST='codex'/);
+    assert.match(wrapper, /SKILL_ROUTER_ASSET_ROOT=/);
+
+    await writeProbeSkill(
+      join(root, ".agents", "skills", "wrapper-probe"),
+      "wrapper-probe",
+      "Codex wrapper host probe",
+    );
+    const { stdout: listStdout } = await execFileAsync(wrapperPath, ["skills", "list", "--json"], {
+      cwd: REPO_ROOT,
+      env: sandboxEnv(root, { SKILL_ROUTER_HOST: "claude-code" }),
+      maxBuffer: MAX_BUFFER,
+    });
+    const listed = JSON.parse(listStdout) as Array<{ id: string }>;
+    assert.ok(listed.some((item) => item.id === "user:agents:wrapper-probe"), "wrapper selects Codex host");
+    assert.equal(listed.some((item) => item.id === "user:wrapper-probe"), false, "wrapper overrides caller host env");
+
+    const initProject = join(root, "init-project");
+    const { stdout: initStdout } = await execFileAsync(
+      wrapperPath,
+      ["init", "codex", "project", "--cwd", initProject, "--json"],
+      {
+        cwd: REPO_ROOT,
+        env: sandboxEnv(root, { SKILL_ROUTER_ASSET_ROOT: join(root, "missing-assets") }),
+        maxBuffer: MAX_BUFFER,
+      },
+    );
+    assert.equal(
+      JSON.parse(initStdout).skillMdPath,
+      join(initProject, ".agents", "skills", "skill-router-skills", "SKILL.md"),
+      "wrapper asset root lets init copy the installed skill template",
+    );
 
     const manifest = (await readJson(join(installPath, ".codex-plugin", "plugin.json"))) as { skills: string };
     assert.equal(manifest.skills, "./skills/");

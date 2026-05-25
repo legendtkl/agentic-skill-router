@@ -3,7 +3,8 @@
  * Install skill-router as a local Claude Code plugin.
  *
  * - builds the bundle before copying
- * - copies the Claude Code manifest plus shared bin/lib/skills to
+ * - copies the shared bin/lib runtime to ~/.skill-router/runtime/<version>/
+ * - copies the Claude Code manifest plus skills and a host wrapper to
  *   ~/.claude/plugins/cache/local/skill-router/<version>/
  * - registers the install in ~/.claude/plugins/installed_plugins.json
  * - enables it in ~/.claude/settings.json (enabledPlugins)
@@ -23,7 +24,9 @@ import { PLUGIN_KEY, PLUGIN_NAME, MARKETPLACE, ensureBuild, isPlainObject, log }
 import {
   cleanupOldVersions,
   copyPluginAssets,
+  copyRuntimeAssets,
   normalizeManifestSkills,
+  writeHostWrapper,
 } from "./lib/plugin-install.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +38,9 @@ const version = pluginManifest.version;
 const claudeHome = process.env["CLAUDE_HOME"] || join(homedir(), ".claude");
 const cacheRoot = join(claudeHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME);
 const installPath = join(cacheRoot, version);
+const runtimeCacheRoot = process.env["SKILL_ROUTER_RUNTIME_ROOT"] || join(homedir(), ".skill-router", "runtime");
+const runtimePath = join(runtimeCacheRoot, version);
+const runtimeBin = join(runtimePath, "bin", "skill-router");
 const installedJsonPath = join(claudeHome, "plugins/installed_plugins.json");
 const settingsPath = join(claudeHome, "settings.json");
 const keepOld = process.argv.includes("--keep-old");
@@ -44,9 +50,17 @@ async function main() {
   log(`  target: ${installPath}`);
 
   ensureBuild({ repoRoot, log });
+  await copyRuntimeAssets({ repoRoot, runtimePath });
+  log(`  runtime -> ${runtimePath}`);
   await copyPluginAssets({ pluginSrc, repoRoot, installPath });
   await normalizeManifestSkills(join(installPath, ".claude-plugin/plugin.json"));
-  log(`  copied → ${installPath}`);
+  await writeHostWrapper({
+    wrapperPath: join(installPath, "bin", "skill-router"),
+    runtimeBin,
+    hostName: "claude-code",
+    assetRoot: installPath,
+  });
+  log(`  copied -> ${installPath}`);
   await registerPlugin();
   await enablePlugin();
   await cleanupOldVersions(cacheRoot, version, { keepOld, log });
