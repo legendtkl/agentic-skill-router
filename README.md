@@ -11,35 +11,46 @@ Subagent management is intentionally out of scope for this repository.
 
 ## Quick Start
 
-Claude Code:
+Recommended npm install:
+
+```bash
+npm install -g skill-router
+skill-router init
+```
+
+`skill-router init` prompts for the target agent (`codex` or `claude-code`) and
+scope (`project` or `global`). Non-interactive examples:
+
+```bash
+skill-router init codex project
+skill-router init codex global
+skill-router init claude-code project
+skill-router init claude-code global
+```
+
+After init, restart the target agent if it was already running, then ask the
+installed `skill-router-skills` skill to audit, slim, or route installed skills.
+
+One-off project init is also available with `npx` for trial use, but global
+install is recommended so generated skills can reference a stable CLI path:
+
+```bash
+npx --package skill-router skill-router init codex project
+```
+
+Plugin install from a source checkout is still available for local development
+or for the Codex slash-command shim:
 
 ```bash
 npm install
-npm run install:plugin
+npm run install:plugin        # Claude Code plugin
+npm run install:codex-plugin  # Codex plugin and /skill-router:skills prompt
 ```
 
-Restart Claude Code, then ask the installed `skill-router-skills` skill to audit
-or slim installed skills.
-
-Codex:
-
-```bash
-npm install
-npm run install:codex-plugin
-```
-
-Restart Codex, then run:
+After installing the Codex plugin, restart Codex and run:
 
 ```text
 /skill-router:skills
-```
-
-Project or global skill init from an npm/package CLI:
-
-```bash
-skill-router init
-skill-router init codex project
-skill-router init claude-code global
 ```
 
 ## CLI

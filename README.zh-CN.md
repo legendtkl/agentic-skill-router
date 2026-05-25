@@ -8,34 +8,42 @@ Subagent 管理不属于本仓库范围。
 
 ## 快速开始
 
-Claude Code：
+推荐通过 npm 全局安装：
+
+```bash
+npm install -g skill-router
+skill-router init
+```
+
+`skill-router init` 会交互式选择目标 agent（`codex` 或 `claude-code`）和安装范围（`project` 或 `global`）。非交互示例：
+
+```bash
+skill-router init codex project
+skill-router init codex global
+skill-router init claude-code project
+skill-router init claude-code global
+```
+
+init 完成后，如果目标 agent 已在运行，请重启它，然后让已安装的 `skill-router-skills` skill 审计、精简或路由已安装 skills。
+
+也可以用 `npx` 做一次性项目初始化试用；但推荐全局安装，这样生成的 skill 能引用稳定的 CLI 路径：
+
+```bash
+npx --package skill-router skill-router init codex project
+```
+
+从源码 checkout 安装插件仍然可用，适合本地开发或需要 Codex slash-command shim 的场景：
 
 ```bash
 npm install
-npm run install:plugin
+npm run install:plugin        # Claude Code plugin
+npm run install:codex-plugin  # Codex plugin 和 /skill-router:skills prompt
 ```
 
-重启 Claude Code，然后让已安装的 `skill-router-skills` skill 审计或精简已安装 skills。
-
-Codex：
-
-```bash
-npm install
-npm run install:codex-plugin
-```
-
-重启 Codex，然后运行：
+安装 Codex 插件后，重启 Codex，然后运行：
 
 ```text
 /skill-router:skills
-```
-
-从 npm/package CLI 初始化项目或全局 skill：
-
-```bash
-skill-router init
-skill-router init codex project
-skill-router init claude-code global
 ```
 
 ## CLI
