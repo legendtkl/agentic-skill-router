@@ -24,6 +24,29 @@ agentic-skill-router init claude-code project
 agentic-skill-router init claude-code global
 ```
 
+针对 `claude-code`，`init` 还会在 `CLAUDE.md` 里写入一小段路由触发指引（project 范围：`<projectRoot>/CLAUDE.md`；global 范围：`$CLAUDE_HOME/CLAUDE.md`，默认 `~/.claude/CLAUDE.md`）。实际写入的块如下：
+
+```markdown
+<!-- agentic-skill-router:claude-md:begin -->
+## Skill routing
+
+`agentic-skill-router-skills` is a routing Skill that searches a catalog of
+locally-installed disabled skills.
+
+When the `agentic-skill-router-skills` Skill is available and no other
+enabled Skill clearly matches the user's query, call
+`agentic-skill-router-skills` before answering. Do not invent a Skill name
+or fabricate a routing result without a Skill/tool result. If
+`agentic-skill-router-skills` is not installed in this environment, this
+section does not apply.
+```
+
+（用 `<!-- agentic-skill-router:claude-md:end -->` 结束）
+
+HTML 注释 fence 保证幂等：重复执行 `init` 会在原位置替换第一个 fence 块（保持你文件里的位置不变），并剥掉其他重复 fence 块。fence marker 必须独占整行——段落里或 code block 里被引用的 marker 字面量会被忽略，解析器不会被用户文本骗到。fence 之外的现有内容不会被改动；行尾跟随文件本身的主导风格（CRLF 行数 ≥ 裸 LF 行数时用 CRLF，否则 LF）。如果 `CLAUDE.md` 含不配对的 fence（`:begin` 没有匹配的 `:end`），`init` 会在动 skill 目录之前直接中止，畸形的 CLAUDE.md 永远不会留下半装好的 skill。文案中条件式的措辞（"If ... is not installed ... this section does not apply"）是有意为之：即使后续卸载了插件，CLAUDE.md 里残留的块也不会驱使 agent 去调一个不存在的 Skill。
+
+文案对应 `experiments/dci-compare/` 中 `claudemd-policy-probe` 的验证结果——在 150-skill 配对实验中把 router 触发率从 78% 提升到 97.6%、路由准确率从 69% 提升到 86.9%。如不需要写入，可加 `--no-claude-md`。Codex `init` 不会修改 CLAUDE.md。
+
 init 完成后，如果目标 agent 已在运行，请重启它，然后让已安装的 `agentic-skill-router-skills` skill 审计、精简或路由已安装 skills。
 
 也可以用 `npx` 做一次性项目初始化试用；但推荐全局安装，这样生成的 skill 能引用稳定的 CLI 路径：
