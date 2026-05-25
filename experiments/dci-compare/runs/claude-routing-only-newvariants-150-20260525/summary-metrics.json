@@ -1,0 +1,146 @@
+{
+  "rows": [
+    {
+      "variant": "D-agentic",
+      "total": 24,
+      "triggered": 24,
+      "correct": 20,
+      "hallucinated": 0,
+      "sumCost": 3.6821932499999996,
+      "sumTurns": 100,
+      "sumDur": 476360,
+      "meanCtxEnd": 33842.791666666664,
+      "misses": [
+        {
+          "queryId": "gh-repo-analytics",
+          "expected": "skill-021",
+          "matched": "skill-146",
+          "timedOut": false,
+          "triggered": true
+        },
+        {
+          "queryId": "pptx-reference-formatting",
+          "expected": "skill-140",
+          "matched": "skill-103",
+          "timedOut": false,
+          "triggered": true
+        },
+        {
+          "queryId": "shock-analysis-demand",
+          "expected": "skill-105",
+          "matched": "skill-026",
+          "timedOut": false,
+          "triggered": true
+        },
+        {
+          "queryId": "shock-analysis-supply",
+          "expected": "skill-105",
+          "matched": "skill-080",
+          "timedOut": false,
+          "triggered": true
+        }
+      ]
+    },
+    {
+      "variant": "K-bounded",
+      "total": 24,
+      "triggered": 24,
+      "correct": 23,
+      "hallucinated": 0,
+      "sumCost": 3.26572025,
+      "sumTurns": 102,
+      "sumDur": 546558,
+      "meanCtxEnd": 30670.458333333332,
+      "misses": [
+        {
+          "queryId": "gh-repo-analytics",
+          "expected": "skill-021",
+          "matched": "skill-046",
+          "timedOut": false,
+          "triggered": true
+        }
+      ]
+    },
+    {
+      "variant": "K-lite",
+      "total": 24,
+      "triggered": 24,
+      "correct": 23,
+      "hallucinated": 0,
+      "sumCost": 3.4462975,
+      "sumTurns": 101,
+      "sumDur": 568520,
+      "meanCtxEnd": 31055.25,
+      "misses": [
+        {
+          "queryId": "gh-repo-analytics",
+          "expected": "skill-021",
+          "matched": "skill-046",
+          "timedOut": false,
+          "triggered": true
+        }
+      ]
+    },
+    {
+      "variant": "L-agentic",
+      "total": 24,
+      "triggered": 24,
+      "correct": 22,
+      "hallucinated": 0,
+      "sumCost": 3.4968382499999997,
+      "sumTurns": 102,
+      "sumDur": 595623,
+      "meanCtxEnd": 32384.958333333332,
+      "misses": [
+        {
+          "queryId": "gh-repo-analytics",
+          "expected": "skill-021",
+          "matched": "skill-046",
+          "timedOut": false,
+          "triggered": true
+        },
+        {
+          "queryId": "shock-analysis-demand",
+          "expected": "skill-105",
+          "matched": "skill-026",
+          "timedOut": false,
+          "triggered": true
+        }
+      ]
+    },
+    {
+      "variant": "M-bm25",
+      "total": 24,
+      "triggered": 24,
+      "correct": 21,
+      "hallucinated": 0,
+      "sumCost": 3.6215145,
+      "sumTurns": 99,
+      "sumDur": 536556,
+      "meanCtxEnd": 32547.916666666668,
+      "misses": [
+        {
+          "queryId": "gh-repo-analytics",
+          "expected": "skill-021",
+          "matched": "skill-046",
+          "timedOut": false,
+          "triggered": true
+        },
+        {
+          "queryId": "shock-analysis-supply",
+          "expected": "skill-105",
+          "matched": "skill-026",
+          "timedOut": false,
+          "triggered": true
+        },
+        {
+          "queryId": "pptx-reference-formatting",
+          "expected": "skill-140",
+          "matched": "skill-103",
+          "timedOut": false,
+          "triggered": true
+        }
+      ]
+    }
+  ]
+}
