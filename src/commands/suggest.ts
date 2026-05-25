@@ -6,12 +6,12 @@ import { suggest } from "../policy.ts";
 import type { HostName } from "../types.ts";
 
 /**
- * `skill-router skills suggest` — lists skills the policy thinks are
+ * `agentic-skill-router skills suggest` — lists skills the policy thinks are
  * candidates for disabling based on the configured unused-for threshold.
  */
 export async function cmdSuggest(argv: string[], hostName: HostName): Promise<number> {
   const { values } = parseStrict({
-    commandName: "skill-router skills suggest",
+    commandName: "agentic-skill-router skills suggest",
     config: {
       args: argv,
       options: { "unused-for": { type: "string" }, json: { type: "boolean" } },

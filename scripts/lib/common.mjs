@@ -6,7 +6,7 @@
  */
 import { spawnSync } from "node:child_process";
 
-export const PLUGIN_NAME = "skill-router";
+export const PLUGIN_NAME = "agentic-skill-router";
 export const MARKETPLACE = "local";
 export const PLUGIN_KEY = `${PLUGIN_NAME}@${MARKETPLACE}`;
 

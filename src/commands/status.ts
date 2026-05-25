@@ -5,13 +5,13 @@ import { loadState, statePathForHost } from "../state.ts";
 import type { HostName } from "../types.ts";
 
 /**
- * `skill-router skills status` — reports disabled skills, reapply results,
+ * `agentic-skill-router skills status` — reports disabled skills, reapply results,
  * orphans, in-flight ops, and routed-usage counters. Exits 1 when any
  * conflicting on-disk state is detected.
  */
 export async function cmdStatus(argv: string[], hostName: HostName): Promise<number> {
   const { values } = parseStrict({
-    commandName: "skill-router skills status",
+    commandName: "agentic-skill-router skills status",
     config: { args: argv, options: { json: { type: "boolean" } } },
   });
   const host = createHost(hostName);
@@ -53,9 +53,9 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
     console.log(`\norphaned records (SKILL.md gone entirely; run \`enable <id>\` to clean state): ${reapplyResult.orphaned.join(", ")}`);
   }
   if (reapplyResult.conflicted.length > 0) {
-    console.log(`\n⚠ CONFLICTED — both SKILL.md and SKILL.md.skill-router-disabled present:`);
+    console.log(`\n⚠ CONFLICTED — both SKILL.md and SKILL.md.agentic-skill-router-disabled present:`);
     for (const id of reapplyResult.conflicted) console.log(`  ${id}`);
-    console.log(`Manually delete one file (typically the .skill-router-disabled to fully enable, or the SKILL.md to fully disable) and re-run \`status\`.`);
+    console.log(`Manually delete one file (typically the .agentic-skill-router-disabled to fully enable, or the SKILL.md to fully disable) and re-run \`status\`.`);
   }
   if (orphanMarkers.length > 0) {
     console.log(`\norphan disabled markers (no state record; left from a previous tool or crash):`);

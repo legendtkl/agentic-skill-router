@@ -1,6 +1,6 @@
 {
   "$schema": "see scripts/eval-route.mjs for schema",
-  "description": "Route evaluation fixture. Skills are synthetic but mirror real installed-skill metadata shapes (matching tests/fixtures/routing-benchmark.json and skills/skill-router-skills). The eval script builds a Skill[] catalog from `skills` and runs each query through the selected route mode.",
+  "description": "Route evaluation fixture. Skills are synthetic but mirror real installed-skill metadata shapes (matching tests/fixtures/routing-benchmark.json and skills/agentic-skill-router-skills). The eval script builds a Skill[] catalog from `skills` and runs each query through the selected route mode.",
   "skills": [
     {
       "id": "user:codex:lark-mail",
@@ -86,13 +86,13 @@
       }
     },
     {
-      "id": "user:codex:skill-router-skills",
-      "name": "skill-router-skills",
+      "id": "user:codex:agentic-skill-router-skills",
+      "name": "agentic-skill-router-skills",
       "description": "Use when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills across supported hosts.",
       "metadata": {
-        "name": "skill-router-skills",
+        "name": "agentic-skill-router-skills",
         "description": "Use when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills across supported hosts.",
-        "aliases": ["skill router", "skill-router"],
+        "aliases": ["skill router", "agentic-skill-router"],
         "domains": ["agent-skills"],
         "intents": ["audit_skills", "disable_skill", "restore_skill", "route_skill"]
       }
@@ -149,9 +149,9 @@
       "category": "umbrella-vs-specific"
     },
     {
-      "name": "product-name-skill-router",
+      "name": "product-name-agentic-skill-router",
       "query": "audit installed skill router skills and disable unused ones",
-      "expected": "user:codex:skill-router-skills",
+      "expected": "user:codex:agentic-skill-router-skills",
       "shouldSelect": true,
       "category": "product-name"
     },

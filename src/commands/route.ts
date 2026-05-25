@@ -10,13 +10,13 @@ import { loadState, recordRoutedSkill, saveState, statePathForHost, withStateLoc
 import type { HostName, RouteMode, Skill } from "../types.ts";
 
 /**
- * `skill-router skills route` — finds the best disabled-skill match for a
+ * `agentic-skill-router skills route` — finds the best disabled-skill match for a
  * query, optionally records the route in state, and prints either text or
  * `--json` output.
  */
 export async function cmdRoute(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills route",
+    commandName: "agentic-skill-router skills route",
     config: {
       args: argv,
       options: {

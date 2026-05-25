@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Uninstall skill-router from Claude Code.
+ * Uninstall agentic-skill-router from Claude Code.
  *
- * - removes ~/.claude/plugins/cache/local/skill-router/
+ * - removes ~/.claude/plugins/cache/local/agentic-skill-router/
  * - removes the entry from ~/.claude/plugins/installed_plugins.json
- * - sets enabledPlugins[skill-router@local] = false in settings.json (does not
+ * - sets enabledPlugins[agentic-skill-router@local] = false in settings.json (does not
  *   delete the key, so re-install can re-enable cleanly)
  *
- * Does NOT touch ~/.skill-router/ (state + config). To wipe that too, pass
+ * Does NOT touch ~/.agentic-skill-router/ (state + config). To wipe that too, pass
  * --purge.
  *
  * Does NOT auto-enable previously-disabled skills. If the user wants those
@@ -27,7 +27,7 @@ const claudeHome = process.env["CLAUDE_HOME"] || join(homedir(), ".claude");
 const cacheDir = join(claudeHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME);
 const installedJsonPath = join(claudeHome, "plugins/installed_plugins.json");
 const settingsPath = join(claudeHome, "settings.json");
-const stateDir = process.env["SKILL_ROUTER_STATE_DIR"] || join(homedir(), ".skill-router");
+const stateDir = process.env["AGENTIC_SKILL_ROUTER_STATE_DIR"] || join(homedir(), ".agentic-skill-router");
 const statePath = join(stateDir, "state-claude-code.json");
 
 const purge = process.argv.includes("--purge");

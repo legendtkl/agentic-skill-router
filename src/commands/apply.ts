@@ -8,13 +8,13 @@ import { loadState, skillInstanceKey, statePathForHost } from "../state.ts";
 import type { HostName, Skill, Suggestion } from "../types.ts";
 
 /**
- * `skill-router skills disable` — disables specific ids or every
+ * `agentic-skill-router skills disable` — disables specific ids or every
  * suggested-stale skill (with `--all-suggested`). Requires `--yes` to
  * actually mutate disk; without it, prints a dry-run preview and exits 1.
  */
 export async function cmdDisable(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills disable",
+    commandName: "agentic-skill-router skills disable",
     config: {
       args: argv,
       options: {
@@ -78,7 +78,7 @@ export async function cmdDisable(argv: string[], hostName: HostName): Promise<nu
       const skipped = suggested.filter((s) => s.attributionAmbiguous);
       if (skipped.length > 0) {
         console.error(
-          `\nnote: ${skipped.length} skill(s) skipped from --all-suggested because their usage attribution is ambiguous (multiple plugins share the same pluginShort name). Disable explicitly with \`skill-router skills disable <id>\` if intended.`,
+          `\nnote: ${skipped.length} skill(s) skipped from --all-suggested because their usage attribution is ambiguous (multiple plugins share the same pluginShort name). Disable explicitly with \`agentic-skill-router skills disable <id>\` if intended.`,
         );
       }
     } else {
@@ -111,13 +111,13 @@ export async function cmdDisable(argv: string[], hostName: HostName): Promise<nu
 }
 
 /**
- * `skill-router skills enable` — re-enables skills previously disabled by
+ * `agentic-skill-router skills enable` — re-enables skills previously disabled by
  * the router. Handles ambiguous bare-id resolution (inventory + state) and
  * orphan state records.
  */
 export async function cmdEnable(argv: string[], hostName: HostName): Promise<number> {
   const { positionals, values } = parseStrict({
-    commandName: "skill-router skills enable",
+    commandName: "agentic-skill-router skills enable",
     config: {
       args: argv,
       options: { json: { type: "boolean" } },
@@ -178,7 +178,7 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
           const lines = [...keys]
             .map((k) => {
               const c = candidatesByInstanceKey.get(k)!;
-              return `  skill-router skills enable ${k}  # ${c.description}`;
+              return `  agentic-skill-router skills enable ${k}  # ${c.description}`;
             })
             .join("\n");
           console.error(

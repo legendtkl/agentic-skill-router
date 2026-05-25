@@ -20,10 +20,10 @@ async function makeFakeCodexUser(): Promise<{
   stateDir: string;
   cleanup: () => Promise<void>;
 }> {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-cli-args-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-cli-args-"));
   const codexHome = join(root, ".codex");
   const agentsHome = join(root, ".agents");
-  const stateDir = join(root, ".skill-router");
+  const stateDir = join(root, ".agentic-skill-router");
   const projectRoot = join(root, "project");
   const cwd = join(projectRoot, "packages", "app");
   const adminSkillsRoot = join(root, "etc", "codex", "skills");
@@ -35,7 +35,7 @@ async function makeFakeCodexUser(): Promise<{
   const disabledSkillDir = join(codexHome, "skills", "lark-mail");
   await mkdir(disabledSkillDir, { recursive: true });
   await writeFile(
-    join(disabledSkillDir, "SKILL.md.skill-router-disabled"),
+    join(disabledSkillDir, "SKILL.md.agentic-skill-router-disabled"),
     "---\nname: lark-mail\ndescription: Lark mail workflows for office automation\n---\n\nbody\n",
   );
 
@@ -51,12 +51,12 @@ async function makeFakeCodexUser(): Promise<{
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    SKILL_ROUTER_HOST: "codex",
+    AGENTIC_SKILL_ROUTER_HOST: "codex",
     CODEX_HOME: codexHome,
     AGENTS_HOME: agentsHome,
-    SKILL_ROUTER_CWD: cwd,
+    AGENTIC_SKILL_ROUTER_CWD: cwd,
     CODEX_ADMIN_SKILLS_ROOT: adminSkillsRoot,
-    SKILL_ROUTER_STATE_DIR: stateDir,
+    AGENTIC_SKILL_ROUTER_STATE_DIR: stateDir,
   };
 
   return {
@@ -109,7 +109,7 @@ test("skills list rejects unknown option with exit code 2 and suggestion", async
     await expectUnknownOption(
       ["skills", "list", "--jsoon"],
       fake.env,
-      { option: "--jsoon", suggestion: "--json", commandName: "skill-router skills list" },
+      { option: "--jsoon", suggestion: "--json", commandName: "agentic-skill-router skills list" },
     );
     // Happy path still works.
     const ok = await runCli(["skills", "list", "--json"], fake.env);
@@ -126,7 +126,7 @@ test("skills suggest rejects unknown option with exit code 2", async () => {
     await expectUnknownOption(
       ["skills", "suggest", "--unsed-for=30d"],
       fake.env,
-      { option: "--unsed-for", suggestion: "--unused-for", commandName: "skill-router skills suggest" },
+      { option: "--unsed-for", suggestion: "--unused-for", commandName: "agentic-skill-router skills suggest" },
     );
     const ok = await runCli(["skills", "suggest", "--unused-for=365d", "--json"], fake.env);
     assert.ok(ok.stdout.trim().startsWith("["));
@@ -141,12 +141,12 @@ test("skills route rejects --qurey but still accepts positional query", async ()
     await expectUnknownOption(
       ["skills", "route", "--qurey", "lark mail", "--json"],
       fake.env,
-      { option: "--qurey", suggestion: "--query", commandName: "skill-router skills route" },
+      { option: "--qurey", suggestion: "--query", commandName: "agentic-skill-router skills route" },
     );
     await expectUnknownOption(
       ["skills", "route", "--query=lark mail", "--jsoon"],
       fake.env,
-      { option: "--jsoon", suggestion: "--json", commandName: "skill-router skills route" },
+      { option: "--jsoon", suggestion: "--json", commandName: "agentic-skill-router skills route" },
     );
     // Happy path: positional query.
     const ok = await runCli(["skills", "route", "lark", "mail", "office", "--json", "--no-record"], fake.env);
@@ -163,7 +163,7 @@ test("skills dci search rejects unknown option", async () => {
     await expectUnknownOption(
       ["skills", "dci", "search", "--qurey=lark"],
       fake.env,
-      { option: "--qurey", suggestion: "--query", commandName: "skill-router skills dci search" },
+      { option: "--qurey", suggestion: "--query", commandName: "agentic-skill-router skills dci search" },
     );
     // Happy path: positional query for DCI search.
     const ok = await runCli(["skills", "dci", "search", "lark mail", "--metadata-only", "--json"], fake.env);
@@ -189,7 +189,7 @@ test("skills corpus search and inspect expose agentic metadata primitives", asyn
     await expectUnknownOption(
       ["skills", "corpus", "search", "--anny=lark"],
       fake.env,
-      { option: "--anny", suggestion: "--any", commandName: "skill-router skills corpus search" },
+      { option: "--anny", suggestion: "--any", commandName: "agentic-skill-router skills corpus search" },
     );
 
     const search = await runCli([
@@ -293,7 +293,7 @@ test("skills dci budget rejects unknown option", async () => {
     await expectUnknownOption(
       ["skills", "dci", "budget", "--verbse"],
       fake.env,
-      { option: "--verbse", commandName: "skill-router skills dci budget" },
+      { option: "--verbse", commandName: "agentic-skill-router skills dci budget" },
     );
     const ok = await runCli(["skills", "dci", "budget", "--json"], fake.env);
     assert.ok(ok.stdout.includes("maxQueries"));
@@ -308,7 +308,7 @@ test("skills disable rejects unknown option but still accepts positional id", as
     await expectUnknownOption(
       ["skills", "disable", fake.disabledSkillId, "--yess"],
       fake.env,
-      { option: "--yess", suggestion: "--yes", commandName: "skill-router skills disable" },
+      { option: "--yess", suggestion: "--yes", commandName: "agentic-skill-router skills disable" },
     );
     // Happy path: positional id still flows through. Without --yes, exit code 1
     // (would-disable preview). That confirms parsing accepted both arguments.
@@ -331,7 +331,7 @@ test("skills enable rejects unknown option", async () => {
     await expectUnknownOption(
       ["skills", "enable", fake.disabledSkillId, "--jsoon"],
       fake.env,
-      { option: "--jsoon", suggestion: "--json", commandName: "skill-router skills enable" },
+      { option: "--jsoon", suggestion: "--json", commandName: "agentic-skill-router skills enable" },
     );
     // Happy path: enabling the already-disabled marker works.
     const ok = await runCli(["skills", "enable", fake.disabledSkillId, "--json"], fake.env);
@@ -348,7 +348,7 @@ test("skills status rejects unknown option", async () => {
     await expectUnknownOption(
       ["skills", "status", "--jsoon"],
       fake.env,
-      { option: "--jsoon", suggestion: "--json", commandName: "skill-router skills status" },
+      { option: "--jsoon", suggestion: "--json", commandName: "agentic-skill-router skills status" },
     );
     const ok = await runCli(["skills", "status", "--json"], fake.env);
     const parsed = JSON.parse(ok.stdout) as { disabledCount: number };
@@ -393,7 +393,7 @@ test("skills list rejects --json=1 (boolean flag with value) with exit code 2", 
       fake.env,
       {
         stderrMatch: /does not take an argument/i,
-        commandName: "skill-router skills list",
+        commandName: "agentic-skill-router skills list",
       },
     );
   } finally {
@@ -411,7 +411,7 @@ test("skills route rejects --query with missing value with exit code 2", async (
       fake.env,
       {
         stderrMatch: /argument missing/i,
-        commandName: "skill-router skills route",
+        commandName: "agentic-skill-router skills route",
       },
     );
   } finally {
@@ -429,7 +429,7 @@ test("skills list rejects unexpected positional with exit code 2", async () => {
       fake.env,
       {
         stderrMatch: /does not take positional arguments|unexpected argument/i,
-        commandName: "skill-router skills list",
+        commandName: "agentic-skill-router skills list",
       },
     );
   } finally {
@@ -443,32 +443,32 @@ test("skills dci grep / find / open / inspect / read / select reject unknown opt
     await expectUnknownOption(
       ["skills", "dci", "grep", "--pttn=foo"],
       fake.env,
-      { option: "--pttn", commandName: "skill-router skills dci grep" },
+      { option: "--pttn", commandName: "agentic-skill-router skills dci grep" },
     );
     await expectUnknownOption(
       ["skills", "dci", "find", fake.disabledSkillId, "--pattern=foo", "--regx"],
       fake.env,
-      { option: "--regx", suggestion: "--regex", commandName: "skill-router skills dci find" },
+      { option: "--regx", suggestion: "--regex", commandName: "agentic-skill-router skills dci find" },
     );
     await expectUnknownOption(
       ["skills", "dci", "open", fake.disabledSkillId, "--lne=10"],
       fake.env,
-      { option: "--lne", suggestion: "--line", commandName: "skill-router skills dci open" },
+      { option: "--lne", suggestion: "--line", commandName: "agentic-skill-router skills dci open" },
     );
     await expectUnknownOption(
       ["skills", "dci", "inspect", fake.disabledSkillId, "--jsoon"],
       fake.env,
-      { option: "--jsoon", suggestion: "--json", commandName: "skill-router skills dci inspect" },
+      { option: "--jsoon", suggestion: "--json", commandName: "agentic-skill-router skills dci inspect" },
     );
     await expectUnknownOption(
       ["skills", "dci", "read", fake.disabledSkillId, "--max-chrs=10"],
       fake.env,
-      { option: "--max-chrs", suggestion: "--max-chars", commandName: "skill-router skills dci read" },
+      { option: "--max-chrs", suggestion: "--max-chars", commandName: "agentic-skill-router skills dci read" },
     );
     await expectUnknownOption(
       ["skills", "dci", "select", fake.disabledSkillId, "--query=x", "--confidence=high", "--reson=test"],
       fake.env,
-      { option: "--reson", suggestion: "--reason", commandName: "skill-router skills dci select" },
+      { option: "--reson", suggestion: "--reason", commandName: "agentic-skill-router skills dci select" },
     );
   } finally {
     await fake.cleanup();

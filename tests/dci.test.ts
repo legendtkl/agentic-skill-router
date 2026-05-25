@@ -27,7 +27,7 @@ interface Corpus {
 }
 
 async function makeCorpus(count = 160): Promise<Corpus> {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-dci-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-dci-"));
   const skills: Skill[] = [];
 
   for (let i = 0; i < count; i++) {
@@ -104,7 +104,7 @@ async function writeCorpusSkill(
 ): Promise<Skill> {
   const dir = join(root, opts.name);
   await mkdir(dir, { recursive: true });
-  const skillMdPath = join(dir, `SKILL.md${opts.isDisabled ? ".skill-router-disabled" : ""}`);
+  const skillMdPath = join(dir, `SKILL.md${opts.isDisabled ? ".agentic-skill-router-disabled" : ""}`);
   await writeFile(
     skillMdPath,
     `---\nname: ${opts.name}\ndescription: ${opts.description}\n---\n\n${opts.body}\n`,
@@ -359,7 +359,7 @@ test("DCI search truncation respects UTF-8 multibyte character boundaries", asyn
 
     const dir = join(corpus.root, "utf8-boundary-probe");
     await mkdir(dir, { recursive: true });
-    const skillMdPath = join(dir, "SKILL.md.skill-router-disabled");
+    const skillMdPath = join(dir, "SKILL.md.agentic-skill-router-disabled");
     await writeFile(skillMdPath, fileContent);
     const skill: Skill = {
       id: "user:codex:utf8-boundary-probe",
@@ -592,7 +592,7 @@ test("DCI inspect and read reject non-routable skills", async () => {
   try {
     const inspected = dciInspectSkill(corpus.skills, "user:codex:body-only-probe");
     assert.equal(inspected.action, "inspect-skill");
-    assert.match(inspected.skillMdPath, /SKILL\.md\.skill-router-disabled$/);
+    assert.match(inspected.skillMdPath, /SKILL\.md\.agentic-skill-router-disabled$/);
 
     await assert.rejects(() => dciReadSkill(corpus.skills, "user:codex:enabled-probe"), /not a routable disabled skill/);
     assert.throws(() => dciInspectSkill(corpus.skills, "plugin:browser@local:browser"), /not a routable disabled skill/);
@@ -612,7 +612,7 @@ test("DCI read truncates content and select returns a read action", async () => 
     const selected = dciSelectSkill(corpus.skills, "user:codex:body-only-probe", "high", "body matched unique probe");
     assert.equal(selected.action, "read-skill-file");
     assert.equal(selected.confidence, "high");
-    assert.match(selected.skillMdPath, /SKILL\.md\.skill-router-disabled$/);
+    assert.match(selected.skillMdPath, /SKILL\.md\.agentic-skill-router-disabled$/);
   } finally {
     await corpus.cleanup();
   }

@@ -41,7 +41,7 @@ export class UnknownOptionError extends ParseArgsError {
 
 export interface ParseStrictOptions<C extends ParseArgsConfig> {
   /**
-   * Logical command name used in error messages, e.g. `"skill-router skills route"`.
+   * Logical command name used in error messages, e.g. `"agentic-skill-router skills route"`.
    */
   commandName: string;
   /**

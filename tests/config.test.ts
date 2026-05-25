@@ -42,13 +42,13 @@ test("parseDuration: rejects garbage", () => {
 });
 
 test("loadConfig returns default when file missing", async () => {
-  const cfg = await loadConfig(join(tmpdir(), "skill-router-no-such-file-" + Math.random()));
+  const cfg = await loadConfig(join(tmpdir(), "agentic-skill-router-no-such-file-" + Math.random()));
   assert.equal(cfg.unusedForDays, DEFAULT_UNUSED_FOR_DAYS);
   assert.equal(cfg.routeMode, DEFAULT_CONFIG.routeMode);
 });
 
 test("loadConfig honours unusedForDays", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-config-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-config-"));
   const path = join(dir, "config.json");
   try {
     await mkdir(dirname(path), { recursive: true });
@@ -62,7 +62,7 @@ test("loadConfig honours unusedForDays", async () => {
 });
 
 test("loadConfig honours routeMode", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-config-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-config-"));
   const path = join(dir, "config.json");
   try {
     await mkdir(dirname(path), { recursive: true });
@@ -75,7 +75,7 @@ test("loadConfig honours routeMode", async () => {
 });
 
 test("loadConfig honours keepNames and keepIds", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-config-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-config-"));
   const path = join(dir, "config.json");
   try {
     await mkdir(dirname(path), { recursive: true });
@@ -92,7 +92,7 @@ test("loadConfig honours keepNames and keepIds", async () => {
 });
 
 test("loadConfig ignores non-string entries in keepNames / keepIds", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-config-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-config-"));
   const path = join(dir, "config.json");
   try {
     await mkdir(dirname(path), { recursive: true });
@@ -176,7 +176,7 @@ test("parseConfigValue: keepNames rejects non-array and non-string entries", () 
 });
 
 test("setConfigValue writes file atomically and preserves unknown sibling keys", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-set-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-set-"));
   const path = join(dir, "config.json");
   try {
     await writeFile(path, JSON.stringify({ unusedForDays: 30, futureKey: "keep" }) + "\n");
@@ -194,7 +194,7 @@ test("setConfigValue writes file atomically and preserves unknown sibling keys",
 });
 
 test("setConfigValue rejects invalid value without touching disk", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-set-bad-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-set-bad-"));
   const path = join(dir, "config.json");
   try {
     await writeFile(path, JSON.stringify({ unusedForDays: 45 }) + "\n");
@@ -208,7 +208,7 @@ test("setConfigValue rejects invalid value without touching disk", async () => {
 });
 
 test("setConfigValue serializes concurrent writes so neither key is dropped", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-set-concurrent-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-set-concurrent-"));
   const path = join(dir, "config.json");
   try {
     // Start from a known baseline so we can assert both writers preserve it.
@@ -237,7 +237,7 @@ test("setConfigValue serializes concurrent writes so neither key is dropped", as
 });
 
 test("setConfigValue reaps stale lock from a dead PID and succeeds", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-stale-lock-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-stale-lock-"));
   const path = join(dir, "config.json");
   const lockPath = `${path}.lock`;
   try {
@@ -265,7 +265,7 @@ test("setConfigValue reaps stale lock from a dead PID and succeeds", async () =>
 });
 
 test("setConfigValue does not reap an empty lock file (atomic acquisition invariant)", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-empty-lock-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-empty-lock-"));
   const path = join(dir, "config.json");
   const lockPath = `${path}.lock`;
   try {
@@ -299,7 +299,7 @@ test("setConfigValue does not reap an empty lock file (atomic acquisition invari
 });
 
 test("setConfigValue reaps stale lock older than the age threshold and succeeds", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-stale-age-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-stale-age-"));
   const path = join(dir, "config.json");
   const lockPath = `${path}.lock`;
   try {
@@ -319,7 +319,7 @@ test("setConfigValue reaps stale lock older than the age threshold and succeeds"
 });
 
 test("saveRawConfigObject creates parent directory and writes JSON", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-save-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-save-"));
   const path = join(dir, "nested", "config.json");
   try {
     await saveRawConfigObject({ unusedForDays: 7, routeMode: "auto" }, path);

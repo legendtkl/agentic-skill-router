@@ -1,5 +1,5 @@
 {
-  "name": "skill-router",
+  "name": "agentic-skill-router",
   "version": "0.1.0",
   "description": "Manage installed Agent Skills across supported hosts based on usage",
   "license": "MIT",
@@ -12,12 +12,12 @@
     "access": "public"
   },
   "bin": {
-    "skill-router": "bin/skill-router"
+    "agentic-skill-router": "bin/agentic-skill-router"
   },
   "files": [
     "README.md",
     "bin/",
-    "lib/",
+    "lib/agentic-skill-router.mjs",
     "skills/",
     "plugins/claude-code/.claude-plugin/plugin.json",
     "plugins/codex/.codex-plugin/plugin.json",
@@ -33,7 +33,7 @@
     "test": "node --test --import tsx tests/*.test.ts",
     "test:e2e": "npm run test:e2e:network",
     "test:e2e:offline": "node --test --test-concurrency=1 --import tsx tests/cli-offline.e2e.ts",
-    "test:e2e:network": "node --test --test-concurrency=1 --import tsx --test-name-pattern=skill-router-cli tests/codex-openai.e2e.ts tests/claude-openai.e2e.ts",
+    "test:e2e:network": "node --test --test-concurrency=1 --import tsx --test-name-pattern=agentic-skill-router-cli tests/codex-openai.e2e.ts tests/claude-openai.e2e.ts",
     "test:e2e:agent": "node --test --test-concurrency=1 --import tsx --test-name-pattern=\"(codex-cli|claude-cli)\" tests/codex-openai.e2e.ts tests/claude-openai.e2e.ts",
     "test:e2e:codex": "node --test --import tsx --test-name-pattern=\"codex-cli\" tests/codex-openai.e2e.ts",
     "test:e2e:claude": "node --test --import tsx --test-name-pattern=\"claude-cli\" tests/claude-openai.e2e.ts",

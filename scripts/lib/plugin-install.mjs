@@ -2,7 +2,7 @@
  * Host-neutral helpers for the install/uninstall scripts. These cover the
  * parts that look identical between the Claude Code and Codex paths:
  *
- *   - copy shared bin/lib runtime assets into ~/.skill-router/runtime/<version>
+ *   - copy shared bin/lib runtime assets into ~/.agentic-skill-router/runtime/<version>
  *   - copy plugin entry assets (manifest dir + skills) into a versioned cache
  *     directory and add a host-specific bin wrapper
  *   - normalize the manifest's "skills" path so the installed copy points at
@@ -11,7 +11,7 @@
  *     guard so symlinks pointing outside the cache root are unlinked but
  *     never followed)
  *   - read the per-host state file and surface a warning about skills that
- *     are still disabled by skill-router at uninstall time
+ *     are still disabled by agentic-skill-router at uninstall time
  *
  * Pure helpers only; no host-specific knowledge of TOML, JSON shapes, or
  * settings keys lives here.
@@ -57,8 +57,8 @@ export async function copyPluginAssets({
 }
 
 /**
- * Copy the shared CLI runtime once into ~/.skill-router/runtime/<version>/.
- * Host plugin installs then create tiny wrappers that set SKILL_ROUTER_HOST
+ * Copy the shared CLI runtime once into ~/.agentic-skill-router/runtime/<version>/.
+ * Host plugin installs then create tiny wrappers that set AGENTIC_SKILL_ROUTER_HOST
  * before delegating to this runtime.
  *
  * @param {object} options
@@ -77,7 +77,7 @@ export async function copyRuntimeAssets({
   for (const dir of runtimeAssetDirs) {
     await cp(join(repoRoot, dir), join(runtimePath, dir), { recursive: true });
   }
-  await chmod(join(runtimePath, "bin/skill-router"), 0o755);
+  await chmod(join(runtimePath, "bin/agentic-skill-router"), 0o755);
 }
 
 /**
@@ -85,7 +85,7 @@ export async function copyRuntimeAssets({
  *
  * The wrapper is intentionally small: the plugin bundle remains discoverable
  * by the host, while all executable logic lives in the shared runtime. The
- * host name is injected via SKILL_ROUTER_HOST so the runtime does not need to
+ * host name is injected via AGENTIC_SKILL_ROUTER_HOST so the runtime does not need to
  * infer the caller from its own filesystem location.
  *
  * @param {object} options
@@ -99,8 +99,8 @@ export async function writeHostWrapper({ wrapperPath, runtimeBin, hostName, asse
   const script = [
     "#!/usr/bin/env sh",
     "set -eu",
-    `export SKILL_ROUTER_HOST=${shellQuote(hostName)}`,
-    ...(assetRoot ? [`export SKILL_ROUTER_ASSET_ROOT=${shellQuote(assetRoot)}`] : []),
+    `export AGENTIC_SKILL_ROUTER_HOST=${shellQuote(hostName)}`,
+    ...(assetRoot ? [`export AGENTIC_SKILL_ROUTER_ASSET_ROOT=${shellQuote(assetRoot)}`] : []),
     `exec ${shellQuote(runtimeBin)} "$@"`,
     "",
   ].join("\n");
@@ -185,7 +185,7 @@ export async function cleanupOldVersions(cacheRoot, currentVersion, { keepOld = 
 }
 
 /**
- * Read the host's state file and emit a warning if skill-router still has
+ * Read the host's state file and emit a warning if agentic-skill-router still has
  * skills disabled. The wording (warning prefix and the "how to re-enable"
  * hint) differs between hosts so callers customize them via options.
  *
@@ -226,7 +226,7 @@ export async function warnAboutDisabledSkills({
     }
   }
   if (validRecords.length > 0) {
-    log(`${warnPrefix} ${validRecords.length} skill(s) are still disabled by skill-router.`);
+    log(`${warnPrefix} ${validRecords.length} skill(s) are still disabled by agentic-skill-router.`);
     log(`  Their SKILL.md files remain renamed even after uninstall.`);
     for (const line of formatRestoreHint(validRecords)) log(line);
     log("");

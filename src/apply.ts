@@ -155,7 +155,7 @@ function resolveDisableRecord(state: State, idOrInstanceKey: string): DisableRec
   // cmdEnable). Print one ready-to-copy command per candidate so the user
   // can resolve the ambiguity without guessing CLI syntax.
   const examples = byId
-    .map((r) => `  skill-router skills enable ${r.instanceKey}  # ${r.skillMdPath}`)
+    .map((r) => `  agentic-skill-router skills enable ${r.instanceKey}  # ${r.skillMdPath}`)
     .join("\n");
   throw new Error(
     `ambiguous skill id "${idOrInstanceKey}" matches ${byId.length} disabled instances; ` +
@@ -374,7 +374,7 @@ async function reconcilePendingOp(
 
 /**
  * Walk the same skill roots that `scan` enumerates and find
- * `SKILL.md.skill-router-disabled` files that are NOT recorded in state.
+ * `SKILL.md.agentic-skill-router-disabled` files that are NOT recorded in state.
  * These could be left over from a crash where the rename succeeded but the
  * state save did not, or from a previous tool the user used.
  */

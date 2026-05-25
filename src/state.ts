@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { DISABLED_SUFFIX } from "./scan.ts";
 import type { Confidence, DisableRecord, HostName, PendingOp, RoutedSkillRecord, SkillSource, State } from "./types.ts";
 
-export const STATE_DIR = process.env["SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".skill-router");
+export const STATE_DIR = process.env["AGENTIC_SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".agentic-skill-router");
 export const STATE_PATH = join(STATE_DIR, "state-claude-code.json");
 const STATE_LOCK_METADATA = "owner.json";
 const DEFAULT_STATE_LOCK_TIMEOUT_MS = 5_000;
@@ -34,7 +34,7 @@ function emptyState(host: HostName): State {
 }
 
 export function statePathForHost(host: HostName): string {
-  const dir = process.env["SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".skill-router");
+  const dir = process.env["AGENTIC_SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".agentic-skill-router");
   return join(dir, `state-${host}.json`);
 }
 
@@ -45,7 +45,7 @@ function isPlainObject(x: unknown): x is Record<string, unknown> {
 /**
  * Strip the disabled marker suffix so the same on-disk skill yields the same
  * key whether the file currently lives at `SKILL.md` or
- * `SKILL.md.skill-router-disabled`. We deliberately do not call `realpath`:
+ * `SKILL.md.agentic-skill-router-disabled`. We deliberately do not call `realpath`:
  * the underlying file may be temporarily absent (mid-disable, mid-enable, or
  * after an upstream uninstall) and we still need a stable identifier.
  */

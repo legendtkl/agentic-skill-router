@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Install skill-router as a local Codex plugin plus slash command.
+ * Install agentic-skill-router as a local Codex plugin plus slash command.
  *
  * - builds the bundle before copying
- * - copies the shared bin/lib runtime to ~/.skill-router/runtime/<version>/
+ * - copies the shared bin/lib runtime to ~/.agentic-skill-router/runtime/<version>/
  * - copies the Codex manifest plus skills and a host wrapper to
- *   ~/.codex/plugins/cache/local/skill-router/<version>/
- * - enables [plugins."skill-router@local"] in ~/.codex/config.toml
- * - copies prompts/skill-router-skills.md -> ~/.codex/prompts/
+ *   ~/.codex/plugins/cache/local/agentic-skill-router/<version>/
+ * - enables [plugins."agentic-skill-router@local"] in ~/.codex/config.toml
+ * - copies prompts/agentic-skill-router-skills.md -> ~/.codex/prompts/
  *
  * Idempotent: re-running upgrades the install in place.
  */
@@ -37,12 +37,12 @@ const version = pluginManifest.version;
 const codexHome = process.env["CODEX_HOME"] || join(homedir(), ".codex");
 const cacheRoot = join(codexHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME);
 const installPath = join(cacheRoot, version);
-const runtimeCacheRoot = process.env["SKILL_ROUTER_RUNTIME_ROOT"] || join(homedir(), ".skill-router", "runtime");
+const runtimeCacheRoot = process.env["AGENTIC_SKILL_ROUTER_RUNTIME_ROOT"] || join(homedir(), ".agentic-skill-router", "runtime");
 const runtimePath = join(runtimeCacheRoot, version);
-const runtimeBin = join(runtimePath, "bin", "skill-router");
+const runtimeBin = join(runtimePath, "bin", "agentic-skill-router");
 const configPath = join(codexHome, "config.toml");
-const promptSrc = join(pluginSrc, "prompts/skill-router-skills.md");
-const promptPath = join(codexHome, "prompts/skill-router-skills.md");
+const promptSrc = join(pluginSrc, "prompts/agentic-skill-router-skills.md");
+const promptPath = join(codexHome, "prompts/agentic-skill-router-skills.md");
 const keepOld = process.argv.includes("--keep-old");
 
 async function main() {
@@ -55,7 +55,7 @@ async function main() {
   await copyPluginAssets({ pluginSrc, repoRoot, installPath });
   await normalizeManifestSkills(join(installPath, ".codex-plugin/plugin.json"));
   await writeHostWrapper({
-    wrapperPath: join(installPath, "bin", "skill-router"),
+    wrapperPath: join(installPath, "bin", "agentic-skill-router"),
     runtimeBin,
     hostName: "codex",
     assetRoot: installPath,
@@ -69,9 +69,9 @@ async function main() {
   log("✓ installed.");
   log("");
   log("Next: restart Codex, then run:");
-  log("  /skill-router:skills");
+  log("  /agentic-skill-router:skills");
   log("Manual CLI:");
-  log(`  ${installPath}/bin/skill-router skills suggest`);
+  log(`  ${installPath}/bin/agentic-skill-router skills suggest`);
 }
 
 async function enablePlugin() {
@@ -104,12 +104,12 @@ async function installSlashCommand() {
       `  A backup of the current file was written to ${backupPath}.\n` +
       `  To install the latest managed slash command, remove or rename the file and re-run install.\n`,
     );
-    log(`  skipped slash command /skill-router:skills (user-modified)`);
+    log(`  skipped slash command /agentic-skill-router:skills (user-modified)`);
     return;
   }
 
   await cp(promptSrc, promptPath);
-  log(`  installed slash command /skill-router:skills`);
+  log(`  installed slash command /agentic-skill-router:skills`);
 }
 
 main().catch((err) => {

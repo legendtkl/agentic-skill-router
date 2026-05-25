@@ -31,7 +31,7 @@ export interface Skill {
   isPluginDisabled: boolean;
   /** false for builtin skills (we cannot rename binary-bundled SKILL.md) */
   canDisable: boolean;
-  /** both SKILL.md and SKILL.md.skill-router-disabled exist — needs repair */
+  /** both SKILL.md and SKILL.md.agentic-skill-router-disabled exist — needs repair */
   conflict: boolean;
   /**
    * True when the skill directory is a symlink whose realpath resolves outside
@@ -185,8 +185,8 @@ export class SkillConflictError extends Error {
   constructor(skillId: string, livePath: string) {
     super(
       `Skill "${skillId}" is in a split-brain state: both ${livePath} and ` +
-      `${livePath}.skill-router-disabled exist. Manually delete one (typically ` +
-      `the .skill-router-disabled file if you want the skill enabled, or the ` +
+      `${livePath}.agentic-skill-router-disabled exist. Manually delete one (typically ` +
+      `the .agentic-skill-router-disabled file if you want the skill enabled, or the ` +
       `live SKILL.md if you want it disabled) and retry.`,
     );
     this.name = "SkillConflictError";
@@ -206,7 +206,7 @@ export class SkillOutOfRootError extends Error {
       `Refusing to modify skill "${skillId}": its SKILL.md (${skillMdPath}) ` +
       `resolves outside the skills root that discovered it. Skills that live ` +
       `via a symlink whose target is outside the skills root are visible but ` +
-      `cannot be disabled or enabled by skill-router. Move the skill into a ` +
+      `cannot be disabled or enabled by agentic-skill-router. Move the skill into a ` +
       `skills root (or replace the symlink with a real directory) and retry.`,
     );
     this.name = "SkillOutOfRootError";

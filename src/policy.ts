@@ -2,20 +2,20 @@ import { isPluginShortAmbiguous, lookupUsage, lookupUsageStrict } from "./usage.
 import type { Skill, Suggestion, UsageStat } from "./types.ts";
 
 /**
- * The skill-router plugin's own routing skill. We never want to suggest the
+ * The agentic-skill-router plugin's own routing skill. We never want to suggest the
  * tool that powers this command for disabling — match it by the stable
  * (pluginKey, name) tuple rather than by bare name so a user-authored skill
  * with the same display name is NOT auto-kept.
  */
-const SKILL_ROUTER_PLUGIN_KEY_PREFIX = "skill-router@";
-const SKILL_ROUTER_WORKFLOW_NAME = "skill-router-skills";
+const AGENTIC_SKILL_ROUTER_PLUGIN_KEY_PREFIX = "agentic-skill-router@";
+const AGENTIC_SKILL_ROUTER_WORKFLOW_NAME = "agentic-skill-router-skills";
 
 function isSkillRouterOwnSkill(skill: Skill): boolean {
   return (
     skill.source === "plugin" &&
     skill.pluginKey !== null &&
-    skill.pluginKey.startsWith(SKILL_ROUTER_PLUGIN_KEY_PREFIX) &&
-    skill.name === SKILL_ROUTER_WORKFLOW_NAME
+    skill.pluginKey.startsWith(AGENTIC_SKILL_ROUTER_PLUGIN_KEY_PREFIX) &&
+    skill.name === AGENTIC_SKILL_ROUTER_WORKFLOW_NAME
   );
 }
 
@@ -45,7 +45,7 @@ export function suggest(
     if (skill.isDisabled) continue;           // already disabled
     if (skill.isPluginDisabled) continue;     // whole plugin off, no point per-skill
     if (skill.conflict) continue;             // split-brain — resolve first
-    // Protect skill-router's own routing skill (only the plugin instance, not
+    // Protect agentic-skill-router's own routing skill (only the plugin instance, not
     // user-authored skills that happen to share the name).
     if (isSkillRouterOwnSkill(skill)) continue;
     // Config-driven allowlists.

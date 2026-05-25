@@ -23,13 +23,13 @@ async function makeFakeCodexUser(): Promise<{
   stateDir: string;
   cleanup: () => Promise<void>;
 }> {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-codex-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-codex-"));
   const codexHome = join(root, ".codex");
   const agentsHome = join(root, ".agents");
   const projectRoot = join(root, "project");
   const cwd = join(projectRoot, "packages", "app");
   const adminSkillsRoot = join(root, "etc", "codex", "skills");
-  const stateDir = join(root, ".skill-router");
+  const stateDir = join(root, ".agentic-skill-router");
 
   await writeSkill(join(codexHome, "skills", "brand"), "ckm:brand", "Brand voice and identity");
   await writeSkill(join(codexHome, "skills", "unused-local"), "unused-local", "Never called");
@@ -114,7 +114,7 @@ async function makeFakeCodexUser(): Promise<{
 
 async function writeSkill(skillDir: string, name: string, description: string, body = "", disabled = false): Promise<void> {
   await mkdir(skillDir, { recursive: true });
-  await writeFile(join(skillDir, `SKILL.md${disabled ? ".skill-router-disabled" : ""}`), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`);
+  await writeFile(join(skillDir, `SKILL.md${disabled ? ".agentic-skill-router-disabled" : ""}`), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`);
 }
 
 async function writeCodexPluginInstall(
@@ -168,10 +168,10 @@ test("CodexHost enumerates codex, agents, system, and plugin skills", async () =
 });
 
 test("CodexHost deduplicates cached plugin versions by plugin key", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-codex-cache-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-codex-cache-"));
   const codexHome = join(root, ".codex");
   const agentsHome = join(root, ".agents");
-  const stateDir = join(root, ".skill-router");
+  const stateDir = join(root, ".agentic-skill-router");
   const oldInstall = join(codexHome, "plugins", "cache", "openai-curated", "gmail", "old-cache");
   const newInstall = join(codexHome, "plugins", "cache", "openai-curated", "gmail", "new-cache");
   const fallbackOldInstall = join(codexHome, "plugins", "cache", "openai-curated", "calendar", "1.0.0");
@@ -227,10 +227,10 @@ test("CodexHost deduplicates cached plugin versions by plugin key", async () => 
       ...process.env,
       CODEX_HOME: codexHome,
       AGENTS_HOME: agentsHome,
-      SKILL_ROUTER_CWD: root,
+      AGENTIC_SKILL_ROUTER_CWD: root,
       CODEX_ADMIN_SKILLS_ROOT: join(root, "etc", "codex", "skills"),
-      SKILL_ROUTER_STATE_DIR: stateDir,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_STATE_DIR: stateDir,
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
     const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "list", "--json"], { env });
@@ -265,7 +265,7 @@ test("apply.ts disable + enable round-trip on a codex user skill", async () => {
 
     await disableSkill(brand!, "test", { statePath, host: host.name });
     assert.equal(await fileExists(brand!.skillMdPath), false);
-    assert.equal(await fileExists(brand!.skillMdPath + ".skill-router-disabled"), true);
+    assert.equal(await fileExists(brand!.skillMdPath + ".agentic-skill-router-disabled"), true);
 
     const disabledBrand = (await host.listSkills()).find((s) => s.id === "user:codex:brand");
     assert.ok(disabledBrand);
@@ -280,11 +280,11 @@ test("apply.ts disable + enable round-trip on a codex user skill", async () => {
 
 test("CodexHost flags out-of-root symlink skills as canDisable=false across user, plugin, and project roots", async () => {
   const fake = await makeFakeCodexUser();
-  const outside = await mkdtemp(join(tmpdir(), "skill-router-codex-outside-"));
+  const outside = await mkdtemp(join(tmpdir(), "agentic-skill-router-codex-outside-"));
   try {
     // Real skill directories placed entirely outside any Codex skills root.
     // Each is fully valid as a skill, but their SKILL.md must NOT be
-    // renamed by skill-router when reached through an in-root symlink.
+    // renamed by agentic-skill-router when reached through an in-root symlink.
     const externUserDir = join(outside, "ext-user");
     await mkdir(externUserDir, { recursive: true });
     await writeFile(join(externUserDir, "SKILL.md"), "---\nname: ext-user\ndescription: outside codex user root\n---\n");
@@ -346,12 +346,12 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
   try {
     const env = {
       ...process.env,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
@@ -377,7 +377,7 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
 
     await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"], { env });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), false);
-    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled")), true);
+    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.agentic-skill-router-disabled")), true);
 
     const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], { env });
     const parsedStatus = JSON.parse(status.stdout) as { disabledCount: number; disabled: Array<{ id: string }> };
@@ -398,12 +398,12 @@ test("CLI enable refuses to silently pick when two disabled instances share an i
     // the real disable path and state writer.
     const env = {
       ...process.env,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
     await execFileAsync(
@@ -430,7 +430,7 @@ test("CLI enable refuses to silently pick when two disabled instances share an i
     };
     assert.equal(raw.disabledSkills.length, 1);
     const original = raw.disabledSkills[0]!;
-    const ghostPath = join(fake.codexHome, "skills", "unused-local-stale", "SKILL.md.skill-router-disabled");
+    const ghostPath = join(fake.codexHome, "skills", "unused-local-stale", "SKILL.md.agentic-skill-router-disabled");
     raw.disabledSkills.push({
       ...original,
       instanceKey: skillInstanceKey("user:codex:unused-local", ghostPath),
@@ -456,7 +456,7 @@ test("CLI enable refuses to silently pick when two disabled instances share an i
     assert.match(stderr, /ambiguous skill id/i);
     // The remediation hint MUST be the actual supported CLI syntax — a
     // positional instanceKey, NOT a non-existent `--instance-key` flag.
-    assert.match(stderr, /skill-router skills enable /);
+    assert.match(stderr, /agentic-skill-router skills enable /);
     assert.doesNotMatch(stderr, /--instance-key/);
 
     // Both records survive: nothing was renamed silently.
@@ -465,7 +465,7 @@ test("CLI enable refuses to silently pick when two disabled instances share an i
     };
     assert.equal(after.disabledSkills.length, 2);
     assert.equal(
-      await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled")),
+      await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.agentic-skill-router-disabled")),
       true,
     );
     assert.equal(
@@ -482,12 +482,12 @@ test("CLI enable by instanceKey resolves the correct disabled instance", async (
   try {
     const env = {
       ...process.env,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
     await execFileAsync(
@@ -508,7 +508,7 @@ test("CLI enable by instanceKey resolves the correct disabled instance", async (
       }>;
     };
     const realKey = raw.disabledSkills[0]!.instanceKey;
-    const ghostPath = join(fake.codexHome, "skills", "unused-local-stale", "SKILL.md.skill-router-disabled");
+    const ghostPath = join(fake.codexHome, "skills", "unused-local-stale", "SKILL.md.agentic-skill-router-disabled");
     // loadState re-derives instanceKey from `(id, skillMdPath)`, so the
     // canonical ghost key is computed from the ghost path.
     const ghostKey = skillInstanceKey("user:codex:unused-local", ghostPath);
@@ -551,12 +551,12 @@ test("CLI enable JSON reports resolved id and instanceKey on state-only recovery
   try {
     const env = {
       ...process.env,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
     await execFileAsync(
@@ -606,11 +606,11 @@ test("CLI rejects removed --host flag anywhere in the command", async () => {
       ...process.env,
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
-    delete env.SKILL_ROUTER_HOST;
+    delete env.AGENTIC_SKILL_ROUTER_HOST;
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
     await assert.rejects(
@@ -623,12 +623,12 @@ test("CLI rejects removed --host flag anywhere in the command", async () => {
         const e = err as { code?: number; stderr?: string };
         assert.equal(e.code, 2);
         assert.match(e.stderr ?? "", /--host has been removed/);
-        assert.doesNotMatch(e.stderr ?? "", /SKILL_ROUTER_HOST=codex/);
+        assert.doesNotMatch(e.stderr ?? "", /AGENTIC_SKILL_ROUTER_HOST=codex/);
         return true;
       },
     );
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
-    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled")), false);
+    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.agentic-skill-router-disabled")), false);
   } finally {
     await fake.cleanup();
   }
@@ -641,14 +641,14 @@ test("CLI disable of specific ids requires --yes and does not rename", async () 
       ...process.env,
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
     const livePath = join(fake.codexHome, "skills", "unused-local", "SKILL.md");
-    const disabledPath = `${livePath}.skill-router-disabled`;
+    const disabledPath = `${livePath}.agentic-skill-router-disabled`;
 
     let err: unknown;
     try {
@@ -674,10 +674,10 @@ test("CLI refuses to disable Codex admin skills", async () => {
       ...process.env,
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
@@ -693,7 +693,7 @@ test("CLI refuses to disable Codex admin skills", async () => {
       },
     );
     assert.equal(await fileExists(join(fake.adminSkillsRoot, "admin-policy", "SKILL.md")), true);
-    assert.equal(await fileExists(join(fake.adminSkillsRoot, "admin-policy", "SKILL.md.skill-router-disabled")), false);
+    assert.equal(await fileExists(join(fake.adminSkillsRoot, "admin-policy", "SKILL.md.agentic-skill-router-disabled")), false);
   } finally {
     await fake.cleanup();
   }
@@ -722,20 +722,20 @@ test("CLI status scans Codex project and admin roots for orphan disabled markers
       ...process.env,
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
     const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], { env });
     const parsedStatus = JSON.parse(status.stdout) as { orphanMarkers: string[] };
     assert.ok(
-      parsedStatus.orphanMarkers.some((p) => p.endsWith("project/.agents/skills/orphan-project/SKILL.md.skill-router-disabled")),
+      parsedStatus.orphanMarkers.some((p) => p.endsWith("project/.agents/skills/orphan-project/SKILL.md.agentic-skill-router-disabled")),
     );
     assert.ok(
-      parsedStatus.orphanMarkers.some((p) => p.endsWith("etc/codex/skills/orphan-admin/SKILL.md.skill-router-disabled")),
+      parsedStatus.orphanMarkers.some((p) => p.endsWith("etc/codex/skills/orphan-admin/SKILL.md.agentic-skill-router-disabled")),
     );
   } finally {
     await fake.cleanup();
@@ -747,17 +747,17 @@ test("CLI enable cleans disabled state even when skill files disappeared", async
   try {
     const env = {
       ...process.env,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
     await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"], { env });
-    await rm(join(fake.codexHome, "skills", "unused-local", "SKILL.md.skill-router-disabled"));
+    await rm(join(fake.codexHome, "skills", "unused-local", "SKILL.md.agentic-skill-router-disabled"));
 
     const enabled = await execFileAsync(
       process.execPath,
@@ -781,12 +781,12 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
   try {
     const env = {
       ...process.env,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
@@ -815,7 +815,7 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
     assert.equal(parsed.action, "read-skill-file");
     assert.equal(parsed.recorded, true);
     assert.equal(parsed.selected?.id, "user:agents:lark-mail");
-    assert.match(parsed.selected?.skillMdPath ?? "", /SKILL\.md\.skill-router-disabled$/);
+    assert.match(parsed.selected?.skillMdPath ?? "", /SKILL\.md\.agentic-skill-router-disabled$/);
     assert.ok(Array.isArray((parsed.selected as { evidence?: unknown[] } | null)?.evidence));
 
     const rawState = await readFile(join(fake.stateDir, "state-codex.json"), "utf8");
@@ -833,12 +833,12 @@ test("CLI JSON route reports weak matches without failing or read actions", asyn
   try {
     const env = {
       ...process.env,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
@@ -878,12 +878,12 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
   try {
     const env = {
       ...process.env,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
@@ -903,7 +903,7 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
         "draft a Lark mail reply",
         "--json",
       ],
-      { env: { ...env, SKILL_ROUTER_STATE_DIR: badStateDir } },
+      { env: { ...env, AGENTIC_SKILL_ROUTER_STATE_DIR: badStateDir } },
     );
     const parsed = JSON.parse(route.stdout) as {
       action: string;
@@ -948,12 +948,12 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
 
     const env = {
       ...process.env,
-      SKILL_ROUTER_HOST: "codex",
+      AGENTIC_SKILL_ROUTER_HOST: "codex",
       CODEX_HOME: fake.codexHome,
       AGENTS_HOME: fake.agentsHome,
-      SKILL_ROUTER_CWD: fake.cwd,
+      AGENTIC_SKILL_ROUTER_CWD: fake.cwd,
       CODEX_ADMIN_SKILLS_ROOT: fake.adminSkillsRoot,
-      SKILL_ROUTER_STATE_DIR: fake.stateDir,
+      AGENTIC_SKILL_ROUTER_STATE_DIR: fake.stateDir,
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
@@ -988,7 +988,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "please handle dci-amber-invoice-cascade",
         "--json",
       ],
-      { env: { ...env, SKILL_ROUTER_ROUTE_MODE: "dci" } },
+      { env: { ...env, AGENTIC_SKILL_ROUTER_ROUTE_MODE: "dci" } },
     );
     const parsedLexicalRoute = JSON.parse(route.stdout) as { action: string; routeMode: string };
     assert.equal(parsedLexicalRoute.action, "no-confident-match");
@@ -1007,7 +1007,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
         "--no-record",
         "--json",
       ],
-      { env: { ...env, SKILL_ROUTER_ROUTE_MODE: "dci" } },
+      { env: { ...env, AGENTIC_SKILL_ROUTER_ROUTE_MODE: "dci" } },
     );
     const parsedEnvDciRoute = JSON.parse(envDciRoute.stdout) as {
       action: string;
@@ -1244,7 +1244,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
     assert.equal(parsedSelect.recorded, true);
     assert.equal(parsedSelect.id, "user:codex:dci-body-probe");
     assert.equal(parsedSelect.selected[0]?.id, "user:codex:dci-body-probe");
-    assert.match(parsedSelect.skillMdPath, /SKILL\.md\.skill-router-disabled$/);
+    assert.match(parsedSelect.skillMdPath, /SKILL\.md\.agentic-skill-router-disabled$/);
 
     const rawState = await readFile(join(fake.stateDir, "state-codex.json"), "utf8");
     const state = JSON.parse(rawState) as { routedSkills: Array<{ id: string; routeCount: number; lastQuery: string }> };

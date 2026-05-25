@@ -23,7 +23,7 @@ function fixtureSkill(name: string, description: string, metadata: Skill["metada
     metadata,
     source: "user",
     pluginKey: null,
-    skillMdPath: `/tmp/${name}/SKILL.md.skill-router-disabled`,
+    skillMdPath: `/tmp/${name}/SKILL.md.agentic-skill-router-disabled`,
     isDisabled: true,
     isPluginDisabled: false,
     canDisable: true,

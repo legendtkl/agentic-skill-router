@@ -1,4 +1,4 @@
-# skill-router
+# agentic-skill-router
 
 English | [简体中文](README.zh-CN.md)
 
@@ -14,28 +14,28 @@ Subagent management is intentionally out of scope for this repository.
 Recommended npm install:
 
 ```bash
-npm install -g skill-router
-skill-router init
+npm install -g agentic-skill-router
+agentic-skill-router init
 ```
 
-`skill-router init` prompts for the target agent (`codex` or `claude-code`) and
+`agentic-skill-router init` prompts for the target agent (`codex` or `claude-code`) and
 scope (`project` or `global`). Non-interactive examples:
 
 ```bash
-skill-router init codex project
-skill-router init codex global
-skill-router init claude-code project
-skill-router init claude-code global
+agentic-skill-router init codex project
+agentic-skill-router init codex global
+agentic-skill-router init claude-code project
+agentic-skill-router init claude-code global
 ```
 
 After init, restart the target agent if it was already running, then ask the
-installed `skill-router-skills` skill to audit, slim, or route installed skills.
+installed `agentic-skill-router-skills` skill to audit, slim, or route installed skills.
 
 One-off project init is also available with `npx` for trial use, but global
 install is recommended so generated skills can reference a stable CLI path:
 
 ```bash
-npx --package skill-router skill-router init codex project
+npx --package agentic-skill-router agentic-skill-router init codex project
 ```
 
 Plugin install from a source checkout is still available for local development
@@ -44,74 +44,75 @@ or for the Codex slash-command shim:
 ```bash
 npm install
 npm run install:plugin        # Claude Code plugin
-npm run install:codex-plugin  # Codex plugin and /skill-router:skills prompt
+npm run install:codex-plugin  # Codex plugin and /agentic-skill-router:skills prompt
 ```
 
 After installing the Codex plugin, restart Codex and run:
 
 ```text
-/skill-router:skills
+/agentic-skill-router:skills
 ```
 
 ## CLI
 
-Installed plugin bundles expose a thin `bin/skill-router` wrapper. Run these
+Installed plugin bundles expose a thin `bin/agentic-skill-router` wrapper. Run these
 commands from the installed plugin root, or use the absolute path printed by
 the installer.
 
 Installed Claude Code plugin:
 
 ```bash
-bin/skill-router skills list
-bin/skill-router skills suggest --json
-bin/skill-router skills corpus search --all mail --any lark --limit 30 --json
-bin/skill-router skills corpus inspect corpus-abc123def0 --json
-bin/skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
-bin/skill-router skills disable user:lark-mail --yes
-bin/skill-router skills enable user:lark-mail
-bin/skill-router skills status
+bin/agentic-skill-router skills list
+bin/agentic-skill-router skills suggest --json
+bin/agentic-skill-router skills corpus search --all mail --any lark --limit 30 --json
+bin/agentic-skill-router skills corpus inspect corpus-abc123def0 --json
+bin/agentic-skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
+bin/agentic-skill-router skills disable user:lark-mail --yes
+bin/agentic-skill-router skills enable user:lark-mail
+bin/agentic-skill-router skills status
 ```
 
 Installed Codex plugin:
 
 ```bash
-bin/skill-router skills list
-bin/skill-router skills suggest --json
-bin/skill-router skills corpus search --all mail --any lark --limit 30 --json
-bin/skill-router skills corpus inspect corpus-abc123def0 --json
-bin/skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
-bin/skill-router skills disable user:codex:lark-mail --yes
-bin/skill-router skills enable user:codex:lark-mail
-bin/skill-router skills status
+bin/agentic-skill-router skills list
+bin/agentic-skill-router skills suggest --json
+bin/agentic-skill-router skills corpus search --all mail --any lark --limit 30 --json
+bin/agentic-skill-router skills corpus inspect corpus-abc123def0 --json
+bin/agentic-skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
+bin/agentic-skill-router skills disable user:codex:lark-mail --yes
+bin/agentic-skill-router skills enable user:codex:lark-mail
+bin/agentic-skill-router skills status
 ```
 
 `--unused-for=<duration>` accepts `30`, `30d`, `2w`, `3m`, and `1y`.
-The persistent default lives at `~/.skill-router/config.json`:
+The persistent default lives at `~/.agentic-skill-router/config.json`:
 
 ```json
 { "unusedForDays": 60 }
 ```
 
-Installed plugin CLIs auto-detect their host. Repository checkout CLI runs
-default to Claude Code and is mainly for local development.
+Installed plugin wrappers set their host before delegating to the shared
+runtime. Repository checkout CLI runs default to Claude Code and is mainly for
+local development.
 
 ## How It Works
 
 One Agent Skills source is installed through multiple host-specific entry
 points:
 
-- `skills/skill-router-skills/SKILL.md` is the single source of truth.
-- `skills/skill-router-skills/references/` holds shared workflow details.
-- `bin/skill-router` and `lib/skill-router.mjs` are the shared CLI runtime.
+- `skills/agentic-skill-router-skills/SKILL.md` is the single source of truth.
+- `skills/agentic-skill-router-skills/references/` holds shared workflow details.
+- `bin/agentic-skill-router` and `lib/agentic-skill-router.mjs` are the shared CLI runtime.
 - `plugins/claude-code/` and `plugins/codex/` only provide host manifests and
   host-specific entry points.
 - The install scripts copy the shared runtime once to
-  `~/.skill-router/runtime/<version>/`, then copy host manifests, skills, and a
+  `~/.agentic-skill-router/runtime/<version>/`, then copy host manifests, skills, and a
   tiny host-specific wrapper into the selected host's local plugin cache. The
-  wrapper sets `SKILL_ROUTER_HOST` before delegating to the shared runtime.
-- `plugins/codex/prompts/skill-router-skills.md` is a generated slash-command
+  wrapper sets `AGENTIC_SKILL_ROUTER_HOST` before delegating to the shared runtime.
+- `plugins/codex/prompts/agentic-skill-router-skills.md` is a generated slash-command
   shim for Codex.
-- `skill-router init` can create a project or global skill entry for Codex or
+- `agentic-skill-router init` can create a project or global skill entry for Codex or
   Claude Code without installing a host plugin.
 
 Do not create host-specific copies of `SKILL.md`; update the unified skill
@@ -133,9 +134,9 @@ Usage signal:
 Disable mechanism:
 
 - Enabled: `SKILL.md`
-- Disabled: `SKILL.md.skill-router-disabled`
-- State: `~/.skill-router/state-claude-code.json` or
-  `~/.skill-router/state-codex.json`
+- Disabled: `SKILL.md.agentic-skill-router-disabled`
+- State: `~/.agentic-skill-router/state-claude-code.json` or
+  `~/.agentic-skill-router/state-codex.json`
 - Every `skills disable` form requires explicit `--yes`; without it the CLI
   prints what would be disabled and exits without renaming files.
 
@@ -154,7 +155,7 @@ Disabled-skill routing:
   without exposing local file paths.
 - `skills corpus select <ref>` records routed use and returns
   `selected.skillMdPath`; the returned path may end in
-  `SKILL.md.skill-router-disabled` and is safe to read as instructions.
+  `SKILL.md.agentic-skill-router-disabled` and is safe to read as instructions.
 - If metadata evidence is weak or ambiguous, the agent should stop the router
   path and continue normally without selecting a disabled skill.
 
@@ -191,7 +192,7 @@ examples:
 
 ### SKILL.md frontmatter support
 
-`skill-router` ships a minimal, dependency-free YAML parser tuned for the
+`agentic-skill-router` ships a minimal, dependency-free YAML parser tuned for the
 SKILL.md subset that Claude Code and Codex skills actually use. The supported
 forms are:
 
@@ -219,10 +220,10 @@ top level (see the `lark-mail` example above) so it parses reliably.
 ## Troubleshooting
 
 See [`docs/troubleshooting.md`](docs/troubleshooting.md) for recovery
-procedures covering every anomaly section that `skill-router skills status`
+procedures covering every anomaly section that `agentic-skill-router skills status`
 can print: split-brain conflicts, orphan disable markers, orphaned state
 records, malformed state files, plugin-upgrade reapply, and the safe order
-for uninstalling after disabling skills. Default to `skill-router skills
+for uninstalling after disabling skills. Default to `agentic-skill-router skills
 enable <id>` rather than `rm` whenever a recovery path is available.
 
 ## Development
@@ -255,7 +256,7 @@ npm run check:pack
 ```
 
 `npm run check:pack` runs after `npm run build` and verifies that
-`bin/skill-router --help` exits cleanly and `npm pack --dry-run` includes the
+`bin/agentic-skill-router --help` exits cleanly and `npm pack --dry-run` includes the
 required `bin/`, `lib/`, `skills/`, plugin manifests, and Codex prompt entries.
 
 The e2e suite is layered by external dependency so CI default does not
@@ -265,19 +266,19 @@ need network or local agent auth:
 | --- | --- | --- | --- |
 | Offline | `npm run test:e2e:offline` | nothing beyond `node` / `npm` and the bundled CLI (no network, no auth) | every PR and push to `main` |
 | Network | `npm run test:e2e:network` (alias: `npm run test:e2e`) | network to clone the pinned `openai/skills` GitHub ref | nightly schedule + manual `workflow_dispatch` |
-| Agent | `npm run test:e2e:agent` (or single-host `npm run test:e2e:codex` / `npm run test:e2e:claude`) | local `codex` / `claude` CLI plus their auth files | manual `workflow_dispatch` only, and only on a self-hosted runner with the `skill-router-agent-e2e` label (self-skips when binaries are missing) |
+| Agent | `npm run test:e2e:agent` (or single-host `npm run test:e2e:codex` / `npm run test:e2e:claude`) | local `codex` / `claude` CLI plus their auth files | manual `workflow_dispatch` only, and only on a self-hosted runner with the `agentic-skill-router-agent-e2e` label (self-skips when binaries are missing) |
 
 Run higher layers locally when changes touch host install, plugin loading,
 slash prompts, or the agent-facing workflow. The agent layer self-skips
 when the matching binary or auth file is not available.
 
-The `e2e-agent` workflow job uses `runs-on: [self-hosted, skill-router-agent-e2e]`.
+The `e2e-agent` workflow job uses `runs-on: [self-hosted, agentic-skill-router-agent-e2e]`.
 Without a configured self-hosted runner carrying that label, dispatched runs
 will queue and never start — that is intentional, since hosted GitHub runners
 do not satisfy the local `codex` / `claude` binary and auth requirements and
 the underlying tests would otherwise self-skip silently. To actually exercise
 the agent layer in CI, register a self-hosted runner with the
-`skill-router-agent-e2e` label, install `codex` and `claude` on its PATH, and
+`agentic-skill-router-agent-e2e` label, install `codex` and `claude` on its PATH, and
 configure their auth credentials.
 
 To compare routing thresholds before and after a change, run the evaluation
@@ -312,7 +313,7 @@ src/                         TypeScript source
   usage.ts                   transcript usage parser
   policy.ts                  suggestion rules
   apply.ts                   disable / enable / reapply logic
-  state.ts                   ~/.skill-router state files
+  state.ts                   ~/.agentic-skill-router state files
   hosts/{base,claude-code,codex}.ts
 bin/                         Shared CLI wrapper
 lib/                         Generated shared CLI bundle

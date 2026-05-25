@@ -24,7 +24,7 @@ function skill(opts: {
     ...(opts.metadata === undefined ? {} : { metadata: opts.metadata }),
     source: "user",
     pluginKey: null,
-    skillMdPath: `/tmp/${name}/SKILL.md.skill-router-disabled`,
+    skillMdPath: `/tmp/${name}/SKILL.md.agentic-skill-router-disabled`,
     isDisabled: opts.disabled ?? true,
     isPluginDisabled: false,
     canDisable: true,

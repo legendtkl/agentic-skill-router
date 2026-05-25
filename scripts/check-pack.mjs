@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Smoke check for the published package surface.
-// - Runs `bin/skill-router --help` and asserts exit 0 + non-empty stdout.
+// - Runs `bin/agentic-skill-router --help` and asserts exit 0 + non-empty stdout.
 // - Runs `npm pack --dry-run --json` and asserts the required entries are present.
 // Intended to run after `npm run build` (locally and in CI).
 import { execFile } from "node:child_process";
@@ -14,15 +14,23 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 
 const REQUIRED_FILES = [
-  "bin/skill-router",
-  "lib/skill-router.mjs",
-  "skills/skill-router-skills/SKILL.md",
+  "bin/agentic-skill-router",
+  "lib/agentic-skill-router.mjs",
+  "skills/agentic-skill-router-skills/SKILL.md",
   "plugins/claude-code/.claude-plugin/plugin.json",
   "plugins/codex/.codex-plugin/plugin.json",
-  "plugins/codex/prompts/skill-router-skills.md",
+  "plugins/codex/prompts/agentic-skill-router-skills.md",
 ];
 
 const REQUIRED_DIRS = ["bin/", "lib/", "skills/", "plugins/codex/prompts/"];
+
+const FORBIDDEN_PACK_ENTRIES = [
+  "bin/skill-router",
+  "lib/skill-router.mjs",
+  "plugins/codex/prompts/skill-router-skills.md",
+  "skills/skill-router-skills/",
+  "experiments/",
+];
 
 async function fail(message) {
   console.error(`check:pack failed: ${message}`);
@@ -30,7 +38,7 @@ async function fail(message) {
 }
 
 async function assertBundleExists() {
-  const bundle = resolve(root, "lib/skill-router.mjs");
+  const bundle = resolve(root, "lib/agentic-skill-router.mjs");
   try {
     await access(bundle);
   } catch {
@@ -39,23 +47,23 @@ async function assertBundleExists() {
 }
 
 async function checkBinHelp() {
-  const bin = resolve(root, "bin/skill-router");
+  const bin = resolve(root, "bin/agentic-skill-router");
   try {
     const { stdout } = await execFileAsync(bin, ["--help"], {
       cwd: root,
       maxBuffer: 1024 * 1024,
     });
     if (!stdout || stdout.trim().length === 0) {
-      await fail("`bin/skill-router --help` produced empty stdout");
+      await fail("`bin/agentic-skill-router --help` produced empty stdout");
     }
-    if (!/skill-router/.test(stdout)) {
-      await fail("`bin/skill-router --help` stdout did not mention skill-router");
+    if (!/agentic-skill-router/.test(stdout)) {
+      await fail("`bin/agentic-skill-router --help` stdout did not mention agentic-skill-router");
     }
-    console.log("ok: bin/skill-router --help exited 0 with non-empty output");
+    console.log("ok: bin/agentic-skill-router --help exited 0 with non-empty output");
   } catch (err) {
     const status = err?.code ?? err?.status ?? "unknown";
     const stderr = typeof err?.stderr === "string" ? err.stderr : "";
-    await fail(`\`bin/skill-router --help\` exited with status ${status}: ${stderr || err?.message || ""}`);
+    await fail(`\`bin/agentic-skill-router --help\` exited with status ${status}: ${stderr || err?.message || ""}`);
   }
 }
 
@@ -102,6 +110,14 @@ async function checkPackContents() {
   });
   if (missingDirs.length > 0) {
     await fail(`missing required directories in pack: ${missingDirs.join(", ")}`);
+    return;
+  }
+
+  const forbiddenFiles = [...files].filter((file) =>
+    FORBIDDEN_PACK_ENTRIES.some((entry) => file === entry || file.startsWith(entry)),
+  );
+  if (forbiddenFiles.length > 0) {
+    await fail(`forbidden entries in pack: ${forbiddenFiles.join(", ")}`);
     return;
   }
 

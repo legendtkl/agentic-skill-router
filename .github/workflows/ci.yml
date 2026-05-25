@@ -55,7 +55,7 @@ jobs:
     # self-hosted runner the dispatched job will queue and never run, which
     # is intentional and signals that no agent-capable runner is available.
     if: github.event_name == 'workflow_dispatch' && inputs.run_agent_e2e == 'true'
-    runs-on: [self-hosted, skill-router-agent-e2e]
+    runs-on: [self-hosted, agentic-skill-router-agent-e2e]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

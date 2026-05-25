@@ -1,7 +1,7 @@
 # Disabled-skill L-agentic routing
 
-Skill Router routes to disabled skill instructions through metadata-only
-AgenticRAG primitives. Use the `skill_router` helper from `SKILL.md`.
+Agentic Skill Router routes to disabled skill instructions through metadata-only
+AgenticRAG primitives. Use the `agentic_skill_router` helper from `SKILL.md`.
 
 Do not call `skills route`. Do not call `skills dci` or `skills body`. During
 retrieval, do not read disabled skill bodies.
@@ -16,7 +16,7 @@ Build two term sets from the user request:
 Search with a bounded expression:
 
 ```bash
-skill_router skills corpus search \
+agentic_skill_router skills corpus search \
   --all "<must1>" --any "<probe1>" --any "<probe2>" --any "<probe3>" \
   --limit 30 --json
 ```
@@ -30,7 +30,7 @@ with another `--all` term or more specific probes.
 Inspect only plausible metadata records:
 
 ```bash
-skill_router skills corpus inspect corpus-REF1 corpus-REF2 corpus-REF3 --json
+agentic_skill_router skills corpus inspect corpus-REF1 corpus-REF2 corpus-REF3 --json
 ```
 
 Choose by explicit metadata evidence, not nearby topic similarity.
@@ -40,7 +40,7 @@ Choose by explicit metadata evidence, not nearby topic similarity.
 Record exactly one supported selection:
 
 ```bash
-skill_router skills corpus select "<corpus-ref-or-id>" \
+agentic_skill_router skills corpus select "<corpus-ref-or-id>" \
   --query "<current user request>" \
   --confidence high \
   --reason "<brief metadata evidence>" \
