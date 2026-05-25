@@ -34,8 +34,11 @@ differs.
 
 Prereqs:
 
-- SkillRouter dataset cached locally at `/tmp/sr-probe/data/eval_core/`
-  (`hf download pipizhao/SkillRouter-Eval-Core --repo-type dataset --local-dir /tmp/sr-probe/data/eval_core`).
+- SkillRouter dataset cached locally at the shared stable path
+  `~/.cache/skill-router/datasets/SkillRouter-Eval-Core/eval_core/`
+  (`hf download pipizhao/SkillRouter-Eval-Core --repo-type dataset --local-dir ~/.cache/skill-router/datasets/SkillRouter-Eval-Core/eval_core`).
+  Set `SKILLROUTER_EVAL_CORE=/path/to/eval_core` or pass `--src=/path/to/eval_core`
+  to override this location.
 - `claude` CLI on PATH with auth at `~/.claude/.credentials.json`.
 - `HTTPS_PROXY` / `HTTP_PROXY` env set (claude CLI requires the site proxy).
 - `npm install` run at the repo root (the driver shells out to `npm run install:plugin`).

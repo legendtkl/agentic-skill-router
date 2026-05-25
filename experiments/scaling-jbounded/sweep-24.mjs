@@ -16,20 +16,22 @@
 //   node sweep-24.mjs --variant=J-bounded-v2 --home=.tmp-home-full
 //                     --queries-source=paper --run-id=v2-full
 //   [--concurrency=3] [--timeout-ms=600000]
+//   [--src=~/.cache/skill-router/datasets/SkillRouter-Eval-Core/eval_core]
 
 import { spawn } from "node:child_process";
 import { mkdir, writeFile, readFile, readdir, copyFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { skillRouterEvalCorePath } from "../skillrouter-dataset.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXP_DIR = __dirname;
 const VARIANTS_DIR = join(EXP_DIR, "variants");
-const SR_SRC = "/tmp/sr-probe/data/eval_core";
 const DCI_QUERIES = join(EXP_DIR, "..", "dci-compare", "queries.json");
 
 const args = parseArgs(process.argv.slice(2));
+const SR_SRC = args.src;
 const HOME = args.home.startsWith("/") ? args.home : join(EXP_DIR, args.home);
 const OUT_DIR = join(EXP_DIR, "runs", `sweep24-${args.runId}`);
 
@@ -42,6 +44,7 @@ function parseArgs(argv) {
     concurrency: 3,
     timeoutMs: 600_000,
     withClaudeMd: false,
+    src: skillRouterEvalCorePath(),
   };
   for (const a of argv) {
     if (a.startsWith("--variant=")) out.variant = a.slice(10);
@@ -51,6 +54,7 @@ function parseArgs(argv) {
     else if (a.startsWith("--concurrency=")) out.concurrency = Number(a.slice(14));
     else if (a.startsWith("--timeout-ms=")) out.timeoutMs = Number(a.slice(13));
     else if (a === "--with-claudemd") out.withClaudeMd = true;
+    else if (a.startsWith("--src=")) out.src = skillRouterEvalCorePath(a.slice(6));
     else throw new Error(`unknown arg: ${a}`);
   }
   if (!out.home) throw new Error("--home required");
