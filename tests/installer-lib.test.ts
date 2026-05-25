@@ -29,9 +29,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(__dirname);
 
 test("common: PLUGIN_KEY is composed from PLUGIN_NAME and MARKETPLACE", () => {
-  assert.equal(PLUGIN_NAME, "skill-router");
+  assert.equal(PLUGIN_NAME, "agentic-skill-router");
   assert.equal(MARKETPLACE, "local");
-  assert.equal(PLUGIN_KEY, "skill-router@local");
+  assert.equal(PLUGIN_KEY, "agentic-skill-router@local");
 });
 
 test("common: stripProxy drops all four proxy env vars and preserves the rest", () => {
@@ -124,8 +124,8 @@ test("copyPluginAssets copies manifest + host entry dirs only", async () => {
     for (const dir of [...HOST_ENTRY_ASSET_DIRS, ...RUNTIME_ASSET_DIRS]) {
       await mkdir(join(repoRoot, dir), { recursive: true });
     }
-    await writeFile(join(repoRoot, "bin", "skill-router"), "#!/bin/sh\necho hi\n", { mode: 0o644 });
-    await writeFile(join(repoRoot, "lib", "skill-router.mjs"), "// bundle\n");
+    await writeFile(join(repoRoot, "bin", "agentic-skill-router"), "#!/bin/sh\necho hi\n", { mode: 0o644 });
+    await writeFile(join(repoRoot, "lib", "agentic-skill-router.mjs"), "// bundle\n");
     await writeFile(join(repoRoot, "skills", "stub.txt"), "stub\n");
 
     // Pre-create installPath with junk to confirm we wipe it.
@@ -164,8 +164,8 @@ test("copyRuntimeAssets copies shared runtime dirs and marks bin executable", as
 
     await mkdir(join(repoRoot, "bin"), { recursive: true });
     await mkdir(join(repoRoot, "lib"), { recursive: true });
-    await writeFile(join(repoRoot, "bin", "skill-router"), "#!/bin/sh\necho hi\n", { mode: 0o644 });
-    await writeFile(join(repoRoot, "lib", "skill-router.mjs"), "// bundle\n");
+    await writeFile(join(repoRoot, "bin", "agentic-skill-router"), "#!/bin/sh\necho hi\n", { mode: 0o644 });
+    await writeFile(join(repoRoot, "lib", "agentic-skill-router.mjs"), "// bundle\n");
     await mkdir(runtimePath, { recursive: true });
     await writeFile(join(runtimePath, "stale.txt"), "stale");
 
@@ -175,7 +175,7 @@ test("copyRuntimeAssets copies shared runtime dirs and marks bin executable", as
       const entries = await readdir(join(runtimePath, dir));
       assert.ok(entries.length > 0, `${dir} copied with content`);
     }
-    const binStat = await stat(join(runtimePath, "bin", "skill-router"));
+    const binStat = await stat(join(runtimePath, "bin", "agentic-skill-router"));
     assert.ok((binStat.mode & 0o111) !== 0, "runtime bin is executable");
     await assert.rejects(stat(join(runtimePath, "stale.txt")), /ENOENT/);
   } finally {
@@ -186,19 +186,19 @@ test("copyRuntimeAssets copies shared runtime dirs and marks bin executable", as
 test("writeHostWrapper delegates to shared runtime with host and asset root", async () => {
   const root = await mkdtemp(join(tmpdir(), "sr-wrapper-"));
   try {
-    const wrapperPath = join(root, "plugin", "bin", "skill-router");
+    const wrapperPath = join(root, "plugin", "bin", "agentic-skill-router");
     await writeHostWrapper({
       wrapperPath,
-      runtimeBin: "/tmp/runtime bin/skill-router",
+      runtimeBin: "/tmp/runtime bin/agentic-skill-router",
       hostName: "codex",
       assetRoot: "/tmp/plugin assets",
     });
 
     const content = await readFile(wrapperPath, "utf8");
     assert.match(content, /^#!\/usr\/bin\/env sh/);
-    assert.match(content, /export SKILL_ROUTER_HOST='codex'/);
-    assert.match(content, /export SKILL_ROUTER_ASSET_ROOT='\/tmp\/plugin assets'/);
-    assert.match(content, /exec '\/tmp\/runtime bin\/skill-router' "\$@"/);
+    assert.match(content, /export AGENTIC_SKILL_ROUTER_HOST='codex'/);
+    assert.match(content, /export AGENTIC_SKILL_ROUTER_ASSET_ROOT='\/tmp\/plugin assets'/);
+    assert.match(content, /exec '\/tmp\/runtime bin\/agentic-skill-router' "\$@"/);
     const wrapperStat = await stat(wrapperPath);
     assert.ok((wrapperStat.mode & 0o111) !== 0, "wrapper is executable");
   } finally {
@@ -382,25 +382,25 @@ test("warnAboutDisabledSkills without reportMalformed stays quiet about invalid 
 });
 
 test("setPluginEnabled adds a stanza when none exists", () => {
-  const out = setPluginEnabled("", "skill-router@local", true);
-  assert.equal(out, "[plugins.\"skill-router@local\"]\nenabled = true\n");
+  const out = setPluginEnabled("", "agentic-skill-router@local", true);
+  assert.equal(out, "[plugins.\"agentic-skill-router@local\"]\nenabled = true\n");
 });
 
 test("setPluginEnabled preserves preceding content with a blank-line gap", () => {
   const out = setPluginEnabled(
     "model = \"gpt-5\"\n\n[plugins.\"other@local\"]\nenabled = true\n",
-    "skill-router@local",
+    "agentic-skill-router@local",
     true,
   );
   assert.match(out, /model = "gpt-5"/);
   assert.match(out, /\[plugins\."other@local"\]/);
-  assert.match(out, /\[plugins\."skill-router@local"\]\nenabled = true\n$/);
+  assert.match(out, /\[plugins\."agentic-skill-router@local"\]\nenabled = true\n$/);
 });
 
 test("setPluginEnabled flips an existing enabled flag in place", () => {
   const out = setPluginEnabled(
-    "[plugins.\"skill-router@local\"]\nenabled = true\n\n[other]\nx = 1\n",
-    "skill-router@local",
+    "[plugins.\"agentic-skill-router@local\"]\nenabled = true\n\n[other]\nx = 1\n",
+    "agentic-skill-router@local",
     false,
   );
   const stanzaLines = out
@@ -413,9 +413,9 @@ test("setPluginEnabled flips an existing enabled flag in place", () => {
 
 test("setPluginEnabled is idempotent for repeated writes", () => {
   let cfg = "";
-  cfg = setPluginEnabled(cfg, "skill-router@local", true);
-  cfg = setPluginEnabled(cfg, "skill-router@local", true);
-  const headers = cfg.match(/\[plugins\."skill-router@local"\]/g) ?? [];
+  cfg = setPluginEnabled(cfg, "agentic-skill-router@local", true);
+  cfg = setPluginEnabled(cfg, "agentic-skill-router@local", true);
+  const headers = cfg.match(/\[plugins\."agentic-skill-router@local"\]/g) ?? [];
   const enableds = cfg.match(/enabled = true/g) ?? [];
   assert.equal(headers.length, 1);
   assert.equal(enableds.length, 1);

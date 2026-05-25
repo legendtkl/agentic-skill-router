@@ -5,7 +5,7 @@
  * local changes.
  *
  * Format: a single trailing line of the form
- *   <!-- skill-router-managed: sha256=<64 lowercase hex chars> -->
+ *   <!-- agentic-skill-router-managed: sha256=<64 lowercase hex chars> -->
  *
  * The checksum is computed over the file content with the marker line (and
  * the single newline immediately preceding it, when present) stripped out.
@@ -14,9 +14,9 @@
  */
 import { createHash } from "node:crypto";
 
-const MARKER_PREFIX = "<!-- skill-router-managed: sha256=";
+const MARKER_PREFIX = "<!-- agentic-skill-router-managed: sha256=";
 const MARKER_SUFFIX = " -->";
-const MARKER_REGEX = /^<!-- skill-router-managed: sha256=([0-9a-f]{64}) -->$/m;
+const MARKER_REGEX = /^<!-- agentic-skill-router-managed: sha256=([0-9a-f]{64}) -->$/m;
 
 /**
  * Compute the sha256 hex digest of a body string.

@@ -12,7 +12,7 @@
  * always ends with exactly one trailing newline.
  *
  * @param {string} config Original TOML content. May be empty.
- * @param {string} pluginKey Quoted plugin identifier (e.g. `skill-router@local`).
+ * @param {string} pluginKey Quoted plugin identifier (e.g. `agentic-skill-router@local`).
  * @param {boolean} enabled Desired flag value.
  * @returns {string} The rewritten TOML.
  */

@@ -169,7 +169,7 @@ interface StatusJson {
 }
 
 test(
-  "[skill-router-cli] Codex OpenAI skills e2e installs curated skills, disables a subset, and routes 20 queries",
+  "[agentic-skill-router-cli] Codex OpenAI skills e2e installs curated skills, disables a subset, and routes 20 queries",
   async () => {
     assert.ok(CODEX_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.includes(OPENAI_SKILLS_REPO)));
     assert.ok(CODEX_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.startsWith("HOME=")));
@@ -179,7 +179,7 @@ test(
     try {
       assert.equal(fresh.env.CODEX_HOME, undefined);
       assert.equal(fresh.env.AGENTS_HOME, undefined);
-      assert.equal(fresh.env.SKILL_ROUTER_HOST, undefined);
+      assert.equal(fresh.env.AGENTIC_SKILL_ROUTER_HOST, undefined);
       await installSkillRouterForCodex(fresh.env);
       const installedOpenAiSkillCount = await installOpenAiCuratedSkillsFromGithub(
         fresh.workdir,
@@ -191,7 +191,7 @@ test(
       const routerBin = await installedCodexRouterBin(fresh.codexHome);
       assert.equal(await fileExists(routerBin), true);
       const config = await readFile(join(fresh.codexHome, "config.toml"), "utf8");
-      assert.match(config, /\[plugins\."skill-router@local"\]\nenabled = true/);
+      assert.match(config, /\[plugins\."agentic-skill-router@local"\]\nenabled = true/);
 
       const listed = await runRouterJson<SkillListItem[]>(routerBin, ["skills", "list", "--json"], fresh.env);
       const codexOpenAiSkills = listed.filter((item) => item.id.startsWith("user:codex:"));
@@ -202,7 +202,7 @@ test(
       }
       assert.ok(!listed.some((item) => item.id === "user:codex:skill-installer"));
       assert.ok(!listed.some((item) => item.id.startsWith("builtin:codex-system:")));
-      assert.ok(listed.some((item) => item.id === "plugin:skill-router@local:skill-router-skills"));
+      assert.ok(listed.some((item) => item.id === "plugin:agentic-skill-router@local:agentic-skill-router-skills"));
 
       await runRouter(
         routerBin,
@@ -219,7 +219,7 @@ test(
       for (const skill of DISABLED_OPENAI_SKILLS) {
         const skillDir = join(fresh.codexHome, "skills", skill);
         assert.equal(await fileExists(join(skillDir, "SKILL.md")), false);
-        assert.equal(await fileExists(join(skillDir, "SKILL.md.skill-router-disabled")), true);
+        assert.equal(await fileExists(join(skillDir, "SKILL.md.agentic-skill-router-disabled")), true);
       }
 
       const status = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
@@ -239,7 +239,7 @@ test(
         assert.equal(routed.action, "read-skill-file");
         assert.equal(routed.recorded, true);
         assert.equal(routed.selected?.id, expected);
-        assert.match(routed.selected?.skillMdPath ?? "", /SKILL\.md\.skill-router-disabled$/);
+        assert.match(routed.selected?.skillMdPath ?? "", /SKILL\.md\.agentic-skill-router-disabled$/);
         assert.ok(routed.matches.some((match) => match.id === expected));
       }
 
@@ -298,13 +298,13 @@ test(
       const probePath = await writeCodexAgentProbe(fresh.projectCwd);
       const finalMessagePath = join(fresh.root, "codex-agent-final.json");
       const prompt = [
-        "/skill-router:skills",
-        "Run the skill-router Codex integration check.",
+        "/agentic-skill-router:skills",
+        "Run the agentic-skill-router Codex integration check.",
         `First, read the slash command prompt sentinel line named "Codex slash command sentinel" and keep its value.`,
-        `Then use the installed skill-router-skills workflow, read its SKILL.md, and keep the value from the line named "Codex workflow sentinel".`,
+        `Then use the installed agentic-skill-router-skills workflow, read its SKILL.md, and keep the value from the line named "Codex workflow sentinel".`,
         "Run this exact local probe command, passing the workflow sentinel value as the single argument:",
         `node ${JSON.stringify(probePath)} "<workflow-sentinel-value>"`,
-        "The probe calls skill-router for 20 disabled OpenAI skill queries, reads each returned selected.skillMdPath, and extracts the Codex E2E sentinel line.",
+        "The probe calls agentic-skill-router for 20 disabled OpenAI skill queries, reads each returned selected.skillMdPath, and extracts the Codex E2E sentinel line.",
         "Return only minified JSON in this exact shape: {\"slashSentinel\":\"...\",\"workflowSentinel\":\"...\",\"probe\":<probe stdout JSON>}.",
         "Do not infer or fabricate sentinel values.",
       ].join("\n");
@@ -351,12 +351,12 @@ test(
 );
 
 async function makeFreshCodexEnvironment(): Promise<FreshCodexEnvironment> {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-codex-openai-e2e-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-codex-openai-e2e-"));
   const codexHome = join(root, ".codex");
   const agentsHome = join(root, ".agents");
   const workdir = join(root, "work");
   const projectCwd = join(root, "project");
-  const stateDir = join(projectCwd, ".skill-router");
+  const stateDir = join(projectCwd, ".agentic-skill-router");
 
   await mkdir(codexHome, { recursive: true });
   await mkdir(agentsHome, { recursive: true });
@@ -367,13 +367,13 @@ async function makeFreshCodexEnvironment(): Promise<FreshCodexEnvironment> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: root,
-    SKILL_ROUTER_STATE_DIR: stateDir,
-    SKILL_ROUTER_CWD: projectCwd,
+    AGENTIC_SKILL_ROUTER_STATE_DIR: stateDir,
+    AGENTIC_SKILL_ROUTER_CWD: projectCwd,
   };
   delete env.CODEX_HOME;
   delete env.AGENTS_HOME;
   delete env.CLAUDE_HOME;
-  delete env.SKILL_ROUTER_HOST;
+  delete env.AGENTIC_SKILL_ROUTER_HOST;
 
   return {
     root,
@@ -446,13 +446,13 @@ async function appendCodexRouterWorkflowSentinels(codexHome: string): Promise<vo
     `\n\n## Codex E2E Workflow Probe\n\nCodex workflow sentinel: ${CODEX_WORKFLOW_SENTINEL}\n`,
   );
   await appendFile(
-    join(codexHome, "prompts", "skill-router-skills.md"),
+    join(codexHome, "prompts", "agentic-skill-router-skills.md"),
     `\nCodex slash command sentinel: ${CODEX_SLASH_SENTINEL}\n`,
   );
 }
 
 async function writeCodexAgentProbe(projectCwd: string): Promise<string> {
-  const probePath = join(projectCwd, "codex-skill-router-agent-probe.mjs");
+  const probePath = join(projectCwd, "codex-agentic-skill-router-agent-probe.mjs");
   const source = `import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -462,18 +462,18 @@ const expectedWorkflowSentinel = process.argv[2];
 if (!expectedWorkflowSentinel) throw new Error("workflow sentinel argument is required");
 const codexHome = process.env.CODEX_HOME ?? join(homedir(), ".codex");
 
-const pluginRoot = join(codexHome, "plugins", "cache", "local", "skill-router");
+const pluginRoot = join(codexHome, "plugins", "cache", "local", "agentic-skill-router");
 const versions = readdirSync(pluginRoot)
-  .filter((version) => existsSync(join(pluginRoot, version, "bin", "skill-router")))
+  .filter((version) => existsSync(join(pluginRoot, version, "bin", "agentic-skill-router")))
   .sort((a, b) => statSync(join(pluginRoot, b)).mtimeMs - statSync(join(pluginRoot, a)).mtimeMs);
-if (versions.length === 0) throw new Error("installed skill-router plugin bundle not found");
+if (versions.length === 0) throw new Error("installed agentic-skill-router plugin bundle not found");
 
 const installedPluginRoot = join(pluginRoot, versions[0]);
-const routerBin = join(installedPluginRoot, "bin", "skill-router");
-const workflowSkillPath = join(installedPluginRoot, "skills", "skill-router-skills", "SKILL.md");
+const routerBin = join(installedPluginRoot, "bin", "agentic-skill-router");
+const workflowSkillPath = join(installedPluginRoot, "skills", "agentic-skill-router-skills", "SKILL.md");
 const workflowSkill = readFileSync(workflowSkillPath, "utf8");
 if (!workflowSkill.includes(\`Codex workflow sentinel: \${expectedWorkflowSentinel}\`)) {
-  throw new Error("workflow sentinel argument did not match installed skill-router-skills SKILL.md");
+  throw new Error("workflow sentinel argument did not match installed agentic-skill-router-skills SKILL.md");
 }
 
 const queries = ${JSON.stringify(ROUTE_CASES.map((routeCase) => routeCase.query), null, 2)};
@@ -556,7 +556,7 @@ async function localCodexAuthPath(): Promise<string | null> {
 async function installedCodexRouterBin(codexHome: string): Promise<string> {
   const manifestRaw = await readFile(join(REPO_ROOT, "plugins", "codex", ".codex-plugin", "plugin.json"), "utf8");
   const manifest = JSON.parse(manifestRaw) as { version: string };
-  return join(codexHome, "plugins", "cache", "local", "skill-router", manifest.version, "bin", "skill-router");
+  return join(codexHome, "plugins", "cache", "local", "agentic-skill-router", manifest.version, "bin", "agentic-skill-router");
 }
 
 async function installedCodexRouterSkillPath(codexHome: string): Promise<string> {
@@ -567,10 +567,10 @@ async function installedCodexRouterSkillPath(codexHome: string): Promise<string>
     "plugins",
     "cache",
     "local",
-    "skill-router",
+    "agentic-skill-router",
     manifest.version,
     "skills",
-    "skill-router-skills",
+    "agentic-skill-router-skills",
     "SKILL.md",
   );
 }
@@ -586,7 +586,7 @@ async function runRouterJson<T>(bin: string, args: string[], env: NodeJS.Process
     return JSON.parse(stdout) as T;
   } catch (err) {
     const tail = stdout.slice(-500);
-    throw new Error(`failed to parse skill-router JSON output (${stdout.length} chars): ${(err as Error).message}\n${tail}`);
+    throw new Error(`failed to parse agentic-skill-router JSON output (${stdout.length} chars): ${(err as Error).message}\n${tail}`);
   }
 }
 

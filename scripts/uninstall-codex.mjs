@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Uninstall skill-router from Codex.
+ * Uninstall agentic-skill-router from Codex.
  *
- * - removes ~/.codex/plugins/cache/local/skill-router/
- * - sets [plugins."skill-router@local"].enabled = false in ~/.codex/config.toml
- * - removes ~/.codex/prompts/skill-router-skills.md
+ * - removes ~/.codex/plugins/cache/local/agentic-skill-router/
+ * - sets [plugins."agentic-skill-router@local"].enabled = false in ~/.codex/config.toml
+ * - removes ~/.codex/prompts/agentic-skill-router-skills.md
  *
- * Does NOT touch ~/.skill-router/ unless --purge is passed.
+ * Does NOT touch ~/.agentic-skill-router/ unless --purge is passed.
  */
 import { readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -21,8 +21,8 @@ import { isManagedUnchanged } from "./prompt-marker.mjs";
 const codexHome = process.env["CODEX_HOME"] || join(homedir(), ".codex");
 const cacheDir = join(codexHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME);
 const configPath = join(codexHome, "config.toml");
-const promptPath = join(codexHome, "prompts/skill-router-skills.md");
-const stateDir = process.env["SKILL_ROUTER_STATE_DIR"] || join(homedir(), ".skill-router");
+const promptPath = join(codexHome, "prompts/agentic-skill-router-skills.md");
+const stateDir = process.env["AGENTIC_SKILL_ROUTER_STATE_DIR"] || join(homedir(), ".agentic-skill-router");
 const statePath = join(stateDir, "state-codex.json");
 
 const purge = process.argv.includes("--purge");
@@ -34,7 +34,7 @@ async function main() {
     statePath,
     warnPrefix: "!",
     formatRestoreHint: () => [
-      `  To restore them BEFORE uninstalling, run /skill-router:skills enable <id...> or use the bundled CLI.`,
+      `  To restore them BEFORE uninstalling, run /agentic-skill-router:skills enable <id...> or use the bundled CLI.`,
     ],
     log,
   });
@@ -72,7 +72,7 @@ async function removeSlashCommand() {
     existing = await readFile(promptPath, "utf8");
   } catch (err) {
     if (err && /** @type {NodeJS.ErrnoException} */(err).code === "ENOENT") {
-      log(`  /skill-router:skills prompt already absent`);
+      log(`  /agentic-skill-router:skills prompt already absent`);
       return;
     }
     throw err;
@@ -81,14 +81,14 @@ async function removeSlashCommand() {
   if (!isManagedUnchanged(existing)) {
     process.stderr.write(
       `! ${promptPath} has local edits; keeping your version.\n` +
-      `  Remove the file manually if you no longer need the /skill-router:skills slash command.\n`,
+      `  Remove the file manually if you no longer need the /agentic-skill-router:skills slash command.\n`,
     );
-    log(`  skipped /skill-router:skills prompt (user-modified)`);
+    log(`  skipped /agentic-skill-router:skills prompt (user-modified)`);
     return;
   }
 
   await rm(promptPath, { force: true });
-  log(`  removed /skill-router:skills prompt`);
+  log(`  removed /agentic-skill-router:skills prompt`);
 }
 
 async function purgeState() {

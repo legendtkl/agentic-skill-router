@@ -72,12 +72,12 @@ test("collectUsageStats picks up <command-name> tags from string content", async
 });
 
 test("collectUsageStats returns empty map when projectsDir does not exist", async () => {
-  const stats = await collectUsageStats("/nonexistent/path/skill-router-test");
+  const stats = await collectUsageStats("/nonexistent/path/agentic-skill-router-test");
   assert.equal(stats.size, 0);
 });
 
 test("collectUsageStats skips unreadable transcript files", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-usage-read-error-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-usage-read-error-"));
   const projectsDir = join(root, "projects");
   const sessionDir = join(projectsDir, "proj");
   const readable = join(sessionDir, "readable.jsonl");
@@ -206,7 +206,7 @@ test("lookupUsage: non-conflicting plugin still uses short-form attribution", ()
 // ─── usage cache (issue #37) ─────────────────────────────────────────────────
 
 async function mkTmpProjects(): Promise<{ projectsDir: string; cacheDir: string; cleanup: () => Promise<void> }> {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-usage-cache-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-usage-cache-"));
   const projectsDir = join(root, "projects");
   const cacheDir = join(root, "cache");
   await mkdir(projectsDir, { recursive: true });
@@ -242,7 +242,7 @@ test("collectUsageStats writes a cache file when host is provided", async () => 
     await writeTranscript(session, [FOO_TOOLUSE, BAR_TOOLUSE]);
     const cachePath = join(cacheDir, "usage-cache-codex.json");
 
-    delete process.env["SKILL_ROUTER_USAGE_CACHE"];
+    delete process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"];
     const stats = await collectUsageStats(projectsDir, { cachePath });
     assert.equal(stats.get("foo")?.callCount, 1);
     assert.equal(stats.get("bar")?.callCount, 1);
@@ -268,7 +268,7 @@ test("collectUsageStats reuses cached stats when size+mtime are unchanged", asyn
     const session = join(projectsDir, "proj-a", "session.jsonl");
     await writeTranscript(session, [FOO_TOOLUSE]);
     const cachePath = join(cacheDir, "usage-cache-codex.json");
-    delete process.env["SKILL_ROUTER_USAGE_CACHE"];
+    delete process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"];
 
     // First scan: real read populates the cache.
     await collectUsageStats(projectsDir, { cachePath });
@@ -298,7 +298,7 @@ test("collectUsageStats invalidates the cache entry when mtime changes", async (
     const session = join(projectsDir, "proj-a", "session.jsonl");
     await writeTranscript(session, [FOO_TOOLUSE]);
     const cachePath = join(cacheDir, "usage-cache-codex.json");
-    delete process.env["SKILL_ROUTER_USAGE_CACHE"];
+    delete process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"];
 
     await collectUsageStats(projectsDir, { cachePath });
 
@@ -323,7 +323,7 @@ test("collectUsageStats prunes cache entries for deleted transcript files", asyn
     await writeTranscript(sessionA, [FOO_TOOLUSE]);
     await writeTranscript(sessionB, [BAR_TOOLUSE]);
     const cachePath = join(cacheDir, "usage-cache-codex.json");
-    delete process.env["SKILL_ROUTER_USAGE_CACHE"];
+    delete process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"];
 
     await collectUsageStats(projectsDir, { cachePath });
     let parsed = JSON.parse(await readFile(cachePath, "utf8"));
@@ -341,14 +341,14 @@ test("collectUsageStats prunes cache entries for deleted transcript files", asyn
   }
 });
 
-test("collectUsageStats: SKILL_ROUTER_USAGE_CACHE=0 disables read and write", async () => {
+test("collectUsageStats: AGENTIC_SKILL_ROUTER_USAGE_CACHE=0 disables read and write", async () => {
   const { projectsDir, cacheDir, cleanup } = await mkTmpProjects();
   try {
     const session = join(projectsDir, "proj-a", "session.jsonl");
     await writeTranscript(session, [FOO_TOOLUSE]);
     const cachePath = join(cacheDir, "usage-cache-codex.json");
 
-    process.env["SKILL_ROUTER_USAGE_CACHE"] = "0";
+    process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"] = "0";
     try {
       const stats = await collectUsageStats(projectsDir, { cachePath });
       assert.equal(stats.get("foo")?.callCount, 1);
@@ -356,7 +356,7 @@ test("collectUsageStats: SKILL_ROUTER_USAGE_CACHE=0 disables read and write", as
       // Cache file must not have been created.
       await assert.rejects(() => readFile(cachePath, "utf8"), /ENOENT/);
     } finally {
-      delete process.env["SKILL_ROUTER_USAGE_CACHE"];
+      delete process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"];
     }
   } finally {
     await cleanup();
@@ -369,7 +369,7 @@ test("collectUsageStats: no host and no cachePath skips caching entirely", async
     const session = join(projectsDir, "proj-a", "session.jsonl");
     await writeTranscript(session, [FOO_TOOLUSE]);
 
-    delete process.env["SKILL_ROUTER_USAGE_CACHE"];
+    delete process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"];
     // Backwards-compatible single-arg form must still work and must not
     // create any side-effect cache file.
     const stats = await collectUsageStats(projectsDir);

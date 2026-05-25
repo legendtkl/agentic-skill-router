@@ -167,7 +167,7 @@ interface StatusJson {
 }
 
 test(
-  "[skill-router-cli] Claude Code OpenAI skills e2e installs curated skills, disables a subset, and routes 20 queries",
+  "[agentic-skill-router-cli] Claude Code OpenAI skills e2e installs curated skills, disables a subset, and routes 20 queries",
   async () => {
     assert.ok(CLAUDE_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.includes(OPENAI_SKILLS_REPO)));
     assert.ok(CLAUDE_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.startsWith("HOME=")));
@@ -176,7 +176,7 @@ test(
     const fresh = await makeFreshClaudeEnvironment();
     try {
       assert.equal(fresh.env.CLAUDE_HOME, undefined);
-      assert.equal(fresh.env.SKILL_ROUTER_HOST, undefined);
+      assert.equal(fresh.env.AGENTIC_SKILL_ROUTER_HOST, undefined);
       await installSkillRouterForClaude(fresh.env);
       const installedOpenAiSkillCount = await installOpenAiCuratedSkillsFromGithub(
         fresh.workdir,
@@ -190,7 +190,7 @@ test(
       const settings = JSON.parse(await readFile(join(fresh.claudeHome, "settings.json"), "utf8")) as {
         enabledPlugins?: Record<string, boolean>;
       };
-      assert.equal(settings.enabledPlugins?.["skill-router@local"], true);
+      assert.equal(settings.enabledPlugins?.["agentic-skill-router@local"], true);
 
       const listed = await runRouterJson<SkillListItem[]>(routerBin, ["skills", "list", "--json"], fresh.env);
       const claudeOpenAiSkills = listed.filter((item) => {
@@ -205,7 +205,7 @@ test(
         assert.ok(listed.some((item) => item.id === `user:${skill}`), `expected ${skill} to be installed`);
       }
       assert.ok(!listed.some((item) => item.id === "user:skill-installer"));
-      assert.ok(listed.some((item) => item.id === "plugin:skill-router@local:skill-router-skills"));
+      assert.ok(listed.some((item) => item.id === "plugin:agentic-skill-router@local:agentic-skill-router-skills"));
 
       await runRouter(
         routerBin,
@@ -222,7 +222,7 @@ test(
       for (const skill of DISABLED_OPENAI_SKILLS) {
         const skillDir = join(fresh.claudeHome, "skills", skill);
         assert.equal(await fileExists(join(skillDir, "SKILL.md")), false);
-        assert.equal(await fileExists(join(skillDir, "SKILL.md.skill-router-disabled")), true);
+        assert.equal(await fileExists(join(skillDir, "SKILL.md.agentic-skill-router-disabled")), true);
       }
 
       const status = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
@@ -242,7 +242,7 @@ test(
         assert.equal(routed.action, "read-skill-file");
         assert.equal(routed.recorded, true);
         assert.equal(routed.selected?.id, expected);
-        assert.match(routed.selected?.skillMdPath ?? "", /SKILL\.md\.skill-router-disabled$/);
+        assert.match(routed.selected?.skillMdPath ?? "", /SKILL\.md\.agentic-skill-router-disabled$/);
         assert.ok(routed.matches.some((match) => match.id === expected));
       }
 
@@ -300,12 +300,12 @@ test(
 
       const probePath = await writeClaudeAgentProbe(fresh.projectCwd);
       const prompt = [
-        "Run the skill-router Claude Code integration check.",
-        "Read the installed skill-router-skills SKILL.md, and keep the value from the line named",
+        "Run the agentic-skill-router Claude Code integration check.",
+        "Read the installed agentic-skill-router-skills SKILL.md, and keep the value from the line named",
         `"Claude workflow sentinel".`,
         "Run this exact local probe command, passing the workflow sentinel value as the single argument:",
         `node ${JSON.stringify(probePath)} "<workflow-sentinel-value>"`,
-        "The probe calls skill-router for 20 disabled OpenAI skill queries, reads each returned selected.skillMdPath, and extracts the Claude E2E sentinel line.",
+        "The probe calls agentic-skill-router for 20 disabled OpenAI skill queries, reads each returned selected.skillMdPath, and extracts the Claude E2E sentinel line.",
         "Return only minified JSON in this exact shape: {\"workflowSentinel\":\"...\",\"probe\":<probe stdout JSON>}.",
         "Do not infer or fabricate sentinel values.",
       ].join("\n");
@@ -337,11 +337,11 @@ test(
 );
 
 async function makeFreshClaudeEnvironment(): Promise<FreshClaudeEnvironment> {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-claude-openai-e2e-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-claude-openai-e2e-"));
   const claudeHome = join(root, ".claude");
   const workdir = join(root, "work");
   const projectCwd = join(root, "project");
-  const stateDir = join(projectCwd, ".skill-router");
+  const stateDir = join(projectCwd, ".agentic-skill-router");
 
   await mkdir(claudeHome, { recursive: true });
   await mkdir(workdir, { recursive: true });
@@ -351,13 +351,13 @@ async function makeFreshClaudeEnvironment(): Promise<FreshClaudeEnvironment> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     HOME: root,
-    SKILL_ROUTER_STATE_DIR: stateDir,
-    SKILL_ROUTER_CWD: projectCwd,
+    AGENTIC_SKILL_ROUTER_STATE_DIR: stateDir,
+    AGENTIC_SKILL_ROUTER_CWD: projectCwd,
   };
   delete env.CLAUDE_HOME;
   delete env.CODEX_HOME;
   delete env.AGENTS_HOME;
-  delete env.SKILL_ROUTER_HOST;
+  delete env.AGENTIC_SKILL_ROUTER_HOST;
 
   return {
     root,
@@ -431,7 +431,7 @@ async function appendClaudeRouterWorkflowSentinel(claudeHome: string): Promise<v
 }
 
 async function writeClaudeAgentProbe(projectCwd: string): Promise<string> {
-  const probePath = join(projectCwd, "claude-skill-router-agent-probe.mjs");
+  const probePath = join(projectCwd, "claude-agentic-skill-router-agent-probe.mjs");
   const source = `import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -441,18 +441,18 @@ const expectedWorkflowSentinel = process.argv[2];
 if (!expectedWorkflowSentinel) throw new Error("workflow sentinel argument is required");
 const claudeHome = process.env.CLAUDE_HOME ?? join(homedir(), ".claude");
 
-const pluginRoot = join(claudeHome, "plugins", "cache", "local", "skill-router");
+const pluginRoot = join(claudeHome, "plugins", "cache", "local", "agentic-skill-router");
 const versions = readdirSync(pluginRoot)
-  .filter((version) => existsSync(join(pluginRoot, version, "bin", "skill-router")))
+  .filter((version) => existsSync(join(pluginRoot, version, "bin", "agentic-skill-router")))
   .sort((a, b) => statSync(join(pluginRoot, b)).mtimeMs - statSync(join(pluginRoot, a)).mtimeMs);
-if (versions.length === 0) throw new Error("installed skill-router plugin bundle not found");
+if (versions.length === 0) throw new Error("installed agentic-skill-router plugin bundle not found");
 
 const installedPluginRoot = join(pluginRoot, versions[0]);
-const routerBin = join(installedPluginRoot, "bin", "skill-router");
-const workflowSkillPath = join(installedPluginRoot, "skills", "skill-router-skills", "SKILL.md");
+const routerBin = join(installedPluginRoot, "bin", "agentic-skill-router");
+const workflowSkillPath = join(installedPluginRoot, "skills", "agentic-skill-router-skills", "SKILL.md");
 const workflowSkill = readFileSync(workflowSkillPath, "utf8");
 if (!workflowSkill.includes(\`Claude workflow sentinel: \${expectedWorkflowSentinel}\`)) {
-  throw new Error("workflow sentinel argument did not match installed skill-router-skills SKILL.md");
+  throw new Error("workflow sentinel argument did not match installed agentic-skill-router-skills SKILL.md");
 }
 
 const queries = ${JSON.stringify(ROUTE_CASES.map((routeCase) => routeCase.query), null, 2)};
@@ -535,7 +535,7 @@ async function localClaudeAuthPath(): Promise<string | null> {
 async function installedClaudeRouterBin(claudeHome: string): Promise<string> {
   const manifestRaw = await readFile(join(REPO_ROOT, "plugins", "claude-code", ".claude-plugin", "plugin.json"), "utf8");
   const manifest = JSON.parse(manifestRaw) as { version: string };
-  return join(claudeHome, "plugins", "cache", "local", "skill-router", manifest.version, "bin", "skill-router");
+  return join(claudeHome, "plugins", "cache", "local", "agentic-skill-router", manifest.version, "bin", "agentic-skill-router");
 }
 
 async function installedClaudeRouterSkillPath(claudeHome: string): Promise<string> {
@@ -546,10 +546,10 @@ async function installedClaudeRouterSkillPath(claudeHome: string): Promise<strin
     "plugins",
     "cache",
     "local",
-    "skill-router",
+    "agentic-skill-router",
     manifest.version,
     "skills",
-    "skill-router-skills",
+    "agentic-skill-router-skills",
     "SKILL.md",
   );
 }
@@ -565,7 +565,7 @@ async function runRouterJson<T>(bin: string, args: string[], env: NodeJS.Process
     return JSON.parse(stdout) as T;
   } catch (err) {
     const tail = stdout.slice(-500);
-    throw new Error(`failed to parse skill-router JSON output (${stdout.length} chars): ${(err as Error).message}\n${tail}`);
+    throw new Error(`failed to parse agentic-skill-router JSON output (${stdout.length} chars): ${(err as Error).message}\n${tail}`);
   }
 }
 

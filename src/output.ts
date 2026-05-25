@@ -10,38 +10,38 @@ import type { Confidence, RouteMode, Skill, Suggestion, UsageStat } from "./type
  * for `--help` and by the various dispatch fallbacks for `-h`/`--help`.
  */
 export function usage(code = 0): number {
-  console.log(`skill-router — manage installed Agent Skills across supported hosts
+  console.log(`agentic-skill-router — manage installed Agent Skills across supported hosts
 
 USAGE
-  skill-router init [codex|claude-code] [project|global] [--cwd=<dir>] [--force] [--json]
-  skill-router skills list [--json]
-  skill-router skills suggest [--unused-for=<dur>] [--json]
-  skill-router skills route --query=<text> [--mode=auto|metadata|body|lexical|dci] [--json] [--top-k=N] [--no-record]
-  skill-router skills corpus search (--any=<term>... | --all=<term>...) [--ranker=weighted|bm25] [--limit=N] [--json]
-  skill-router skills corpus inspect <id-or-name-or-ref...> [--json]
-  skill-router skills corpus select <id-or-name-or-ref> --query=<text> --confidence=high|medium --reason=<text> [--json]
-  skill-router skills dci search --query=<text> [--query=<text>...] [--metadata-only] [--json] [--top-k=N]
-  skill-router skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
-  skill-router skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]
-  skill-router skills dci open <id-or-ref> [--line=N] [--window=N] [--json]
-  skill-router skills dci inspect <id-or-ref> [--json]
-  skill-router skills dci read <id-or-ref> [--json] [--max-chars=N]
-  skill-router skills dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
-  skill-router skills dci budget [--json]
-  skill-router skills body <search|grep|find|open|inspect|read|select|budget> ...  (alias for dci)
-  skill-router skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>]
-  skill-router skills enable <id...>
-  skill-router skills status [--json]
-  skill-router skills config get [--json]
-  skill-router skills config set <key> <value>
-  skill-router skills config path
+  agentic-skill-router init [codex|claude-code] [project|global] [--cwd=<dir>] [--force] [--json]
+  agentic-skill-router skills list [--json]
+  agentic-skill-router skills suggest [--unused-for=<dur>] [--json]
+  agentic-skill-router skills route --query=<text> [--mode=auto|metadata|body|lexical|dci] [--json] [--top-k=N] [--no-record]
+  agentic-skill-router skills corpus search (--any=<term>... | --all=<term>...) [--ranker=weighted|bm25] [--limit=N] [--json]
+  agentic-skill-router skills corpus inspect <id-or-name-or-ref...> [--json]
+  agentic-skill-router skills corpus select <id-or-name-or-ref> --query=<text> --confidence=high|medium --reason=<text> [--json]
+  agentic-skill-router skills dci search --query=<text> [--query=<text>...] [--metadata-only] [--json] [--top-k=N]
+  agentic-skill-router skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
+  agentic-skill-router skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]
+  agentic-skill-router skills dci open <id-or-ref> [--line=N] [--window=N] [--json]
+  agentic-skill-router skills dci inspect <id-or-ref> [--json]
+  agentic-skill-router skills dci read <id-or-ref> [--json] [--max-chars=N]
+  agentic-skill-router skills dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
+  agentic-skill-router skills dci budget [--json]
+  agentic-skill-router skills body <search|grep|find|open|inspect|read|select|budget> ...  (alias for dci)
+  agentic-skill-router skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>]
+  agentic-skill-router skills enable <id...>
+  agentic-skill-router skills status [--json]
+  agentic-skill-router skills config get [--json]
+  agentic-skill-router skills config set <key> <value>
+  agentic-skill-router skills config path
 
 DURATION  bare integer = days. Suffixed: 30d / 2w / 3m / 1y
-CONFIG    ~/.skill-router/config.json   { "unusedForDays": 30, "routeMode": "auto" }
+CONFIG    ~/.agentic-skill-router/config.json   { "unusedForDays": 30, "routeMode": "auto" }
           keys: unusedForDays (int), routeMode (auto|metadata|body|lexical|dci),
                 keepNames (JSON array), keepIds (JSON array)
-HOST      installed plugin CLIs auto-detect their host; repo checkouts default to claude-code
-STATE     ~/.skill-router/state-<host>.json
+HOST      installed plugin wrappers set their host; repo checkouts default to claude-code
+STATE     ~/.agentic-skill-router/state-<host>.json
 `);
   return code;
 }
@@ -155,11 +155,11 @@ export function parseConfidence(value: string | undefined): Confidence | null {
 
 /**
  * Resolves the route mode for `skills route`, preferring (in order):
- * the explicit `--mode` flag, the `SKILL_ROUTER_ROUTE_MODE` env var, then
+ * the explicit `--mode` flag, the `AGENTIC_SKILL_ROUTER_ROUTE_MODE` env var, then
  * the configured default. Returns `null` when an explicit value is invalid.
  */
 export function resolveRouteMode(cliValue: string | undefined, configValue: RouteMode): RouteMode | null {
-  if (cliValue === undefined || cliValue === "") return parseRouteMode(process.env["SKILL_ROUTER_ROUTE_MODE"]) ?? configValue;
+  if (cliValue === undefined || cliValue === "") return parseRouteMode(process.env["AGENTIC_SKILL_ROUTER_ROUTE_MODE"]) ?? configValue;
   return parseRouteMode(cliValue);
 }
 
@@ -299,7 +299,7 @@ export function printSuggestions(suggestions: Suggestion[], days: number): void 
     console.log(`  ${tag.padEnd(8)} ${s.skill.id}${ambiguity}`);
     console.log(`           ${s.reason}: ${s.details}`);
   }
-  console.log(`\nrun:  skill-router skills disable --all-suggested --unused-for=${days} --yes`);
+  console.log(`\nrun:  agentic-skill-router skills disable --all-suggested --unused-for=${days} --yes`);
 }
 
 export function pad(s: string, w: number): string {

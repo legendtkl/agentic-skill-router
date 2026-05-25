@@ -16,7 +16,7 @@ const REPO_ROOT = dirname(__dirname);
 const FIXTURE_SKILLS = join(__dirname, "fixtures/skills");
 
 async function makeFakeClaudeHome(): Promise<{ home: string; cleanup: () => Promise<void> }> {
-  const home = await mkdtemp(join(tmpdir(), "skill-router-home-"));
+  const home = await mkdtemp(join(tmpdir(), "agentic-skill-router-home-"));
   // Fake user-level skills root
   await mkdir(join(home, "skills"), { recursive: true });
   await cp(FIXTURE_SKILLS, join(home, "skills"), { recursive: true });
@@ -32,7 +32,7 @@ async function makeFakeClaudeHome(): Promise<{ home: string; cleanup: () => Prom
   );
   await mkdir(join(pluginPath, "skills/drop"), { recursive: true });
   await writeFile(
-    join(pluginPath, "skills/drop/SKILL.md.skill-router-disabled"),
+    join(pluginPath, "skills/drop/SKILL.md.agentic-skill-router-disabled"),
     "---\nname: drop\ndescription: should appear as disabled\n---\n",
   );
 
@@ -60,7 +60,7 @@ async function makeFakeClaudeHome(): Promise<{ home: string; cleanup: () => Prom
 }
 
 async function makeFakeProject(): Promise<{ root: string; cwd: string; cleanup: () => Promise<void> }> {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-project-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-project-"));
   const cwd = join(root, "packages", "app");
   await mkdir(join(root, ".git"), { recursive: true });
   await mkdir(cwd, { recursive: true });
@@ -91,7 +91,7 @@ test("listSkills enumerates user, plugin, and builtin sources", async () => {
     const zap = byId.get("user:zap-disabled");
     assert.ok(zap, "zap-disabled skill should be listed");
     assert.equal(zap!.isDisabled, true);
-    assert.match(zap!.skillMdPath, /SKILL\.md\.skill-router-disabled$/);
+    assert.match(zap!.skillMdPath, /SKILL\.md\.agentic-skill-router-disabled$/);
 
     // Plugin skills
     const keep = byId.get("plugin:myplugin@official:keep");
@@ -136,7 +136,7 @@ test("listSkills enumerates Claude project skill roots from cwd to repo root", a
   }
 });
 
-test("CLI list --json discovers Claude project skill roots from SKILL_ROUTER_CWD", async () => {
+test("CLI list --json discovers Claude project skill roots from AGENTIC_SKILL_ROUTER_CWD", async () => {
   const { home, cleanup: cleanupHome } = await makeFakeClaudeHome();
   const { cwd, cleanup: cleanupProject } = await makeFakeProject();
   try {
@@ -148,7 +148,7 @@ test("CLI list --json discovers Claude project skill roots from SKILL_ROUTER_CWD
         env: {
           ...process.env,
           CLAUDE_HOME: home,
-          SKILL_ROUTER_CWD: cwd,
+          AGENTIC_SKILL_ROUTER_CWD: cwd,
         },
       },
     );
@@ -193,7 +193,7 @@ test("plugin disabled in enabledPlugins surfaces as isPluginDisabled", async () 
 
 test("disable + enable round-trip on a user skill", async () => {
   const { home, cleanup } = await makeFakeClaudeHome();
-  const statePath = join(home, "skill-router-state.json");
+  const statePath = join(home, "agentic-skill-router-state.json");
   try {
     const host = new ClaudeCodeHost({ claudeHome: home });
     const skills = await host.listSkills();
@@ -217,7 +217,7 @@ test("disable + enable round-trip on a user skill", async () => {
 
 test("disable on builtin skill throws", async () => {
   const { home, cleanup } = await makeFakeClaudeHome();
-  const statePath = join(home, "skill-router-state.json");
+  const statePath = join(home, "agentic-skill-router-state.json");
   try {
     const host = new ClaudeCodeHost({ claudeHome: home });
     const skills = await host.listSkills();
@@ -237,8 +237,8 @@ test("symlink skill whose target is outside the skills root is marked outOfRoot 
   // Build a directory entirely outside the skills root to host the link
   // target. The skill directory under the link target is a fully valid
   // skill, but it lives outside the user's ~/.claude/skills tree, so
-  // skill-router must refuse to rename SKILL.md through it.
-  const outside = await mkdtemp(join(tmpdir(), "skill-router-outside-"));
+  // agentic-skill-router must refuse to rename SKILL.md through it.
+  const outside = await mkdtemp(join(tmpdir(), "agentic-skill-router-outside-"));
   try {
     const externalSkill = join(outside, "external-skill");
     await mkdir(externalSkill, { recursive: true });
@@ -260,7 +260,7 @@ test("symlink skill whose target is outside the skills root is marked outOfRoot 
     // that the host would reject mid-batch.
     assert.equal(external!.canDisable, false, "out-of-root symlink must report canDisable=false");
 
-    const statePath = join(home, "skill-router-state.json");
+    const statePath = join(home, "agentic-skill-router-state.json");
     // apply.ts disable refuses with a clear error
     await assert.rejects(
       () => disableSkill(external!, "test", { statePath, host: host.name }),
@@ -282,7 +282,7 @@ test("symlink skill whose target is outside the skills root is marked outOfRoot 
 
 test("symlink skill whose target is inside the same skills root remains disable-able", async () => {
   const { home, cleanup } = await makeFakeClaudeHome();
-  const statePath = join(home, "skill-router-state.json");
+  const statePath = join(home, "agentic-skill-router-state.json");
   try {
     // Create a real skill directory under the user skills root, then symlink
     // it under a second name. The symlink target IS inside the skills root,
@@ -336,7 +336,7 @@ test("Host interface does not expose disable/enable", async () => {
 });
 
 test("listSkills attaches frontmatterWarnings for nested mappings", async () => {
-  const home = await mkdtemp(join(tmpdir(), "skill-router-nested-fm-"));
+  const home = await mkdtemp(join(tmpdir(), "agentic-skill-router-nested-fm-"));
   try {
     await mkdir(join(home, "skills", "nested-meta"), { recursive: true });
     await writeFile(
@@ -375,7 +375,7 @@ test("listSkills attaches frontmatterWarnings for nested mappings", async () => 
 });
 
 test("readSkillFrontmatterDetailed stops after closed frontmatter", async () => {
-  const home = await mkdtemp(join(tmpdir(), "skill-router-frontmatter-prefix-"));
+  const home = await mkdtemp(join(tmpdir(), "agentic-skill-router-frontmatter-prefix-"));
   try {
     const skillDir = join(home, "skills", "frontmatter-prefix");
     await mkdir(skillDir, { recursive: true });
@@ -406,7 +406,7 @@ test("readSkillFrontmatterDetailed stops after closed frontmatter", async () => 
 });
 
 test("CLI list --json surfaces frontmatterWarnings only when non-empty", async () => {
-  const home = await mkdtemp(join(tmpdir(), "skill-router-nested-fm-cli-"));
+  const home = await mkdtemp(join(tmpdir(), "agentic-skill-router-nested-fm-cli-"));
   try {
     await mkdir(join(home, "skills", "nested-cli"), { recursive: true });
     await writeFile(
@@ -432,7 +432,7 @@ test("CLI list --json surfaces frontmatterWarnings only when non-empty", async (
     const result = await execFileAsync(
       process.execPath,
       ["--import", "tsx", cli, "skills", "list", "--json"],
-      { env: { ...process.env, CLAUDE_HOME: home, SKILL_ROUTER_CWD: home } },
+      { env: { ...process.env, CLAUDE_HOME: home, AGENTIC_SKILL_ROUTER_CWD: home } },
     );
     const listed = JSON.parse(result.stdout) as Array<{ id: string; frontmatterWarnings?: string[] }>;
     const nested = listed.find((s) => s.id === "user:nested-cli");

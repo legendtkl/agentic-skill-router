@@ -1,4 +1,4 @@
-# skill-router - Agent Guide
+# agentic-skill-router - Agent Guide
 
 ## Project Overview
 
@@ -78,7 +78,7 @@ npm run test:e2e:offline
 
 For executable changes that touch host discovery, plugin install, route
 selection, or disabled-skill behavior, also run the networked OpenAI skills
-e2e for the installed `skill-router` CLI path inside an isolated temporary
+e2e for the installed `agentic-skill-router` CLI path inside an isolated temporary
 home:
 
 ```bash
@@ -90,7 +90,7 @@ does not require a local Codex or Claude CLI, but does fetch the pinned
 `openai/skills` GitHub ref.
 
 If a change touches Codex CLI startup, slash prompts, plugin loading, or the
-agent-facing `skill-router-skills` workflow, also run the real Codex CLI e2e
+agent-facing `agentic-skill-router-skills` workflow, also run the real Codex CLI e2e
 when local `codex` and Codex auth are available:
 
 ```bash
@@ -98,7 +98,7 @@ npm run test:e2e:codex
 ```
 
 If a change touches Claude Code plugin loading or the agent-facing
-`skill-router-skills` workflow, also run the real Claude CLI e2e when a
+`agentic-skill-router-skills` workflow, also run the real Claude CLI e2e when a
 local `claude` binary and Claude auth (`~/.claude/.credentials.json`) are
 available:
 
@@ -126,7 +126,7 @@ every PR without touching the network or requiring local agent binaries.
 - File: `tests/cli-offline.e2e.ts`.
 - Creates a fresh temporary `HOME`, installs the local Codex plugin into it,
   drops a single fixture skill into the Codex skills dir, disables it via
-  the installed `skill-router` binary, and asserts that
+  the installed `agentic-skill-router` binary, and asserts that
   `skills route --query ... --json` selects the fixture back.
 - Must never touch the network and must not require any auth or external
   binary beyond `node`, `npm`, and the bundled CLI.
@@ -134,7 +134,7 @@ every PR without touching the network or requiring local agent binaries.
 
 ### Layer 2 — Network (`npm run test:e2e:network`, alias: `npm run test:e2e`)
 
-- Files: the `[skill-router-cli]` subtest of `tests/codex-openai.e2e.ts` and
+- Files: the `[agentic-skill-router-cli]` subtest of `tests/codex-openai.e2e.ts` and
   `tests/claude-openai.e2e.ts`.
 - Keep `tests/codex-openai.e2e.ts` as the real Codex install and routing
   guard for changes that touch Codex host discovery, Codex plugin install,
@@ -145,9 +145,9 @@ every PR without touching the network or requiring local agent binaries.
   `user:codex:<skill>`.
 - Allowed to fetch external git repositories (currently the pinned
   `openai/skills` ref). Must not require a local Codex CLI, Claude CLI,
-  Codex auth, `CODEX_HOME`, `AGENTS_HOME`, `CLAUDE_HOME`, or
-  `SKILL_ROUTER_HOST`; the installed plugin CLI must auto-detect its host
-  from the plugin bundle.
+  Codex auth, `CODEX_HOME`, `AGENTS_HOME`, `CLAUDE_HOME`, or a caller-provided
+  `AGENTIC_SKILL_ROUTER_HOST`; installed plugin wrappers must set their host
+  before delegating to the shared runtime.
 - Runs on the nightly schedule and via manual `workflow_dispatch` in CI.
 
 ### Layer 3 — Agent (`npm run test:e2e:agent`)
@@ -162,34 +162,34 @@ every PR without touching the network or requiring local agent binaries.
 - These tests self-skip when the local agent binary or auth is missing, so
   they are safe to run on any developer machine.
 - CI runs this layer only via manual `workflow_dispatch`, and the job is
-  pinned to `runs-on: [self-hosted, skill-router-agent-e2e]`. Hosted GitHub
+  pinned to `runs-on: [self-hosted, agentic-skill-router-agent-e2e]`. Hosted GitHub
   runners would not satisfy the local `codex` / `claude` binary and auth
   requirements, so without a configured self-hosted runner carrying the
-  `skill-router-agent-e2e` label the dispatched job will queue and never
+  `agentic-skill-router-agent-e2e` label the dispatched job will queue and never
   start — by design, so the agent layer never silently self-skips in CI.
 - To actually exercise the agent layer in CI, register a self-hosted runner
-  with the `skill-router-agent-e2e` label, put `codex` and `claude` on its
+  with the `agentic-skill-router-agent-e2e` label, put `codex` and `claude` on its
   PATH, and configure their auth credentials on that runner.
 
 ### Shared invariants for the OpenAI e2e files (layers 2 and 3)
 
 - Each case must create a fresh temporary home, install the local
-  skill-router plugin for the corresponding host under that home, install all
+  agentic-skill-router plugin for the corresponding host under that home, install all
   curated skills from the pinned official `openai/skills` repository, disable
-  a subset via the installed `skill-router` binary, and verify at least 20
+  a subset via the installed `agentic-skill-router` binary, and verify at least 20
   realistic user queries through `skills route --json`.
 - The pinned `openai/skills` ref currently contains 38 curated skills; each
   e2e should install that whole curated corpus rather than sampling a smaller
   set.
-- The separate Codex CLI e2e must invoke the installed `/skill-router:skills`
-  slash prompt, verify the slash prompt sentinel and `skill-router-skills`
+- The separate Codex CLI e2e must invoke the installed `/agentic-skill-router:skills`
+  slash prompt, verify the slash prompt sentinel and `agentic-skill-router-skills`
   workflow sentinel, then execute a probe that routes those disabled-skill
   queries, reads each returned `selected.skillMdPath`, and verifies per-skill
   sentinel markers from the matched skill file. This guards against tests that
   only check query text without proving Codex can invoke the installed router
   in a fresh environment.
 - The separate Claude CLI e2e must drive `claude -p` against the installed
-  Claude Code plugin, verify the `skill-router-skills` workflow sentinel, then
+  Claude Code plugin, verify the `agentic-skill-router-skills` workflow sentinel, then
   execute the same per-skill probe to confirm the agent can route disabled
   skills and reach each `selected.skillMdPath` in a fresh environment.
 - Only install `skills/.curated/*` from `openai/skills`. Do not copy
@@ -210,7 +210,7 @@ every PR without touching the network or requiring local agent binaries.
   under `src/hosts/`.
 - Built-in/system skills must remain protected and non-disableable.
 - Disabling is a rename operation:
-  - Skills: `SKILL.md` <-> `SKILL.md.skill-router-disabled`
+  - Skills: `SKILL.md` <-> `SKILL.md.agentic-skill-router-disabled`
 - Do not commit generated bundles under `plugins/*/lib/`; they are gitignored.
 - Add or update focused `node:test` coverage for behavior changes.
 
@@ -218,7 +218,7 @@ every PR without touching the network or requiring local agent binaries.
 
 - Non-doc changes should pass typecheck, tests, and build.
 - Keep PRs scoped; avoid unrelated refactors.
-- Never commit credentials or user-local state from `~/.skill-router`.
+- Never commit credentials or user-local state from `~/.agentic-skill-router`.
 
 ### PR Guidelines
 

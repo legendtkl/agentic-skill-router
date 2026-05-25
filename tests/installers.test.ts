@@ -10,9 +10,9 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(__dirname);
 const execFileAsync = promisify(execFile);
-const NPM_CACHE = join(tmpdir(), `skill-router-installers-npm-cache-${process.pid}`);
+const NPM_CACHE = join(tmpdir(), `agentic-skill-router-installers-npm-cache-${process.pid}`);
 
-const PLUGIN_KEY = "skill-router@local";
+const PLUGIN_KEY = "agentic-skill-router@local";
 const MAX_BUFFER = 4 * 1024 * 1024;
 
 const PKG_VERSION = JSON.parse(await readFile(join(REPO_ROOT, "package.json"), "utf8")).version as string;
@@ -30,7 +30,7 @@ function sandboxEnv(root: string, extra: NodeJS.ProcessEnv = {}): NodeJS.Process
     USERPROFILE: root,
     CLAUDE_HOME: join(root, ".claude"),
     CODEX_HOME: join(root, ".codex"),
-    SKILL_ROUTER_STATE_DIR: join(root, ".skill-router"),
+    AGENTIC_SKILL_ROUTER_STATE_DIR: join(root, ".agentic-skill-router"),
     npm_config_cache: NPM_CACHE,
     ...extra,
   };
@@ -74,9 +74,9 @@ test("[claude] install creates plugin cache, manifest, bin wrapper, and register
   const root = await mkdtemp(join(tmpdir(), "sr-installer-claude-"));
   try {
     const claudeHome = join(root, ".claude");
-    const installPath = join(claudeHome, "plugins", "cache", "local", "skill-router", PKG_VERSION);
-    const runtimePath = join(root, ".skill-router", "runtime", PKG_VERSION);
-    const wrapperPath = join(installPath, "bin", "skill-router");
+    const installPath = join(claudeHome, "plugins", "cache", "local", "agentic-skill-router", PKG_VERSION);
+    const runtimePath = join(root, ".agentic-skill-router", "runtime", PKG_VERSION);
+    const wrapperPath = join(installPath, "bin", "agentic-skill-router");
 
     await execFileAsync(process.execPath, ["scripts/install.mjs"], {
       cwd: REPO_ROOT,
@@ -86,21 +86,21 @@ test("[claude] install creates plugin cache, manifest, bin wrapper, and register
 
     // Plugin cache files
     assert.ok(await pathExists(join(installPath, ".claude-plugin", "plugin.json")), "plugin manifest copied");
-    assert.ok(await pathExists(join(installPath, "bin", "skill-router")), "host bin wrapper copied");
-    assert.equal(await pathExists(join(installPath, "lib", "skill-router.mjs")), false, "plugin cache does not duplicate runtime lib");
+    assert.ok(await pathExists(join(installPath, "bin", "agentic-skill-router")), "host bin wrapper copied");
+    assert.equal(await pathExists(join(installPath, "lib", "agentic-skill-router.mjs")), false, "plugin cache does not duplicate runtime lib");
     assert.ok(
-      await pathExists(join(installPath, "skills", "skill-router-skills", "SKILL.md")),
+      await pathExists(join(installPath, "skills", "agentic-skill-router-skills", "SKILL.md")),
       "router skill copied",
     );
-    assert.ok(await pathExists(join(runtimePath, "bin", "skill-router")), "shared runtime bin copied");
-    assert.ok(await pathExists(join(runtimePath, "lib", "skill-router.mjs")), "shared runtime lib copied");
+    assert.ok(await pathExists(join(runtimePath, "bin", "agentic-skill-router")), "shared runtime bin copied");
+    assert.ok(await pathExists(join(runtimePath, "lib", "agentic-skill-router.mjs")), "shared runtime lib copied");
 
     // Bin wrapper is executable
     const binStat = await stat(wrapperPath);
     assert.ok((binStat.mode & 0o111) !== 0, "bin wrapper is executable");
     const wrapper = await readFile(wrapperPath, "utf8");
-    assert.match(wrapper, /SKILL_ROUTER_HOST='claude-code'/);
-    assert.match(wrapper, /SKILL_ROUTER_ASSET_ROOT=/);
+    assert.match(wrapper, /AGENTIC_SKILL_ROUTER_HOST='claude-code'/);
+    assert.match(wrapper, /AGENTIC_SKILL_ROUTER_ASSET_ROOT=/);
 
     await writeProbeSkill(
       join(claudeHome, "skills", "wrapper-probe"),
@@ -109,7 +109,7 @@ test("[claude] install creates plugin cache, manifest, bin wrapper, and register
     );
     const { stdout: listStdout } = await execFileAsync(wrapperPath, ["skills", "list", "--json"], {
       cwd: REPO_ROOT,
-      env: sandboxEnv(root, { SKILL_ROUTER_HOST: "codex" }),
+      env: sandboxEnv(root, { AGENTIC_SKILL_ROUTER_HOST: "codex" }),
       maxBuffer: MAX_BUFFER,
     });
     const listed = JSON.parse(listStdout) as Array<{ id: string }>;
@@ -122,13 +122,13 @@ test("[claude] install creates plugin cache, manifest, bin wrapper, and register
       ["init", "claude-code", "project", "--cwd", initProject, "--json"],
       {
         cwd: REPO_ROOT,
-        env: sandboxEnv(root, { SKILL_ROUTER_ASSET_ROOT: join(root, "missing-assets") }),
+        env: sandboxEnv(root, { AGENTIC_SKILL_ROUTER_ASSET_ROOT: join(root, "missing-assets") }),
         maxBuffer: MAX_BUFFER,
       },
     );
     assert.equal(
       JSON.parse(initStdout).skillMdPath,
-      join(initProject, ".claude", "skills", "skill-router-skills", "SKILL.md"),
+      join(initProject, ".claude", "skills", "agentic-skill-router-skills", "SKILL.md"),
       "wrapper asset root lets init copy the installed skill template",
     );
 
@@ -200,8 +200,8 @@ test("[claude] uninstall removes cache, unregisters, and disables in settings wi
   const root = await mkdtemp(join(tmpdir(), "sr-installer-claude-uninstall-"));
   try {
     const claudeHome = join(root, ".claude");
-    const stateDir = join(root, ".skill-router");
-    const installPath = join(claudeHome, "plugins", "cache", "local", "skill-router", PKG_VERSION);
+    const stateDir = join(root, ".agentic-skill-router");
+    const installPath = join(claudeHome, "plugins", "cache", "local", "agentic-skill-router", PKG_VERSION);
 
     await execFileAsync(process.execPath, ["scripts/install.mjs"], {
       cwd: REPO_ROOT,
@@ -225,7 +225,7 @@ test("[claude] uninstall removes cache, unregisters, and disables in settings wi
 
     // Cache dir removed (whole plugin family root, not just version).
     assert.equal(
-      await pathExists(join(claudeHome, "plugins", "cache", "local", "skill-router")),
+      await pathExists(join(claudeHome, "plugins", "cache", "local", "agentic-skill-router")),
       false,
       "plugin cache dir removed",
     );
@@ -252,7 +252,7 @@ test("[claude] uninstall removes cache, unregisters, and disables in settings wi
 test("[claude] uninstall --purge removes state directory", async () => {
   const root = await mkdtemp(join(tmpdir(), "sr-installer-claude-purge-"));
   try {
-    const stateDir = join(root, ".skill-router");
+    const stateDir = join(root, ".agentic-skill-router");
 
     await execFileAsync(process.execPath, ["scripts/install.mjs"], {
       cwd: REPO_ROOT,
@@ -279,9 +279,9 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
   const root = await mkdtemp(join(tmpdir(), "sr-installer-codex-"));
   try {
     const codexHome = join(root, ".codex");
-    const installPath = join(codexHome, "plugins", "cache", "local", "skill-router", PKG_VERSION);
-    const runtimePath = join(root, ".skill-router", "runtime", PKG_VERSION);
-    const wrapperPath = join(installPath, "bin", "skill-router");
+    const installPath = join(codexHome, "plugins", "cache", "local", "agentic-skill-router", PKG_VERSION);
+    const runtimePath = join(root, ".agentic-skill-router", "runtime", PKG_VERSION);
+    const wrapperPath = join(installPath, "bin", "agentic-skill-router");
 
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
@@ -291,20 +291,20 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
 
     // Plugin cache files
     assert.ok(await pathExists(join(installPath, ".codex-plugin", "plugin.json")), "plugin manifest copied");
-    assert.ok(await pathExists(join(installPath, "bin", "skill-router")), "host bin wrapper copied");
-    assert.equal(await pathExists(join(installPath, "lib", "skill-router.mjs")), false, "plugin cache does not duplicate runtime lib");
+    assert.ok(await pathExists(join(installPath, "bin", "agentic-skill-router")), "host bin wrapper copied");
+    assert.equal(await pathExists(join(installPath, "lib", "agentic-skill-router.mjs")), false, "plugin cache does not duplicate runtime lib");
     assert.ok(
-      await pathExists(join(installPath, "skills", "skill-router-skills", "SKILL.md")),
+      await pathExists(join(installPath, "skills", "agentic-skill-router-skills", "SKILL.md")),
       "router skill copied",
     );
-    assert.ok(await pathExists(join(runtimePath, "bin", "skill-router")), "shared runtime bin copied");
-    assert.ok(await pathExists(join(runtimePath, "lib", "skill-router.mjs")), "shared runtime lib copied");
+    assert.ok(await pathExists(join(runtimePath, "bin", "agentic-skill-router")), "shared runtime bin copied");
+    assert.ok(await pathExists(join(runtimePath, "lib", "agentic-skill-router.mjs")), "shared runtime lib copied");
 
     const binStat = await stat(wrapperPath);
     assert.ok((binStat.mode & 0o111) !== 0, "bin wrapper is executable");
     const wrapper = await readFile(wrapperPath, "utf8");
-    assert.match(wrapper, /SKILL_ROUTER_HOST='codex'/);
-    assert.match(wrapper, /SKILL_ROUTER_ASSET_ROOT=/);
+    assert.match(wrapper, /AGENTIC_SKILL_ROUTER_HOST='codex'/);
+    assert.match(wrapper, /AGENTIC_SKILL_ROUTER_ASSET_ROOT=/);
 
     await writeProbeSkill(
       join(root, ".agents", "skills", "wrapper-probe"),
@@ -313,7 +313,7 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
     );
     const { stdout: listStdout } = await execFileAsync(wrapperPath, ["skills", "list", "--json"], {
       cwd: REPO_ROOT,
-      env: sandboxEnv(root, { SKILL_ROUTER_HOST: "claude-code" }),
+      env: sandboxEnv(root, { AGENTIC_SKILL_ROUTER_HOST: "claude-code" }),
       maxBuffer: MAX_BUFFER,
     });
     const listed = JSON.parse(listStdout) as Array<{ id: string }>;
@@ -326,13 +326,13 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
       ["init", "codex", "project", "--cwd", initProject, "--json"],
       {
         cwd: REPO_ROOT,
-        env: sandboxEnv(root, { SKILL_ROUTER_ASSET_ROOT: join(root, "missing-assets") }),
+        env: sandboxEnv(root, { AGENTIC_SKILL_ROUTER_ASSET_ROOT: join(root, "missing-assets") }),
         maxBuffer: MAX_BUFFER,
       },
     );
     assert.equal(
       JSON.parse(initStdout).skillMdPath,
-      join(initProject, ".agents", "skills", "skill-router-skills", "SKILL.md"),
+      join(initProject, ".agents", "skills", "agentic-skill-router-skills", "SKILL.md"),
       "wrapper asset root lets init copy the installed skill template",
     );
 
@@ -341,13 +341,13 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
 
     // Slash prompt installed
     assert.ok(
-      await pathExists(join(codexHome, "prompts", "skill-router-skills.md")),
-      "/skill-router:skills prompt installed",
+      await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")),
+      "/agentic-skill-router:skills prompt installed",
     );
 
     // config.toml enables the plugin
     const config = await readFile(join(codexHome, "config.toml"), "utf8");
-    assert.match(config, /\[plugins\."skill-router@local"\]\nenabled = true/);
+    assert.match(config, /\[plugins\."agentic-skill-router@local"\]\nenabled = true/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -382,14 +382,14 @@ test("[codex] install is idempotent: re-running keeps a single enabled stanza an
     const config = await readFile(join(codexHome, "config.toml"), "utf8");
 
     // Exactly one stanza for our plugin (no duplicate sections).
-    const ourHeaderMatches = config.match(/\[plugins\."skill-router@local"\]/g) ?? [];
-    assert.equal(ourHeaderMatches.length, 1, "single [plugins.\"skill-router@local\"] section after re-install");
+    const ourHeaderMatches = config.match(/\[plugins\."agentic-skill-router@local"\]/g) ?? [];
+    assert.equal(ourHeaderMatches.length, 1, "single [plugins.\"agentic-skill-router@local\"] section after re-install");
 
     // Exactly one enabled line inside our plugin's stanza.
     const ourSection = config
       .split(/\r?\n/)
       .reduce<string[]>((acc, line, idx, arr) => {
-        if (line.trim() === '[plugins."skill-router@local"]') {
+        if (line.trim() === '[plugins."agentic-skill-router@local"]') {
           let end = arr.length;
           for (let j = idx + 1; j < arr.length; j++) {
             if (/^\s*\[/.test(arr[j] ?? "")) {
@@ -417,8 +417,8 @@ test("[codex] uninstall removes cache and slash prompt, flips config.toml enable
   const root = await mkdtemp(join(tmpdir(), "sr-installer-codex-uninstall-"));
   try {
     const codexHome = join(root, ".codex");
-    const stateDir = join(root, ".skill-router");
-    const installPath = join(codexHome, "plugins", "cache", "local", "skill-router", PKG_VERSION);
+    const stateDir = join(root, ".agentic-skill-router");
+    const installPath = join(codexHome, "plugins", "cache", "local", "agentic-skill-router", PKG_VERSION);
 
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
@@ -426,7 +426,7 @@ test("[codex] uninstall removes cache and slash prompt, flips config.toml enable
       maxBuffer: MAX_BUFFER,
     });
     assert.ok(await pathExists(installPath));
-    assert.ok(await pathExists(join(codexHome, "prompts", "skill-router-skills.md")));
+    assert.ok(await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")));
 
     // Seed state to verify uninstall preserves it.
     await mkdir(stateDir, { recursive: true });
@@ -440,21 +440,21 @@ test("[codex] uninstall removes cache and slash prompt, flips config.toml enable
 
     // Plugin cache family root removed.
     assert.equal(
-      await pathExists(join(codexHome, "plugins", "cache", "local", "skill-router")),
+      await pathExists(join(codexHome, "plugins", "cache", "local", "agentic-skill-router")),
       false,
       "plugin cache dir removed",
     );
 
     // Slash prompt removed.
     assert.equal(
-      await pathExists(join(codexHome, "prompts", "skill-router-skills.md")),
+      await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")),
       false,
-      "/skill-router:skills prompt removed",
+      "/agentic-skill-router:skills prompt removed",
     );
 
     // config.toml retains stanza but flipped to enabled = false.
     const config = await readFile(join(codexHome, "config.toml"), "utf8");
-    assert.match(config, /\[plugins\."skill-router@local"\]\nenabled = false/);
+    assert.match(config, /\[plugins\."agentic-skill-router@local"\]\nenabled = false/);
 
     // State preserved (no --purge).
     assert.ok(await pathExists(join(stateDir, "state-codex.json")), "state preserved without --purge");
@@ -466,7 +466,7 @@ test("[codex] uninstall removes cache and slash prompt, flips config.toml enable
 test("[codex] uninstall --purge removes state directory", async () => {
   const root = await mkdtemp(join(tmpdir(), "sr-installer-codex-purge-"));
   try {
-    const stateDir = join(root, ".skill-router");
+    const stateDir = join(root, ".agentic-skill-router");
 
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
@@ -501,7 +501,7 @@ test("[codex] uninstall is a no-op when no install exists (no config.toml create
     });
 
     // No cache, no prompt — uninstall must not crash with missing files.
-    assert.equal(await pathExists(join(codexHome, "prompts", "skill-router-skills.md")), false);
+    assert.equal(await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")), false);
     // And uninstall must not spuriously create config.toml (e.g. by writing a
     // disabled plugin stanza on an empty setup).
     assert.equal(await pathExists(join(codexHome, "config.toml")), false, "config.toml must not be created on no-op uninstall");
@@ -538,13 +538,13 @@ for (const variant of [
   {
     label: "claude-code",
     script: "scripts/install.mjs",
-    cacheRelative: ["plugins", "cache", "local", "skill-router"],
+    cacheRelative: ["plugins", "cache", "local", "agentic-skill-router"],
     sandboxRootName: "claude",
   },
   {
     label: "codex",
     script: "scripts/install-codex.mjs",
-    cacheRelative: ["plugins", "cache", "local", "skill-router"],
+    cacheRelative: ["plugins", "cache", "local", "agentic-skill-router"],
     sandboxRootName: "codex",
   },
 ]) {
@@ -556,7 +556,7 @@ for (const variant of [
     variant.sandboxRootName === "claude" ? join(root, ".claude") : join(root, ".codex");
 
   test(`install (${variant.label}) removes stale plugin cache versions by default`, async () => {
-    const root = await mkdtemp(join(tmpdir(), `skill-router-cleanup-${variant.label}-`));
+    const root = await mkdtemp(join(tmpdir(), `agentic-skill-router-cleanup-${variant.label}-`));
     try {
       const cacheRoot = join(cacheParentFor(root), ...variant.cacheRelative);
       await mkdir(cacheRoot, { recursive: true });
@@ -583,7 +583,7 @@ for (const variant of [
   });
 
   test(`install (${variant.label}) with --keep-old preserves stale versions`, async () => {
-    const root = await mkdtemp(join(tmpdir(), `skill-router-cleanup-keep-${variant.label}-`));
+    const root = await mkdtemp(join(tmpdir(), `agentic-skill-router-cleanup-keep-${variant.label}-`));
     try {
       const cacheRoot = join(cacheParentFor(root), ...variant.cacheRelative);
       await mkdir(cacheRoot, { recursive: true });
@@ -607,7 +607,7 @@ for (const variant of [
   });
 
   test(`install (${variant.label}) only removes the symlink for stale entries pointing outside the cache root`, async () => {
-    const root = await mkdtemp(join(tmpdir(), `skill-router-cleanup-symlink-${variant.label}-`));
+    const root = await mkdtemp(join(tmpdir(), `agentic-skill-router-cleanup-symlink-${variant.label}-`));
     try {
       const cacheRoot = join(cacheParentFor(root), ...variant.cacheRelative);
       const outsideDir = join(root, "outside");

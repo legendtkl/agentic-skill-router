@@ -23,7 +23,7 @@ import { loadState, recordRoutedSkill, saveState, statePathForHost, withStateLoc
 import type { HostName } from "../types.ts";
 
 /**
- * Dispatcher for `skill-router skills dci ...` and the `body` alias. The
+ * Dispatcher for `agentic-skill-router skills dci ...` and the `body` alias. The
  * named subcommands match the documented surface in `usage()`.
  */
 export async function cmdDci(argv: string[], hostName: HostName): Promise<number> {
@@ -49,7 +49,7 @@ export async function cmdDci(argv: string[], hostName: HostName): Promise<number
 
 async function cmdDciSearch(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills dci search",
+    commandName: "agentic-skill-router skills dci search",
     config: {
       args: argv,
       options: {
@@ -94,7 +94,7 @@ async function cmdDciSearch(argv: string[], hostName: HostName): Promise<number>
 
 async function cmdDciGrep(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills dci grep",
+    commandName: "agentic-skill-router skills dci grep",
     config: {
       args: argv,
       options: {
@@ -141,7 +141,7 @@ async function cmdDciGrep(argv: string[], hostName: HostName): Promise<number> {
 
 async function cmdDciFind(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills dci find",
+    commandName: "agentic-skill-router skills dci find",
     config: {
       args: argv,
       options: {
@@ -191,7 +191,7 @@ async function cmdDciFind(argv: string[], hostName: HostName): Promise<number> {
 
 async function cmdDciOpen(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills dci open",
+    commandName: "agentic-skill-router skills dci open",
     config: {
       args: argv,
       options: {
@@ -234,7 +234,7 @@ async function cmdDciOpen(argv: string[], hostName: HostName): Promise<number> {
 
 async function cmdDciInspect(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills dci inspect",
+    commandName: "agentic-skill-router skills dci inspect",
     config: {
       args: argv,
       options: { json: { type: "boolean" } },
@@ -260,7 +260,7 @@ async function cmdDciInspect(argv: string[], hostName: HostName): Promise<number
 
 async function cmdDciRead(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills dci read",
+    commandName: "agentic-skill-router skills dci read",
     config: {
       args: argv,
       options: {
@@ -291,7 +291,7 @@ async function cmdDciRead(argv: string[], hostName: HostName): Promise<number> {
 
 async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills dci select",
+    commandName: "agentic-skill-router skills dci select",
     config: {
       args: argv,
       options: {
@@ -379,7 +379,7 @@ async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number>
 
 async function cmdDciBudget(argv: string[]): Promise<number> {
   const { values } = parseStrict({
-    commandName: "skill-router skills dci budget",
+    commandName: "agentic-skill-router skills dci budget",
     config: {
       args: argv,
       options: { json: { type: "boolean" } },

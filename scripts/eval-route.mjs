@@ -90,7 +90,7 @@ async function materializeSkillFiles(root, specs) {
   for (const spec of specs) {
     const dir = join(root, spec.name);
     await mkdir(dir, { recursive: true });
-    const skillMdPath = join(dir, "SKILL.md.skill-router-disabled");
+    const skillMdPath = join(dir, "SKILL.md.agentic-skill-router-disabled");
     const metadata = spec.metadata ?? { name: spec.name, description: spec.description };
     const yamlSafe = (text) => text.replace(/"/g, '\\"').replace(/\r?\n/g, " ");
     const body = [
@@ -338,7 +338,7 @@ async function main() {
   // meaningful.
   const routeTopK = Math.max(opts.topK, 3);
 
-  const workDir = await mkdtemp(join(tmpdir(), "skill-router-eval-"));
+  const workDir = await mkdtemp(join(tmpdir(), "agentic-skill-router-eval-"));
   const rows = [];
   try {
     const skills = await materializeSkillFiles(join(workDir, "skills"), fixture.skills);

@@ -16,7 +16,7 @@ import {
 import type { DisableRecord } from "../src/types.ts";
 
 async function tempPath(): Promise<{ path: string; cleanup: () => Promise<void> }> {
-  const dir = await mkdtemp(join(tmpdir(), "skill-router-state-"));
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-state-"));
   return {
     path: join(dir, "state.json"),
     cleanup: () => rm(dir, { recursive: true, force: true }),
@@ -114,7 +114,7 @@ test("removeDisableRecord drops the matching entry by instanceKey", () => {
 
 test("skillInstanceKey canonicalizes around the disabled marker suffix", () => {
   const live = skillInstanceKey("user:foo", "/skills/foo/SKILL.md");
-  const disabled = skillInstanceKey("user:foo", "/skills/foo/SKILL.md.skill-router-disabled");
+  const disabled = skillInstanceKey("user:foo", "/skills/foo/SKILL.md.agentic-skill-router-disabled");
   assert.equal(live, disabled);
 });
 
@@ -123,7 +123,7 @@ test("recordRoutedSkill increments routed usage by instanceKey", () => {
   const first = recordRoutedSkill(initial, {
     id: "user:agents:lark-mail",
     pluginKey: null,
-    skillMdPath: "/tmp/lark-mail/SKILL.md.skill-router-disabled",
+    skillMdPath: "/tmp/lark-mail/SKILL.md.agentic-skill-router-disabled",
     name: "lark-mail",
     query: "draft mail",
     confidence: "high",
@@ -132,7 +132,7 @@ test("recordRoutedSkill increments routed usage by instanceKey", () => {
   const second = recordRoutedSkill(first, {
     id: "user:agents:lark-mail",
     pluginKey: null,
-    skillMdPath: "/tmp/lark-mail/SKILL.md.skill-router-disabled",
+    skillMdPath: "/tmp/lark-mail/SKILL.md.agentic-skill-router-disabled",
     name: "lark-mail",
     query: "reply mail",
     confidence: "medium",
@@ -143,7 +143,7 @@ test("recordRoutedSkill increments routed usage by instanceKey", () => {
   assert.equal(second.routedSkills?.[0]?.routeCount, 2);
   assert.equal(
     second.routedSkills?.[0]?.instanceKey,
-    skillInstanceKey("user:agents:lark-mail", "/tmp/lark-mail/SKILL.md.skill-router-disabled"),
+    skillInstanceKey("user:agents:lark-mail", "/tmp/lark-mail/SKILL.md.agentic-skill-router-disabled"),
   );
   assert.equal(second.routedSkills?.[0]?.firstRoutedAt, "2026-05-20T00:00:00.000Z");
   assert.equal(second.routedSkills?.[0]?.lastRoutedAt, "2026-05-21T00:00:00.000Z");
@@ -155,7 +155,7 @@ test("recordRoutedSkill tracks two instances of the same id independently", () =
   const a = recordRoutedSkill(initial, {
     id: "user:agents:lark-mail",
     pluginKey: null,
-    skillMdPath: "/tmp/lark-mail-a/SKILL.md.skill-router-disabled",
+    skillMdPath: "/tmp/lark-mail-a/SKILL.md.agentic-skill-router-disabled",
     name: "lark-mail",
     query: "draft mail",
     confidence: "high",
@@ -164,7 +164,7 @@ test("recordRoutedSkill tracks two instances of the same id independently", () =
   const b = recordRoutedSkill(a, {
     id: "user:agents:lark-mail",
     pluginKey: null,
-    skillMdPath: "/tmp/lark-mail-b/SKILL.md.skill-router-disabled",
+    skillMdPath: "/tmp/lark-mail-b/SKILL.md.agentic-skill-router-disabled",
     name: "lark-mail",
     query: "reply mail",
     confidence: "medium",
@@ -174,8 +174,8 @@ test("recordRoutedSkill tracks two instances of the same id independently", () =
   // Both instances coexist; counts are independent.
   assert.equal(b.routedSkills?.length, 2);
   const byPath = new Map((b.routedSkills ?? []).map((r) => [r.skillMdPath, r]));
-  assert.equal(byPath.get("/tmp/lark-mail-a/SKILL.md.skill-router-disabled")?.routeCount, 1);
-  assert.equal(byPath.get("/tmp/lark-mail-b/SKILL.md.skill-router-disabled")?.routeCount, 1);
+  assert.equal(byPath.get("/tmp/lark-mail-a/SKILL.md.agentic-skill-router-disabled")?.routeCount, 1);
+  assert.equal(byPath.get("/tmp/lark-mail-b/SKILL.md.agentic-skill-router-disabled")?.routeCount, 1);
 });
 
 test("withStateLock serializes concurrent read-modify-write mutations", async () => {
@@ -188,7 +188,7 @@ test("withStateLock serializes concurrent read-modify-write mutations", async ()
       await saveState(recordRoutedSkill(state, {
         id: "user:codex:mail",
         pluginKey: null,
-        skillMdPath: "/tmp/mail/SKILL.md.skill-router-disabled",
+        skillMdPath: "/tmp/mail/SKILL.md.agentic-skill-router-disabled",
         name: "mail",
         query: `q${idx}`,
         confidence: "high",
@@ -398,14 +398,14 @@ test("loadState synthesizes instanceKey for legacy records that lack one", async
         {
           id: "user:foo",
           pluginKey: null,
-          skillMdPath: "/skills/a/SKILL.md.skill-router-disabled",
+          skillMdPath: "/skills/a/SKILL.md.agentic-skill-router-disabled",
           disabledAt: "2026-01-01T00:00:00Z",
           reason: "manual",
         },
         {
           id: "user:foo",
           pluginKey: null,
-          skillMdPath: "/skills/b/SKILL.md.skill-router-disabled",
+          skillMdPath: "/skills/b/SKILL.md.agentic-skill-router-disabled",
           disabledAt: "2026-01-02T00:00:00Z",
           reason: "manual",
         },
@@ -414,7 +414,7 @@ test("loadState synthesizes instanceKey for legacy records that lack one", async
         {
           id: "user:foo",
           pluginKey: null,
-          skillMdPath: "/skills/a/SKILL.md.skill-router-disabled",
+          skillMdPath: "/skills/a/SKILL.md.agentic-skill-router-disabled",
           name: "foo",
           routeCount: 3,
           firstRoutedAt: "2026-01-01T00:00:00Z",
@@ -428,8 +428,8 @@ test("loadState synthesizes instanceKey for legacy records that lack one", async
     const state = await loadState(path);
     assert.equal(state.disabledSkills.length, 2);
     const keys = state.disabledSkills.map((r) => r.instanceKey);
-    assert.equal(keys[0], skillInstanceKey("user:foo", "/skills/a/SKILL.md.skill-router-disabled"));
-    assert.equal(keys[1], skillInstanceKey("user:foo", "/skills/b/SKILL.md.skill-router-disabled"));
+    assert.equal(keys[0], skillInstanceKey("user:foo", "/skills/a/SKILL.md.agentic-skill-router-disabled"));
+    assert.equal(keys[1], skillInstanceKey("user:foo", "/skills/b/SKILL.md.agentic-skill-router-disabled"));
     assert.notEqual(keys[0], keys[1]);
     assert.equal(state.routedSkills?.[0]?.instanceKey, keys[0]);
     // After saveState, the synthesized instanceKey persists.
@@ -455,7 +455,7 @@ test("loadState re-derives stale instanceKey values from id and path", async () 
           instanceKey: "stale-key",
           id: "user:foo",
           pluginKey: null,
-          skillMdPath: "/skills/a/SKILL.md.skill-router-disabled",
+          skillMdPath: "/skills/a/SKILL.md.agentic-skill-router-disabled",
           disabledAt: "2026-01-01T00:00:00Z",
           reason: "manual",
         },
@@ -465,7 +465,7 @@ test("loadState re-derives stale instanceKey values from id and path", async () 
           instanceKey: "also-stale",
           id: "user:foo",
           pluginKey: null,
-          skillMdPath: "/skills/a/SKILL.md.skill-router-disabled",
+          skillMdPath: "/skills/a/SKILL.md.agentic-skill-router-disabled",
           name: "foo",
           routeCount: 1,
           firstRoutedAt: "2026-01-01T00:00:00Z",
@@ -477,7 +477,7 @@ test("loadState re-derives stale instanceKey values from id and path", async () 
     });
     await writeFile(path, stale);
     const state = await loadState(path);
-    const key = skillInstanceKey("user:foo", "/skills/a/SKILL.md.skill-router-disabled");
+    const key = skillInstanceKey("user:foo", "/skills/a/SKILL.md.agentic-skill-router-disabled");
     assert.equal(state.disabledSkills[0]?.instanceKey, key);
     assert.equal(state.routedSkills?.[0]?.instanceKey, key);
   } finally {

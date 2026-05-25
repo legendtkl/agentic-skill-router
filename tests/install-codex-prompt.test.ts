@@ -16,7 +16,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(__dirname);
 const execFileAsync = promisify(execFile);
-const NPM_TEST_CACHE = join(tmpdir(), `skill-router-prompt-npm-cache-${process.pid}`);
+const NPM_TEST_CACHE = join(tmpdir(), `agentic-skill-router-prompt-npm-cache-${process.pid}`);
 
 test("attachManagedMarker produces a self-verifying body", () => {
   const body = "hello world\n";
@@ -31,7 +31,7 @@ test("attachManagedMarker produces a self-verifying body", () => {
 test("attachManagedMarker normalises trailing newline", () => {
   const stamped = attachManagedMarker("no trailing newline");
   assert.ok(isManagedUnchanged(stamped));
-  assert.match(stamped, /no trailing newline\n<!-- skill-router-managed:/);
+  assert.match(stamped, /no trailing newline\n<!-- agentic-skill-router-managed:/);
 });
 
 test("isManagedUnchanged rejects files without a marker", () => {
@@ -45,7 +45,7 @@ test("isManagedUnchanged rejects user-edited managed files", () => {
 });
 
 test("install reinstall over managed copy refreshes the file in place", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-install-prompt-managed-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-install-prompt-managed-"));
   try {
     const codexHome = join(root, ".codex");
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
@@ -54,7 +54,7 @@ test("install reinstall over managed copy refreshes the file in place", async ()
       maxBuffer: 4 * 1024 * 1024,
     });
 
-    const promptPath = join(codexHome, "prompts", "skill-router-skills.md");
+    const promptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
     const first = await readFile(promptPath, "utf8");
     assert.ok(isManagedUnchanged(first));
 
@@ -72,7 +72,7 @@ test("install reinstall over managed copy refreshes the file in place", async ()
 });
 
 test("install preserves a user-edited prompt and writes a backup", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-install-prompt-user-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-install-prompt-user-"));
   try {
     const codexHome = join(root, ".codex");
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
@@ -81,7 +81,7 @@ test("install preserves a user-edited prompt and writes a backup", async () => {
       maxBuffer: 4 * 1024 * 1024,
     });
 
-    const promptPath = join(codexHome, "prompts", "skill-router-skills.md");
+    const promptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
     const userVersion = "user owned prompt body\nwith local edits\n";
     await writeFile(promptPath, userVersion);
 
@@ -106,7 +106,7 @@ test("install preserves a user-edited prompt and writes a backup", async () => {
 });
 
 test("uninstall removes a managed prompt copy", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-uninstall-prompt-managed-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-uninstall-prompt-managed-"));
   try {
     const codexHome = join(root, ".codex");
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
@@ -115,7 +115,7 @@ test("uninstall removes a managed prompt copy", async () => {
       maxBuffer: 4 * 1024 * 1024,
     });
 
-    const promptPath = join(codexHome, "prompts", "skill-router-skills.md");
+    const promptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
     assert.ok(await pathExists(promptPath));
 
     await execFileAsync(process.execPath, ["scripts/uninstall-codex.mjs"], {
@@ -130,7 +130,7 @@ test("uninstall removes a managed prompt copy", async () => {
 });
 
 test("uninstall preserves a user-edited prompt file", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-uninstall-prompt-user-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-uninstall-prompt-user-"));
   try {
     const codexHome = join(root, ".codex");
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
@@ -139,7 +139,7 @@ test("uninstall preserves a user-edited prompt file", async () => {
       maxBuffer: 4 * 1024 * 1024,
     });
 
-    const promptPath = join(codexHome, "prompts", "skill-router-skills.md");
+    const promptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
     const userVersion = "user owned prompt body\n";
     await writeFile(promptPath, userVersion);
 
@@ -176,7 +176,7 @@ function codexInstallEnv(root: string, codexHome: string): NodeJS.ProcessEnv {
     HOME: root,
     USERPROFILE: root,
     CODEX_HOME: codexHome,
-    SKILL_ROUTER_RUNTIME_ROOT: join(root, ".skill-router", "runtime"),
+    AGENTIC_SKILL_ROUTER_RUNTIME_ROOT: join(root, ".agentic-skill-router", "runtime"),
     npm_config_cache: NPM_TEST_CACHE,
   };
 }

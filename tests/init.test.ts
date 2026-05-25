@@ -20,7 +20,7 @@ function sandboxEnv(root: string): NodeJS.ProcessEnv {
     USERPROFILE: root,
     AGENTS_HOME: join(root, ".agents"),
     CLAUDE_HOME: join(root, ".claude"),
-    SKILL_ROUTER_STATE_DIR: join(root, ".skill-router"),
+    AGENTIC_SKILL_ROUTER_STATE_DIR: join(root, ".agentic-skill-router"),
   };
 }
 
@@ -33,10 +33,10 @@ async function runInit(args: string[], env: NodeJS.ProcessEnv): Promise<{ stdout
 }
 
 test("init codex project writes project .agents skill and local CLI reference", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-init-codex-project-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-codex-project-"));
   try {
     const project = join(root, "project");
-    const fakeCli = join(root, "runtime", "skill-router");
+    const fakeCli = join(root, "runtime", "agentic-skill-router");
     const { stdout, stderr } = await runInit(
       ["codex", "project", "--cwd", project, "--cli", fakeCli, "--json"],
       sandboxEnv(root),
@@ -49,19 +49,19 @@ test("init codex project writes project .agents skill and local CLI reference", 
       skillMdPath: string;
       cliPath: string;
     };
-    assert.equal(parsed.action, "initialized-skill-router-skill");
+    assert.equal(parsed.action, "initialized-agentic-skill-router-skill");
     assert.equal(parsed.agent, "codex");
     assert.equal(parsed.scope, "project");
     assert.equal(parsed.cliPath, fakeCli);
-    assert.match(parsed.skillMdPath, /\.agents\/skills\/skill-router-skills\/SKILL\.md$/);
-    assert.ok(await fileExists(join(project, ".agents", "skills", "skill-router-skills", "SKILL.md")));
+    assert.match(parsed.skillMdPath, /\.agents\/skills\/agentic-skill-router-skills\/SKILL\.md$/);
+    assert.ok(await fileExists(join(project, ".agents", "skills", "agentic-skill-router-skills", "SKILL.md")));
 
     const localCli = await readFile(
-      join(project, ".agents", "skills", "skill-router-skills", "references", "local-cli.md"),
+      join(project, ".agents", "skills", "agentic-skill-router-skills", "references", "local-cli.md"),
       "utf8",
     );
     assert.match(localCli, /initialized for Codex/);
-    assert.match(localCli, /SKILL_ROUTER_HOST=codex/);
+    assert.match(localCli, /AGENTIC_SKILL_ROUTER_HOST=codex/);
     assert.match(localCli, new RegExp(escapeRegExp(fakeCli)));
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -69,18 +69,18 @@ test("init codex project writes project .agents skill and local CLI reference", 
 });
 
 test("init claude-code global writes CLAUDE_HOME skill", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-init-claude-global-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-claude-global-"));
   try {
     const env = sandboxEnv(root);
     const { stdout, stderr } = await runInit(
-      ["claude-code", "--scope", "global", "--cli", join(root, "bin", "skill-router"), "--json"],
+      ["claude-code", "--scope", "global", "--cli", join(root, "bin", "agentic-skill-router"), "--json"],
       env,
     );
     assert.equal(stderr, "");
     const parsed = JSON.parse(stdout) as { agent: string; scope: string; skillMdPath: string };
     assert.equal(parsed.agent, "claude-code");
     assert.equal(parsed.scope, "global");
-    assert.equal(parsed.skillMdPath, join(root, ".claude", "skills", "skill-router-skills", "SKILL.md"));
+    assert.equal(parsed.skillMdPath, join(root, ".claude", "skills", "agentic-skill-router-skills", "SKILL.md"));
     assert.ok(await fileExists(parsed.skillMdPath));
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -88,7 +88,7 @@ test("init claude-code global writes CLAUDE_HOME skill", async () => {
 });
 
 test("init target without scope defaults to project in non-interactive mode", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-init-default-scope-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-default-scope-"));
   try {
     const project = join(root, "project");
     const { stdout, stderr } = await runInit(
@@ -98,14 +98,14 @@ test("init target without scope defaults to project in non-interactive mode", as
     assert.equal(stderr, "");
     const parsed = JSON.parse(stdout) as { scope: string; skillMdPath: string };
     assert.equal(parsed.scope, "project");
-    assert.equal(parsed.skillMdPath, join(project, ".agents", "skills", "skill-router-skills", "SKILL.md"));
+    assert.equal(parsed.skillMdPath, join(project, ".agents", "skills", "agentic-skill-router-skills", "SKILL.md"));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
 test("init accepts scope positional when agent is supplied by option", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-init-agent-option-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-agent-option-"));
   try {
     const { stdout, stderr } = await runInit(
       ["--agent", "codex", "global", "--json"],
@@ -115,19 +115,19 @@ test("init accepts scope positional when agent is supplied by option", async () 
     const parsed = JSON.parse(stdout) as { agent: string; scope: string; skillMdPath: string };
     assert.equal(parsed.agent, "codex");
     assert.equal(parsed.scope, "global");
-    assert.equal(parsed.skillMdPath, join(root, ".agents", "skills", "skill-router-skills", "SKILL.md"));
+    assert.equal(parsed.skillMdPath, join(root, ".agents", "skills", "agentic-skill-router-skills", "SKILL.md"));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
 test("init help and parse errors use CLI output instead of stack traces", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-init-errors-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-errors-"));
   try {
     const env = sandboxEnv(root);
     const help = await runInit(["--help"], env);
     assert.equal(help.stderr, "");
-    assert.match(help.stdout, /usage: skill-router init/);
+    assert.match(help.stdout, /usage: agentic-skill-router init/);
 
     let caught: unknown;
     try {
@@ -146,7 +146,7 @@ test("init help and parse errors use CLI output instead of stack traces", async 
 });
 
 test("init refuses to overwrite without --force", async () => {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-init-force-"));
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-force-"));
   try {
     const project = join(root, "project");
     const env = sandboxEnv(root);

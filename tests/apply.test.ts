@@ -13,7 +13,7 @@ async function setup(): Promise<{
   skill: Skill;
   cleanup: () => Promise<void>;
 }> {
-  const workdir = await mkdtemp(join(tmpdir(), "skill-router-apply-"));
+  const workdir = await mkdtemp(join(tmpdir(), "agentic-skill-router-apply-"));
   const skillDir = join(workdir, "skills/foo");
   await mkdir(skillDir, { recursive: true });
   const skillMdPath = join(skillDir, "SKILL.md");
@@ -48,7 +48,7 @@ test("disable renames SKILL.md and writes state", async () => {
     const result = await disableSkill(skill, "manual", { statePath });
     assert.equal(result.alreadyDisabled, false);
     assert.equal(await fileExists(skill.skillMdPath), false);
-    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), true);
+    assert.equal(await fileExists(skill.skillMdPath + ".agentic-skill-router-disabled"), true);
     assert.equal(result.state.disabledSkills.length, 1);
     assert.equal(result.state.disabledSkills[0]!.id, "user:foo");
     assert.equal(result.state.disabledSkills[0]!.reason, "manual");
@@ -62,7 +62,7 @@ test("disable is idempotent if already renamed", async () => {
   try {
     await disableSkill(skill, "first", { statePath });
     // Update skill record to reflect new path
-    const disabledSkill = { ...skill, isDisabled: true, skillMdPath: skill.skillMdPath + ".skill-router-disabled" };
+    const disabledSkill = { ...skill, isDisabled: true, skillMdPath: skill.skillMdPath + ".agentic-skill-router-disabled" };
     const result = await disableSkill(disabledSkill, "second", { statePath });
     assert.equal(result.alreadyDisabled, true);
     assert.equal(result.state.disabledSkills.length, 1);
@@ -76,11 +76,11 @@ test("enable renames back and removes state record", async () => {
   const { skill, statePath, cleanup } = await setup();
   try {
     await disableSkill(skill, "manual", { statePath });
-    const disabledSkill = { ...skill, isDisabled: true, skillMdPath: skill.skillMdPath + ".skill-router-disabled" };
+    const disabledSkill = { ...skill, isDisabled: true, skillMdPath: skill.skillMdPath + ".agentic-skill-router-disabled" };
     const result = await enableSkill(disabledSkill, { statePath });
     assert.equal(result.alreadyEnabled, false);
     assert.equal(await fileExists(skill.skillMdPath), true);
-    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), false);
+    assert.equal(await fileExists(skill.skillMdPath + ".agentic-skill-router-disabled"), false);
     assert.equal(result.state.disabledSkills.length, 0);
   } finally {
     await cleanup();
@@ -91,7 +91,7 @@ test("enableSkillFromState cleans orphan record when both files are gone", async
   const { skill, statePath, cleanup } = await setup();
   try {
     await disableSkill(skill, "manual", { statePath });
-    await rm(skill.skillMdPath + ".skill-router-disabled");
+    await rm(skill.skillMdPath + ".agentic-skill-router-disabled");
 
     const result = await enableSkillFromState("user:foo", { statePath });
     assert.equal(result.cleanedStateOnly, true);
@@ -110,7 +110,7 @@ test("enableSkillFromState restores disabled marker and clears state", async () 
     const result = await enableSkillFromState("user:foo", { statePath });
     assert.equal(result.alreadyEnabled, false);
     assert.equal(await fileExists(skill.skillMdPath), true);
-    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), false);
+    assert.equal(await fileExists(skill.skillMdPath + ".agentic-skill-router-disabled"), false);
     const state = await loadState(statePath);
     assert.equal(state.disabledSkills.length, 0);
   } finally {
@@ -126,7 +126,7 @@ test("enable refuses split-brain and preserves state", async () => {
 
     await assert.rejects(() => enableSkillFromState("user:foo", { statePath }), /split-brain|both/i);
     assert.equal(await fileExists(skill.skillMdPath), true);
-    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), true);
+    assert.equal(await fileExists(skill.skillMdPath + ".agentic-skill-router-disabled"), true);
     const state = await loadState(statePath);
     assert.equal(state.disabledSkills.length, 1);
   } finally {
@@ -139,13 +139,13 @@ test("reapplyMissing detects upstream-recreated SKILL.md and renames again", asy
   try {
     await disableSkill(skill, "manual", { statePath });
     // Simulate upstream restoring the original (e.g. plugin upgrade)
-    await rename(skill.skillMdPath + ".skill-router-disabled", skill.skillMdPath);
+    await rename(skill.skillMdPath + ".agentic-skill-router-disabled", skill.skillMdPath);
     assert.equal(await fileExists(skill.skillMdPath), true);
 
     const result = await reapplyMissing({ statePath });
     assert.deepEqual(result.reapplied, ["user:foo"]);
     assert.deepEqual(result.orphaned, []);
-    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), true);
+    assert.equal(await fileExists(skill.skillMdPath + ".agentic-skill-router-disabled"), true);
   } finally {
     await cleanup();
   }
@@ -155,7 +155,7 @@ test("reapplyMissing reports orphans when SKILL.md is gone entirely", async () =
   const { skill, statePath, cleanup } = await setup();
   try {
     await disableSkill(skill, "manual", { statePath });
-    await rm(skill.skillMdPath + ".skill-router-disabled");
+    await rm(skill.skillMdPath + ".agentic-skill-router-disabled");
 
     const result = await reapplyMissing({ statePath });
     assert.deepEqual(result.reapplied, []);
@@ -169,7 +169,7 @@ test("reapplyMissing reconciles state path from current inventory after plugin u
   const { skill, statePath, cleanup, workdir } = await setup();
   try {
     await disableSkill(skill, "manual", { statePath });
-    await rm(skill.skillMdPath + ".skill-router-disabled");
+    await rm(skill.skillMdPath + ".agentic-skill-router-disabled");
 
     const upgradedDir = join(workdir, "skills/foo-v2");
     await mkdir(upgradedDir, { recursive: true });
@@ -181,19 +181,19 @@ test("reapplyMissing reconciles state path from current inventory after plugin u
     assert.deepEqual(result.reapplied, ["user:foo"]);
     assert.deepEqual(result.orphaned, []);
     assert.equal(await fileExists(upgradedLive), false);
-    assert.equal(await fileExists(upgradedLive + ".skill-router-disabled"), true);
+    assert.equal(await fileExists(upgradedLive + ".agentic-skill-router-disabled"), true);
     const state = await loadState(statePath);
-    assert.equal(state.disabledSkills[0]?.skillMdPath, upgradedLive + ".skill-router-disabled");
+    assert.equal(state.disabledSkills[0]?.skillMdPath, upgradedLive + ".agentic-skill-router-disabled");
   } finally {
     await cleanup();
   }
 });
 
-test("disable refuses when both SKILL.md and SKILL.md.skill-router-disabled exist", async () => {
+test("disable refuses when both SKILL.md and SKILL.md.agentic-skill-router-disabled exist", async () => {
   const { skill, statePath, cleanup } = await setup();
   try {
     // Create the disabled marker alongside the live file (split-brain)
-    await writeFile(skill.skillMdPath + ".skill-router-disabled", "stale\n");
+    await writeFile(skill.skillMdPath + ".agentic-skill-router-disabled", "stale\n");
     await assert.rejects(
       () => disableSkill(skill, "x", { statePath }),
       /split-brain|both/i,
@@ -218,7 +218,7 @@ test("reapplyMissing flags conflicted records (both files exist)", async () => {
     assert.deepEqual(result.orphaned, []);
     // Both files should still exist (we don't auto-resolve)
     assert.equal(await fileExists(skill.skillMdPath), true);
-    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), true);
+    assert.equal(await fileExists(skill.skillMdPath + ".agentic-skill-router-disabled"), true);
     void workdir;
   } finally {
     await cleanup();
@@ -231,7 +231,7 @@ test("findOrphanMarkers detects disabled SKILL.md without state record", async (
     // Create a fully-orphaned skill: disabled marker, no state record at all
     const orphanDir = join(workdir, "skills/orphan");
     await mkdir(orphanDir, { recursive: true });
-    const orphanPath = join(orphanDir, "SKILL.md.skill-router-disabled");
+    const orphanPath = join(orphanDir, "SKILL.md.agentic-skill-router-disabled");
     await writeFile(orphanPath, "abandoned\n");
 
     const orphans = await findOrphanMarkers([join(workdir, "skills")], { statePath });
@@ -260,7 +260,7 @@ test("enable commits the journal entry on success (no pendingOps left behind)", 
   const { skill, statePath, cleanup } = await setup();
   try {
     await disableSkill(skill, "manual", { statePath });
-    const disabledSkill = { ...skill, isDisabled: true, skillMdPath: skill.skillMdPath + ".skill-router-disabled" };
+    const disabledSkill = { ...skill, isDisabled: true, skillMdPath: skill.skillMdPath + ".agentic-skill-router-disabled" };
     const result = await enableSkill(disabledSkill, { statePath });
     assert.equal(result.state.pendingOps?.length ?? 0, 0);
     const loaded = await loadState(statePath);
@@ -278,7 +278,7 @@ test("status recovers a disable where rename completed but state save crashed", 
     // the phase-2 commit never reached disk: the live file is gone, the
     // disabled marker exists, the state has an enable-style journal entry
     // pointing at a disable intent, and disabledSkills is still empty.
-    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
     await rename(skill.skillMdPath, disabledPath);
 
     const pending: PendingOp = {
@@ -325,11 +325,11 @@ test("status rolls back a disable where rename never happened", async () => {
     // Intent written, but the rename never completed: live file still present,
     // no disabled marker, no disable record.
     const pending: PendingOp = {
-      instanceKey: skillInstanceKey(skill.id, skill.skillMdPath + ".skill-router-disabled"),
+      instanceKey: skillInstanceKey(skill.id, skill.skillMdPath + ".agentic-skill-router-disabled"),
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
-      disabledPath: skill.skillMdPath + ".skill-router-disabled",
+      disabledPath: skill.skillMdPath + ".agentic-skill-router-disabled",
       startedAt: "2026-05-22T00:00:00.000Z",
     };
     const initial: State = addPendingOp(
@@ -356,10 +356,10 @@ test("status rolls back a disable pending op when both files are absent", async 
   try {
     await rm(skill.skillMdPath);
     const record = {
-      instanceKey: skillInstanceKey(skill.id, skill.skillMdPath + ".skill-router-disabled"),
+      instanceKey: skillInstanceKey(skill.id, skill.skillMdPath + ".agentic-skill-router-disabled"),
       id: skill.id,
       pluginKey: skill.pluginKey,
-      skillMdPath: skill.skillMdPath + ".skill-router-disabled",
+      skillMdPath: skill.skillMdPath + ".agentic-skill-router-disabled",
       skillName: skill.name,
       source: skill.source,
       disabledAt: "2026-05-22T00:00:00.000Z",
@@ -370,7 +370,7 @@ test("status rolls back a disable pending op when both files are absent", async 
       op: "disable",
       id: skill.id,
       livePath: skill.skillMdPath,
-      disabledPath: skill.skillMdPath + ".skill-router-disabled",
+      disabledPath: skill.skillMdPath + ".agentic-skill-router-disabled",
       startedAt: "2026-05-22T00:00:00.000Z",
       record,
     };
@@ -404,7 +404,7 @@ test("status does NOT re-disable an enabled skill when the post-rename state sav
   const { skill, statePath, cleanup } = await setup();
   try {
     await disableSkill(skill, "manual", { statePath });
-    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
 
     // Manually rebuild the "post-rename, pre-final-save" state: disable
     // record still present, pending enable intent recorded, live SKILL.md
@@ -440,7 +440,7 @@ test("status leaves an enable split-brain pending op alone for manual repair", a
   const { skill, statePath, cleanup } = await setup();
   try {
     await disableSkill(skill, "manual", { statePath });
-    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
     await writeFile(skill.skillMdPath, "live again\n");
 
     const stateAfterCrash = await loadState(statePath);
@@ -472,7 +472,7 @@ test("status rolls back an enable where rename never happened (disable record st
   const { skill, statePath, cleanup } = await setup();
   try {
     await disableSkill(skill, "manual", { statePath });
-    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
 
     // Enable intent was journaled, but the rename never ran: disabled marker
     // still present, live file still absent, disable record still present.
@@ -503,7 +503,7 @@ test("status rolls back an enable where rename never happened (disable record st
 test("status leaves a split-brain pending op alone for manual repair", async () => {
   const { skill, statePath, cleanup } = await setup();
   try {
-    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
     await writeFile(disabledPath, "stale\n");
     const pending: PendingOp = {
       instanceKey: skillInstanceKey(skill.id, disabledPath),
@@ -569,7 +569,7 @@ test("status preserves a pre-existing disable record when disable rollback fires
   const { skill, statePath, cleanup } = await setup();
   try {
     await disableSkill(skill, "first", { statePath });
-    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
     // Upstream tool restores the live file but the disabled marker also stays
     // around briefly; remove it to model the moment the new disable attempt
     // is journaled (live present, disabled absent).
@@ -656,7 +656,7 @@ test("disableSkill refuses skills flagged outOfRoot and leaves SKILL.md alone", 
     );
     // The original SKILL.md must still be live; nothing was renamed.
     assert.equal(await fileExists(skill.skillMdPath), true);
-    assert.equal(await fileExists(skill.skillMdPath + ".skill-router-disabled"), false);
+    assert.equal(await fileExists(skill.skillMdPath + ".agentic-skill-router-disabled"), false);
     // No state record should have been written.
     const state = await loadState(statePath);
     assert.equal(state.disabledSkills.length, 0);
@@ -672,7 +672,7 @@ async function setupTwoInstances(): Promise<{
   skillB: Skill;
   cleanup: () => Promise<void>;
 }> {
-  const workdir = await mkdtemp(join(tmpdir(), "skill-router-apply-multi-"));
+  const workdir = await mkdtemp(join(tmpdir(), "agentic-skill-router-apply-multi-"));
   const skillADir = join(workdir, "skills-a/foo");
   const skillBDir = join(workdir, "skills-b/foo");
   await mkdir(skillADir, { recursive: true });
@@ -710,7 +710,7 @@ test("two skills sharing an id at different paths are tracked as separate instan
     const state = await loadState(statePath);
     assert.equal(state.disabledSkills.length, 1);
     assert.equal(state.disabledSkills[0]!.id, "user:foo");
-    assert.equal(state.disabledSkills[0]!.skillMdPath, skillA.skillMdPath + ".skill-router-disabled");
+    assert.equal(state.disabledSkills[0]!.skillMdPath, skillA.skillMdPath + ".agentic-skill-router-disabled");
     assert.equal(
       state.disabledSkills[0]!.instanceKey,
       skillInstanceKey(skillA.id, skillA.skillMdPath),
@@ -740,7 +740,7 @@ test("two skills sharing an id at different paths are tracked as separate instan
     );
 
     // Enabling instance A by its own Skill restores A only and leaves B alone.
-    const disabledA = { ...skillA, isDisabled: true, skillMdPath: skillA.skillMdPath + ".skill-router-disabled" };
+    const disabledA = { ...skillA, isDisabled: true, skillMdPath: skillA.skillMdPath + ".agentic-skill-router-disabled" };
     await enableSkill(disabledA, { statePath });
 
     const final = await loadState(statePath);
@@ -791,12 +791,12 @@ test("enableSkillFromState refuses to silently pick one of multiple same-id inst
       (err: Error) => {
         const msg = err.message;
         assert.match(msg, /ambiguous skill id/i);
-        assert.match(msg, /skill-router skills enable /);
+        assert.match(msg, /agentic-skill-router skills enable /);
         assert.doesNotMatch(msg, /--instance-key/);
         const keyA = skillInstanceKey(skillA.id, skillA.skillMdPath);
         const keyB = skillInstanceKey(skillB.id, skillB.skillMdPath);
-        assert.match(msg, new RegExp(`skill-router skills enable ${keyA}\\b`));
-        assert.match(msg, new RegExp(`skill-router skills enable ${keyB}\\b`));
+        assert.match(msg, new RegExp(`agentic-skill-router skills enable ${keyA}\\b`));
+        assert.match(msg, new RegExp(`agentic-skill-router skills enable ${keyB}\\b`));
         return true;
       },
     );
@@ -831,11 +831,11 @@ test("enableSkillFromState resolves an explicit instanceKey unambiguously", asyn
     const result = await enableSkillFromState(keyA, { statePath });
     assert.equal(result.alreadyEnabled, false);
     assert.equal(await fileExists(skillA.skillMdPath), true);
-    assert.equal(await fileExists(skillB.skillMdPath + ".skill-router-disabled"), true);
+    assert.equal(await fileExists(skillB.skillMdPath + ".agentic-skill-router-disabled"), true);
 
     const state = await loadState(statePath);
     assert.equal(state.disabledSkills.length, 1);
-    assert.equal(state.disabledSkills[0]!.skillMdPath, skillB.skillMdPath + ".skill-router-disabled");
+    assert.equal(state.disabledSkills[0]!.skillMdPath, skillB.skillMdPath + ".agentic-skill-router-disabled");
   } finally {
     await cleanup();
   }
@@ -854,8 +854,8 @@ test("pending enable op for one same-id instance survives an enable on the other
   try {
     await disableSkill(skillA, "manual", { statePath });
     await disableSkill(skillB, "manual", { statePath });
-    const disabledA = skillA.skillMdPath + ".skill-router-disabled";
-    const disabledB = skillB.skillMdPath + ".skill-router-disabled";
+    const disabledA = skillA.skillMdPath + ".agentic-skill-router-disabled";
+    const disabledB = skillB.skillMdPath + ".agentic-skill-router-disabled";
     const keyA = skillInstanceKey(skillA.id, skillA.skillMdPath);
     const keyB = skillInstanceKey(skillB.id, skillB.skillMdPath);
 
@@ -922,7 +922,7 @@ test("loadState synthesizes instanceKey for legacy pending ops missing the field
   // (id, disabledPath) so subsequent journal operations key by it.
   const { skill, statePath, cleanup } = await setup();
   try {
-    const disabledPath = skill.skillMdPath + ".skill-router-disabled";
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
     const legacy = {
       schema: 1,
       host: "claude-code",

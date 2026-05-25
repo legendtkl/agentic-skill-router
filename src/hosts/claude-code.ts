@@ -46,7 +46,7 @@ export class ClaudeCodeHost implements Host {
   constructor(opts: ClaudeCodeHostOptions = {}) {
     this.claudeHome = opts.claudeHome ?? join(homedir(), ".claude");
     this.projectsDir = opts.projectsDir ?? join(this.claudeHome, "projects");
-    this.cwd = opts.cwd ?? process.env["SKILL_ROUTER_CWD"] ?? process.cwd();
+    this.cwd = opts.cwd ?? process.env["AGENTIC_SKILL_ROUTER_CWD"] ?? process.cwd();
   }
 
   async listSkills(): Promise<Skill[]> {

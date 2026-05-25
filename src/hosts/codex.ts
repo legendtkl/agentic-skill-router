@@ -47,7 +47,7 @@ export class CodexHost implements Host {
     this.codexHome = opts.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
     this.agentsHome = opts.agentsHome ?? process.env["AGENTS_HOME"] ?? join(homedir(), ".agents");
     this.sessionsDir = opts.sessionsDir ?? join(this.codexHome, "sessions");
-    this.cwd = opts.cwd ?? process.env["SKILL_ROUTER_CWD"] ?? process.cwd();
+    this.cwd = opts.cwd ?? process.env["AGENTIC_SKILL_ROUTER_CWD"] ?? process.cwd();
     this.adminSkillsRoot = opts.adminSkillsRoot ?? process.env["CODEX_ADMIN_SKILLS_ROOT"] ?? "/etc/codex/skills";
   }
 

@@ -8,7 +8,7 @@ export interface FrontmatterReadResult {
   warnings: string[];
 }
 
-export const DISABLED_SUFFIX = ".skill-router-disabled";
+export const DISABLED_SUFFIX = ".agentic-skill-router-disabled";
 const MAX_FRONTMATTER_BYTES = 32_000;
 
 interface InstalledPlugin {
@@ -280,7 +280,7 @@ export async function readCodexPluginSettings(path: string): Promise<ClaudeSetti
 /**
  * Walk a directory like `<root>/skills/` and return Skills found beneath it.
  * Each immediate child should be a directory (or symlink to one) containing
- * SKILL.md or SKILL.md.skill-router-disabled. Anything else is silently
+ * SKILL.md or SKILL.md.agentic-skill-router-disabled. Anything else is silently
  * skipped. If a child has BOTH files (split-brain after a crash or manual
  * edit), the live `SKILL.md` wins and we mark the skill via the `conflict`
  * channel passed to `build` so callers can surface it for repair.

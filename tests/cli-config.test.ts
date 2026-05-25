@@ -20,17 +20,17 @@ interface Fixture {
 }
 
 async function makeFixture(): Promise<Fixture> {
-  const root = await mkdtemp(join(tmpdir(), "skill-router-cli-config-"));
-  const configDir = join(root, ".skill-router");
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-cli-config-"));
+  const configDir = join(root, ".agentic-skill-router");
   const stateDir = configDir;
   const configPath = join(configDir, "config.json");
   await mkdir(configDir, { recursive: true });
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    SKILL_ROUTER_HOST: "codex",
-    SKILL_ROUTER_CONFIG_PATH: configPath,
-    SKILL_ROUTER_STATE_DIR: stateDir,
+    AGENTIC_SKILL_ROUTER_HOST: "codex",
+    AGENTIC_SKILL_ROUTER_CONFIG_PATH: configPath,
+    AGENTIC_SKILL_ROUTER_STATE_DIR: stateDir,
   };
 
   return {

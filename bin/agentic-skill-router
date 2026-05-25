@@ -12,4 +12,4 @@ while [ -L "$PRG" ]; do
 done
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$PRG")" && pwd)
-exec node "$SCRIPT_DIR/../lib/skill-router.mjs" "$@"
+exec node "$SCRIPT_DIR/../lib/agentic-skill-router.mjs" "$@"

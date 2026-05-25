@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { Config, RouteMode } from "./types.ts";
 
-export const DEFAULT_CONFIG_PATH = join(homedir(), ".skill-router", "config.json");
+export const DEFAULT_CONFIG_PATH = join(homedir(), ".agentic-skill-router", "config.json");
 export const DEFAULT_UNUSED_FOR_DAYS = 30;
 
 export const DEFAULT_CONFIG: Config = {
@@ -19,13 +19,13 @@ export type ConfigKey = (typeof CONFIG_KEYS)[number];
 export const ROUTE_MODES: ReadonlyArray<RouteMode> = ["auto", "metadata", "body", "lexical", "dci"];
 
 /**
- * The active config path. Honors `SKILL_ROUTER_CONFIG_PATH` at call time so
+ * The active config path. Honors `AGENTIC_SKILL_ROUTER_CONFIG_PATH` at call time so
  * tests can run multiple in-process invocations against different fake
  * config files without rebuilding the module. Falls back to
- * {@link DEFAULT_CONFIG_PATH} (typically `~/.skill-router/config.json`).
+ * {@link DEFAULT_CONFIG_PATH} (typically `~/.agentic-skill-router/config.json`).
  */
 export function configPath(): string {
-  return process.env["SKILL_ROUTER_CONFIG_PATH"] ?? DEFAULT_CONFIG_PATH;
+  return process.env["AGENTIC_SKILL_ROUTER_CONFIG_PATH"] ?? DEFAULT_CONFIG_PATH;
 }
 
 /**

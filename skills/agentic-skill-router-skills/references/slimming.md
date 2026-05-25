@@ -2,10 +2,10 @@
 
 Use `suggest` for cleanup requests.
 
-Use the `skill_router` helper from `SKILL.md`.
+Use the `agentic_skill_router` helper from `SKILL.md`.
 
 ```bash
-skill_router skills suggest --json
+agentic_skill_router skills suggest --json
 ```
 
 Each suggestion includes `id`, `name`, `source`, `reason`, `confidence`, and
@@ -17,8 +17,8 @@ renamed.
 Supported disable forms:
 
 ```bash
-skill_router skills disable <id...> --yes
-skill_router skills disable --all-suggested --yes
+agentic_skill_router skills disable <id...> --yes
+agentic_skill_router skills disable --all-suggested --yes
 ```
 
 Other operations:

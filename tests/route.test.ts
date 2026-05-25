@@ -23,14 +23,14 @@ test("routeDisabledSkills selects a matching disabled skill", () => {
       name: "lark-approval",
       description: "飞书审批 API：审批实例、审批任务管理。",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-approval/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-approval/SKILL.md.agentic-skill-router-disabled",
     }),
     mkSkill({
       id: "user:agents:lark-mail",
       name: "lark-mail",
       description: "飞书邮箱：发送邮件、回复邮件、搜索邮件。",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-mail/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-mail/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -55,7 +55,7 @@ test("routeDisabledSkills ignores enabled and plugin-disabled skills", () => {
       pluginKey: "gmail@openai-curated",
       isDisabled: true,
       isPluginDisabled: true,
-      skillMdPath: "/tmp/gmail/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/gmail/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -71,7 +71,7 @@ test("routeDisabledSkills reports low matches without selecting them", () => {
       name: "lark-task",
       description: "飞书任务：管理任务、清单和任务智能体。",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-task/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-task/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -88,7 +88,7 @@ test("routeDisabledSkills does not route punctuation-only queries", () => {
       name: "lark-mail",
       description: "飞书邮箱：发送邮件、回复邮件、搜索邮件。",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-mail/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-mail/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -104,21 +104,21 @@ test("routeDisabledSkills treats common single-term matches as weak evidence", (
       name: "lark-approval",
       description: "飞书审批 API：审批实例、审批任务管理。",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-approval/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-approval/SKILL.md.agentic-skill-router-disabled",
     }),
     mkSkill({
       id: "user:agents:lark-mail",
       name: "lark-mail",
       description: "飞书邮箱：发送邮件、回复邮件、搜索邮件。",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-mail/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-mail/SKILL.md.agentic-skill-router-disabled",
     }),
     mkSkill({
       id: "user:agents:lark-task",
       name: "lark-task",
       description: "飞书任务：管理任务、清单和任务智能体。",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-task/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-task/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -138,14 +138,14 @@ test("routeDisabledSkills uses matched CJK action cues despite query parameters"
       name: "lark-approval",
       description: "飞书审批 API：审批实例、审批任务管理。",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-approval/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-approval/SKILL.md.agentic-skill-router-disabled",
     }),
     mkSkill({
       id: "user:agents:lark-mail",
       name: "lark-mail",
       description: "飞书邮箱：发送邮件、发邮件、回复邮件、搜索邮件。",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-mail/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-mail/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -161,14 +161,14 @@ test("routeDisabledSkills does not let one generic CJK cue override distinctive 
       name: "tea-data-query",
       description: "TEA 数据查询工具。输入一个 TEA 的 URL 链接，自动解析 project_id、dashboard_id 或 report_id，通过 DataOpen API 查询并展示数据。支持 Dashboard 和 Report。",
       isDisabled: true,
-      skillMdPath: "/tmp/tea-data-query/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/tea-data-query/SKILL.md.agentic-skill-router-disabled",
     }),
     mkSkill({
       id: "user:codex:bytedance-es",
       name: "bytedance-es",
       description: "Query Elasticsearch via Kibana console API: execute ES DSL queries, search indices, retrieve documents, and get ES index mapping.",
       isDisabled: true,
-      skillMdPath: "/tmp/bytedance-es/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/bytedance-es/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -189,21 +189,21 @@ test("routeDisabledSkills does not select a multi-domain keyword pile", () => {
       name: "lark-workflow-standup-report",
       description: "Daily planning workflow that combines calendar agenda and task lists.",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-workflow-standup-report/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-workflow-standup-report/SKILL.md.agentic-skill-router-disabled",
     }),
     mkSkill({
       id: "user:agents:lark-approval",
       name: "lark-approval",
       description: "Approval workflows.",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-approval/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-approval/SKILL.md.agentic-skill-router-disabled",
     }),
     mkSkill({
       id: "user:agents:lark-mail",
       name: "lark-mail",
       description: "Mail workflows.",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-mail/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-mail/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -219,7 +219,7 @@ test("routeDisabledSkills keeps exact skill-name queries selectable", () => {
       name: "lark-mail",
       description: "飞书邮箱：发送邮件、回复邮件、搜索邮件。",
       isDisabled: true,
-      skillMdPath: "/tmp/lark-mail/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/lark-mail/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -235,14 +235,14 @@ test("routeDisabledSkills checks ambiguity before applying topK", () => {
       name: "alpha-mail",
       description: "Mail workflows for drafting replies.",
       isDisabled: true,
-      skillMdPath: "/tmp/alpha-mail/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/alpha-mail/SKILL.md.agentic-skill-router-disabled",
     }),
     mkSkill({
       id: "user:agents:beta-mail",
       name: "beta-mail",
       description: "Mail workflows for drafting replies.",
       isDisabled: true,
-      skillMdPath: "/tmp/beta-mail/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/beta-mail/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -255,11 +255,11 @@ test("routeDisabledSkills checks ambiguity before applying topK", () => {
 test("routeDisabledSkills handles long instruction-heavy queries", () => {
   const skills = [
     mkSkill({
-      id: "user:codex:skill-router-e2e-probe",
-      name: "skill-router-e2e-probe",
+      id: "user:codex:agentic-skill-router-e2e-probe",
+      name: "agentic-skill-router-e2e-probe",
       description: "Use for the unique Codex router end-to-end validation request about nebula budget reconciliation and disabled-skill proxying.",
       isDisabled: true,
-      skillMdPath: "/tmp/skill-router-e2e-probe/SKILL.md.skill-router-disabled",
+      skillMdPath: "/tmp/agentic-skill-router-e2e-probe/SKILL.md.agentic-skill-router-disabled",
     }),
   ];
 
@@ -269,6 +269,6 @@ test("routeDisabledSkills handles long instruction-heavy queries", () => {
     { topK: 1 },
   );
 
-  assert.equal(result.selected?.skill.id, "user:codex:skill-router-e2e-probe");
+  assert.equal(result.selected?.skill.id, "user:codex:agentic-skill-router-e2e-probe");
   assert.equal(result.selected?.confidence, "high");
 });

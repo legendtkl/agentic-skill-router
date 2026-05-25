@@ -11,7 +11,7 @@ import {
 import { usage } from "../output.ts";
 
 /**
- * `skill-router skills config` — dispatch for the config get/set/path
+ * `agentic-skill-router skills config` — dispatch for the config get/set/path
  * subcommands. The handler does not need a host because the config file is
  * a single user-global JSON document shared by every host bundle.
  */
@@ -33,7 +33,7 @@ export async function cmdConfig(argv: string[]): Promise<number> {
 
 async function cmdConfigGet(argv: string[]): Promise<number> {
   const { values } = parseStrict({
-    commandName: "skill-router skills config get",
+    commandName: "agentic-skill-router skills config get",
     config: { args: argv, options: { json: { type: "boolean" } } },
   });
   const path = configPath();
@@ -60,7 +60,7 @@ async function cmdConfigGet(argv: string[]): Promise<number> {
 
 async function cmdConfigSet(argv: string[]): Promise<number> {
   const { positionals } = parseStrict({
-    commandName: "skill-router skills config set",
+    commandName: "agentic-skill-router skills config set",
     config: { args: argv, options: {}, allowPositionals: true },
   });
   if (positionals.length < 2) {
@@ -95,7 +95,7 @@ async function cmdConfigSet(argv: string[]): Promise<number> {
 
 function cmdConfigPath(argv: string[]): number {
   parseStrict({
-    commandName: "skill-router skills config path",
+    commandName: "agentic-skill-router skills config path",
     config: { args: argv, options: {} },
   });
   console.log(configPath());

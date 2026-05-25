@@ -10,7 +10,7 @@ type InitAgent = "claude-code" | "codex";
 type InitScope = "project" | "global";
 
 interface InitResult {
-  action: "initialized-skill-router-skill";
+  action: "initialized-agentic-skill-router-skill";
   agent: InitAgent;
   scope: InitScope;
   targetRoot: string;
@@ -20,7 +20,7 @@ interface InitResult {
 }
 
 /**
- * `skill-router init` creates a router skill for one supported code agent.
+ * `agentic-skill-router init` creates a router skill for one supported code agent.
  * Without a target it prompts interactively; scripts can pass `codex` or
  * `claude-code` as the first positional argument and `project` or `global` as
  * the optional second positional argument.
@@ -29,7 +29,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
   if (argv.includes("-h") || argv.includes("--help")) {
     process.stdout.write(
       [
-        "usage: skill-router init [codex|claude-code] [project|global]",
+        "usage: agentic-skill-router init [codex|claude-code] [project|global]",
         "",
         "Options:",
         "  --agent <codex|claude-code>",
@@ -45,7 +45,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
   }
 
   const { values, positionals } = parseStrict({
-    commandName: "skill-router init",
+    commandName: "agentic-skill-router init",
     config: {
       args: argv,
       options: {
@@ -61,7 +61,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
   });
 
   if (positionals.length > 2) {
-    process.stderr.write("usage: skill-router init [codex|claude-code] [project|global]\n");
+    process.stderr.write("usage: agentic-skill-router init [codex|claude-code] [project|global]\n");
     return 2;
   }
 
@@ -71,7 +71,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
     values.scope as string | undefined,
   );
   if (decoded.extra.length > 0) {
-    process.stderr.write("usage: skill-router init [codex|claude-code] [project|global]\n");
+    process.stderr.write("usage: agentic-skill-router init [codex|claude-code] [project|global]\n");
     return 2;
   }
 
@@ -83,7 +83,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
     }
     agent = await promptForAgent();
     if (!agent) {
-      process.stderr.write("specify a target agent in non-interactive mode: skill-router init codex\n");
+      process.stderr.write("specify a target agent in non-interactive mode: agentic-skill-router init codex\n");
       return 2;
     }
   }
@@ -96,7 +96,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
     }
     scope = input.isTTY ? await promptForScope(agent) : "project";
     if (!scope) {
-      process.stderr.write("specify a scope in non-interactive mode: skill-router init codex project\n");
+      process.stderr.write("specify a scope in non-interactive mode: agentic-skill-router init codex project\n");
       return 2;
     }
   }
@@ -124,7 +124,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
     return 0;
   }
 
-  process.stdout.write(`initialized skill-router for ${displayAgent(agent)} (${result.scope})\n`);
+  process.stdout.write(`initialized agentic-skill-router for ${displayAgent(agent)} (${result.scope})\n`);
   process.stdout.write(`skill: ${result.skillMdPath}\n`);
   process.stdout.write(`cli:   ${result.cliPath}\n`);
   return 0;
@@ -161,7 +161,7 @@ async function initializeSkill(opts: {
 }): Promise<InitResult> {
   const targetRoot = skillRootFor(opts.agent, opts.scope, opts.projectRoot);
   const skillRoot = join(targetRoot, "skills");
-  const skillDir = join(skillRoot, "skill-router-skills");
+  const skillDir = join(skillRoot, "agentic-skill-router-skills");
   if (await pathExists(skillDir)) {
     if (!opts.force) {
       throw new Error(`${skillDir} already exists; re-run with --force to replace it`);
@@ -174,7 +174,7 @@ async function initializeSkill(opts: {
   await writeLocalCliReference(skillDir, opts.agent, opts.scope, opts.cliPath);
 
   return {
-    action: "initialized-skill-router-skill",
+    action: "initialized-agentic-skill-router-skill",
     agent: opts.agent,
     scope: opts.scope,
     targetRoot,
@@ -208,10 +208,10 @@ async function writeLocalCliReference(
     "# Local CLI",
     "",
     `This ${scope} skill was initialized for ${displayAgent(agent)}.`,
-    "Use this helper before running skill-router commands from this skill:",
+    "Use this helper before running agentic-skill-router commands from this skill:",
     "",
     "```bash",
-    `skill_router() { SKILL_ROUTER_HOST=${agent} ${shellQuote(cliPath)} "$@"; }`,
+    `agentic_skill_router() { AGENTIC_SKILL_ROUTER_HOST=${agent} ${shellQuote(cliPath)} "$@"; }`,
     "```",
     "",
   ].join("\n");
@@ -220,7 +220,7 @@ async function writeLocalCliReference(
 
 async function promptForAgent(): Promise<InitAgent | null> {
   if (!input.isTTY) return null;
-  output.write("Initialize skill-router for:\n");
+  output.write("Initialize agentic-skill-router for:\n");
   output.write("  1) Codex (.agents/skills)\n");
   output.write("  2) Claude Code (.claude/skills)\n");
   const rl = createInterface({ input, output });
@@ -236,7 +236,7 @@ async function promptForAgent(): Promise<InitAgent | null> {
 
 async function promptForScope(agent: InitAgent): Promise<InitScope | null> {
   if (!input.isTTY) return null;
-  output.write(`Install ${displayAgent(agent)} skill-router skill into:\n`);
+  output.write(`Install ${displayAgent(agent)} agentic-skill-router skill into:\n`);
   output.write(`  1) Project (${agent === "codex" ? ".agents/skills" : ".claude/skills"})\n`);
   output.write(`  2) Global (${agent === "codex" ? "~/.agents/skills" : "~/.claude/skills"})\n`);
   const rl = createInterface({ input, output });
@@ -267,11 +267,11 @@ function parseInitScope(value: string | undefined): InitScope | null {
 }
 
 async function resolveCliPath(cliFlag: string | undefined): Promise<string> {
-  const explicit = cliFlag || process.env["SKILL_ROUTER_CLI"];
+  const explicit = cliFlag || process.env["AGENTIC_SKILL_ROUTER_CLI"];
   if (explicit) return resolve(expandHome(explicit));
 
   const packageRoot = await findPackageRoot(dirname(fileURLToPath(import.meta.url)));
-  const packagedBin = join(packageRoot, "bin", "skill-router");
+  const packagedBin = join(packageRoot, "bin", "agentic-skill-router");
   if (await fileExists(packagedBin)) return packagedBin;
 
   const entry = process.argv[1];
@@ -280,15 +280,15 @@ async function resolveCliPath(cliFlag: string | undefined): Promise<string> {
 
 async function findRouterSkillSourceDir(): Promise<string> {
   const roots: string[] = [];
-  const assetRoot = process.env["SKILL_ROUTER_ASSET_ROOT"];
+  const assetRoot = process.env["AGENTIC_SKILL_ROUTER_ASSET_ROOT"];
   if (assetRoot) roots.push(resolve(expandHome(assetRoot)));
   roots.push(await findPackageRoot(dirname(fileURLToPath(import.meta.url))));
 
   for (const root of roots) {
-    const candidate = join(root, "skills", "skill-router-skills");
+    const candidate = join(root, "skills", "agentic-skill-router-skills");
     if (await fileExists(join(candidate, "SKILL.md"))) return candidate;
   }
-  throw new Error("could not locate skills/skill-router-skills next to the skill-router package");
+  throw new Error("could not locate skills/agentic-skill-router-skills next to the agentic-skill-router package");
 }
 
 async function findPackageRoot(start: string): Promise<string> {
@@ -296,7 +296,7 @@ async function findPackageRoot(start: string): Promise<string> {
   while (true) {
     if (
       await fileExists(join(current, "package.json")) ||
-      await fileExists(join(current, "skills", "skill-router-skills", "SKILL.md"))
+      await fileExists(join(current, "skills", "agentic-skill-router-skills", "SKILL.md"))
     ) {
       return current;
     }

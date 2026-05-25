@@ -137,11 +137,11 @@ interface UsageCache {
 const CACHE_VERSION = 1;
 
 /**
- * Resolves the cache dir. Mirrors `state.ts`'s `SKILL_ROUTER_STATE_DIR`
+ * Resolves the cache dir. Mirrors `state.ts`'s `AGENTIC_SKILL_ROUTER_STATE_DIR`
  * convention so users can redirect both state and cache the same way.
  */
 function cacheDir(): string {
-  return process.env["SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".skill-router");
+  return process.env["AGENTIC_SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".agentic-skill-router");
 }
 
 /**
@@ -153,7 +153,7 @@ export function usageCachePathForHost(host: HostName): string {
 }
 
 function cacheBypassed(): boolean {
-  return process.env["SKILL_ROUTER_USAGE_CACHE"] === "0";
+  return process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"] === "0";
 }
 
 export interface CollectUsageOptions {
@@ -178,7 +178,7 @@ export interface CollectUsageOptions {
  * we try `user:<name>`, then `plugin:*:<name>`, then `builtin:<name>`.
  *
  * When `opts.host` (or `opts.cachePath`) is provided AND the
- * `SKILL_ROUTER_USAGE_CACHE` env var is not "0", per-file scan results are
+ * `AGENTIC_SKILL_ROUTER_USAGE_CACHE` env var is not "0", per-file scan results are
  * cached on disk keyed by `(absolutePath, size, mtimeMs)`. Files whose size
  * and mtime match the cached entry are skipped; the cache is rewritten at
  * the end with stale entries (deleted files) pruned.

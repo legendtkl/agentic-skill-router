@@ -48,7 +48,7 @@ export async function cmdCorpus(argv: string[], hostName: HostName): Promise<num
 
 async function cmdCorpusSelect(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills corpus select",
+    commandName: "agentic-skill-router skills corpus select",
     config: {
       args: argv,
       options: {
@@ -128,7 +128,7 @@ async function cmdCorpusSelect(argv: string[], hostName: HostName): Promise<numb
 
 async function cmdCorpusSearch(argv: string[], hostName: HostName): Promise<number> {
   const { values } = parseStrict({
-    commandName: "skill-router skills corpus search",
+    commandName: "agentic-skill-router skills corpus search",
     config: {
       args: argv,
       options: {
@@ -174,7 +174,7 @@ function parseCorpusRanker(raw: string | undefined): CorpusRanker | null {
 
 async function cmdCorpusInspect(argv: string[], hostName: HostName): Promise<number> {
   const { values, positionals } = parseStrict({
-    commandName: "skill-router skills corpus inspect",
+    commandName: "agentic-skill-router skills corpus inspect",
     config: {
       args: argv,
       options: {
@@ -226,7 +226,7 @@ const CORPUS_BM25_INDEX_CACHE_VERSION = 1;
 const DEFAULT_CORPUS_CACHE_TTL_MS = 30_000;
 
 async function loadCorpusSkills(host: Host): Promise<LoadedCorpus> {
-  if (process.env["SKILL_ROUTER_CORPUS_CACHE"] === "0") {
+  if (process.env["AGENTIC_SKILL_ROUTER_CORPUS_CACHE"] === "0") {
     const [fingerprint, skills] = await Promise.all([
       corpusFingerprint(host),
       host.listSkills(),
@@ -262,7 +262,7 @@ async function loadCorpusSkills(host: Host): Promise<LoadedCorpus> {
 }
 
 async function loadCorpusBm25Index(host: Host): Promise<CorpusBm25Index> {
-  if (process.env["SKILL_ROUTER_CORPUS_CACHE"] === "0") {
+  if (process.env["AGENTIC_SKILL_ROUTER_CORPUS_CACHE"] === "0") {
     return buildSkillCorpusBm25Index((await loadCorpusSkills(host)).skills);
   }
   const cachePath = corpusBm25IndexCachePath(host.name);
@@ -311,7 +311,7 @@ async function corpusFingerprint(host: Host): Promise<string> {
       hash.update(entry.name);
       hash.update("\0");
       await updateMarkerFingerprint(hash, join(root, entry.name, "SKILL.md"));
-      await updateMarkerFingerprint(hash, join(root, entry.name, "SKILL.md.skill-router-disabled"));
+      await updateMarkerFingerprint(hash, join(root, entry.name, "SKILL.md.agentic-skill-router-disabled"));
     }
   }
   return hash.digest("hex");
@@ -389,17 +389,17 @@ async function writeJsonBestEffort(path: string, value: unknown): Promise<void> 
 }
 
 function corpusBm25IndexCachePath(host: HostName): string {
-  const dir = process.env["SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".skill-router");
+  const dir = process.env["AGENTIC_SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".agentic-skill-router");
   return join(dir, `corpus-bm25-index-${host}.json`);
 }
 
 function corpusCachePath(host: HostName): string {
-  const dir = process.env["SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".skill-router");
+  const dir = process.env["AGENTIC_SKILL_ROUTER_STATE_DIR"] ?? join(homedir(), ".agentic-skill-router");
   return join(dir, `corpus-cache-${host}.json`);
 }
 
 function corpusCacheTtlMs(): number {
-  const raw = process.env["SKILL_ROUTER_CORPUS_CACHE_TTL_MS"];
+  const raw = process.env["AGENTIC_SKILL_ROUTER_CORPUS_CACHE_TTL_MS"];
   if (!raw) return DEFAULT_CORPUS_CACHE_TTL_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_CORPUS_CACHE_TTL_MS;

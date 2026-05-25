@@ -11,7 +11,7 @@ function skill(name: string, description: string, overrides: Partial<Skill> = {}
     metadata: { name, description },
     source: "user",
     pluginKey: null,
-    skillMdPath: `/tmp/${name}/SKILL.md.skill-router-disabled`,
+    skillMdPath: `/tmp/${name}/SKILL.md.agentic-skill-router-disabled`,
     isDisabled: true,
     isPluginDisabled: false,
     canDisable: true,
