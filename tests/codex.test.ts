@@ -234,7 +234,7 @@ test("CodexHost deduplicates cached plugin versions by plugin key", async () => 
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
     const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "list", "--json"], { env });
-    const listed = JSON.parse(list.stdout) as Array<{ id: string; description: string }>;
+    const listed = (JSON.parse(list.stdout) as { skills: Array<{ id: string; description: string }> }).skills;
     const listedGmailSkills = listed.filter((s) => s.id === "plugin:gmail@openai-curated:gmail");
     assert.equal(listedGmailSkills.length, 1);
     assert.equal(listedGmailSkills[0]!.description, "new Gmail workflows");
@@ -356,12 +356,14 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
     const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "list", "--json"], { env });
-    const listed = JSON.parse(list.stdout) as Array<{
-      id: string;
-      canDisable: boolean;
-      description: string;
-      lastUsed: string | null;
-    }>;
+    const listed = (JSON.parse(list.stdout) as {
+      skills: Array<{
+        id: string;
+        canDisable: boolean;
+        description: string;
+        lastUsed: string | null;
+      }>;
+    }).skills;
     assert.ok(listed.some((s) => s.id === "user:codex:brand" && s.lastUsed === "2026-04-20T09:00:00.000Z"));
     assert.ok(listed.some((s) => s.id === "project:codex:.:project-root" && s.description === "Project root skill"));
     assert.ok(
@@ -370,7 +372,7 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
     assert.ok(listed.some((s) => s.id === "builtin:codex-admin:admin-policy" && s.canDisable === false));
 
     const suggest = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "suggest", "--unused-for=365d", "--json"], { env });
-    const suggestions = JSON.parse(suggest.stdout) as Array<{ id: string }>;
+    const suggestions = (JSON.parse(suggest.stdout) as { suggestions: Array<{ id: string }> }).suggestions;
     assert.ok(suggestions.some((s) => s.id === "user:codex:unused-local"));
     assert.ok(!suggestions.some((s) => s.id === "builtin:codex-system:openai-docs"));
     assert.ok(!suggestions.some((s) => s.id === "plugin:browser-use@openai-bundled:browser"));

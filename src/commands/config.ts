@@ -55,6 +55,11 @@ async function cmdConfigGet(argv: string[]): Promise<number> {
   } else {
     console.log(`keepIds:       []  (default)`);
   }
+  if (typeof config.usageSinceDays === "number" && config.usageSinceDays > 0) {
+    console.log(`usageSinceDays: ${config.usageSinceDays}`);
+  } else {
+    console.log(`usageSinceDays: unset  (default: scan all history)`);
+  }
   return 0;
 }
 

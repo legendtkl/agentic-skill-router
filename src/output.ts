@@ -1,7 +1,15 @@
 import { isPluginShortAmbiguous, lookupUsage } from "./usage.ts";
 import { parseRouteMode } from "./config.ts";
 import type { SkillRouteMatch, SkillRouteResult } from "./route.ts";
-import type { Confidence, RouteMode, Skill, Suggestion, UsageStat } from "./types.ts";
+import type { Confidence, RouteMode, Skill, Suggestion, UsageDiagnostics, UsageStat } from "./types.ts";
+
+/**
+ * Render a {@link UsageDiagnostics} record as a single human-readable line for
+ * the text outputs of `skills list` and `skills suggest`.
+ */
+export function formatUsageDiagnostics(d: UsageDiagnostics): string {
+  return `usage: scanned ${d.scannedFiles} files (parsed ${d.parsedFiles}, cached ${d.cachedFiles}, skipped ${d.skippedDirs} dirs) in ${d.durationMs}ms`;
+}
 
 // ────────────────── top-level usage ──────────────────
 

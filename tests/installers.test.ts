@@ -112,7 +112,7 @@ test("[claude] install creates plugin cache, manifest, bin wrapper, and register
       env: sandboxEnv(root, { AGENTIC_SKILL_ROUTER_HOST: "codex" }),
       maxBuffer: MAX_BUFFER,
     });
-    const listed = JSON.parse(listStdout) as Array<{ id: string }>;
+    const listed = (JSON.parse(listStdout) as { skills: Array<{ id: string }> }).skills;
     assert.ok(listed.some((item) => item.id === "user:wrapper-probe"), "wrapper selects Claude host");
     assert.equal(listed.some((item) => item.id === "user:codex:wrapper-probe"), false, "wrapper overrides caller host env");
 
@@ -316,7 +316,7 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
       env: sandboxEnv(root, { AGENTIC_SKILL_ROUTER_HOST: "claude-code" }),
       maxBuffer: MAX_BUFFER,
     });
-    const listed = JSON.parse(listStdout) as Array<{ id: string }>;
+    const listed = (JSON.parse(listStdout) as { skills: Array<{ id: string }> }).skills;
     assert.ok(listed.some((item) => item.id === "user:agents:wrapper-probe"), "wrapper selects Codex host");
     assert.equal(listed.some((item) => item.id === "user:wrapper-probe"), false, "wrapper overrides caller host env");
 

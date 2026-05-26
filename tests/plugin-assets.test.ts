@@ -142,7 +142,7 @@ test("built bin auto-detects installed Codex plugin host from its bundle", async
         },
       },
     );
-    const listed = JSON.parse(stdout) as Array<{ id: string }>;
+    const listed = (JSON.parse(stdout) as { skills: Array<{ id: string }> }).skills;
     assert.deepEqual(listed.map((item) => item.id), ["user:codex:marker-priority"]);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -185,7 +185,7 @@ test("built bin flushes large JSON output before exit", async () => {
         maxBuffer: 5 * 1024 * 1024,
       },
     );
-    const listed = JSON.parse(stdout) as Array<{ id: string }>;
+    const listed = (JSON.parse(stdout) as { skills: Array<{ id: string }> }).skills;
     assert.equal(listed.length, 90);
   } finally {
     await rm(root, { recursive: true, force: true });

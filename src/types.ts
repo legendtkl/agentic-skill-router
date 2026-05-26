@@ -71,6 +71,30 @@ export interface UsageStat {
   firstSeen: Date | null;
 }
 
+/**
+ * Per-scan diagnostics returned by {@link import("./usage.ts").collectUsageStatsDetailed}.
+ *
+ * - `scannedFiles`: total `.jsonl` files enumerated under the transcript root.
+ * - `cachedFiles`: files whose contents were not parsed because either the
+ *   on-disk (size, mtime) cache matched OR the file's mtime is older than the
+ *   `since` cutoff. Both cases share this counter because their effect is the
+ *   same — no line-by-line parsing happened.
+ * - `parsedFiles`: files that were actually read line-by-line during this scan.
+ * - `skippedDirs`: subdirectories of the transcript root that were skipped
+ *   because `readdir` returned `EACCES` / `EPERM` (see #106).
+ * - `durationMs`: wall-clock duration of the scan in milliseconds.
+ *
+ * Invariants: `scannedFiles === cachedFiles + parsedFiles` (modulo files that
+ * disappeared between enumeration and stat, which are excluded from both).
+ */
+export interface UsageDiagnostics {
+  scannedFiles: number;
+  cachedFiles: number;
+  parsedFiles: number;
+  skippedDirs: number;
+  durationMs: number;
+}
+
 export type SuggestionReason = "never-used" | "stale";
 export type Confidence = "high" | "medium" | "low";
 
@@ -216,6 +240,17 @@ export interface State {
 export interface Config {
   unusedForDays: number;
   routeMode: RouteMode;
+  /**
+   * Optional cap on how far back the transcript scan parses files. When set,
+   * any session file whose mtime is older than `now - usageSinceDays*24h` is
+   * skipped (counted as `cachedFiles` in {@link UsageDiagnostics}). Directory
+   * enumeration still descends into every subtree because we cannot infer a
+   * dir's recency from its own mtime, but per-file parse cost is bounded.
+   *
+   * Overridable per-invocation via `AGENTIC_SKILL_ROUTER_USAGE_SINCE` (a number
+   * of days). Set to 0 or omit to scan all available history.
+   */
+  usageSinceDays?: number;
   /**
    * Extra skill names to protect from the "suggest disable" policy.
    * Matches against `skill.name` for any source. Use this when you want to

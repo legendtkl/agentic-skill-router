@@ -1,7 +1,7 @@
 import { parseStrict } from "../args.ts";
-import { loadConfig, resolveUnusedForDays } from "../config.ts";
+import { loadConfig, resolveUnusedForDays, resolveUsageSince } from "../config.ts";
 import { createHost } from "../host-resolve.ts";
-import { printSuggestions, projectSuggestion } from "../output.ts";
+import { formatUsageDiagnostics, printSuggestions, projectSuggestion } from "../output.ts";
 import { suggest } from "../policy.ts";
 import type { HostName } from "../types.ts";
 
@@ -20,8 +20,9 @@ export async function cmdSuggest(argv: string[], hostName: HostName): Promise<nu
   const host = createHost(hostName);
   const config = await loadConfig();
   const days = resolveUnusedForDays({ cliFlag: values["unused-for"] as string | undefined, config });
+  const since = resolveUsageSince({ config });
   const skills = await host.listSkills();
-  const usage = await host.usageStats();
+  const { usage, diagnostics } = await host.usageStatsDetailed({ since });
   const suggestions = suggest(skills, usage, {
     unusedForDays: days,
     keepNames: config.keepNames,
@@ -29,9 +30,14 @@ export async function cmdSuggest(argv: string[], hostName: HostName): Promise<nu
   });
 
   if (values.json) {
-    process.stdout.write(JSON.stringify(suggestions.map((s) => projectSuggestion(s)), null, 2) + "\n");
+    const payload = {
+      suggestions: suggestions.map((s) => projectSuggestion(s)),
+      usageDiagnostics: diagnostics,
+    };
+    process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
     return 0;
   }
   printSuggestions(suggestions, days);
+  console.log(formatUsageDiagnostics(diagnostics));
   return 0;
 }
