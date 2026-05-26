@@ -1,4 +1,4 @@
-import { readdir, rename, stat } from "node:fs/promises";
+import { readdir, realpath, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { DISABLED_SUFFIX } from "./scan.ts";
 import {
@@ -179,6 +179,31 @@ function resolveDisableRecord(state: State, idOrInstanceKey: string): DisableRec
  * upgrade / npx skills update overwrote our rename), and flag various forms
  * of split-brain or partial state.
  */
+export interface ReapplySkippedSymlink {
+  /** disable record id we would have re-applied */
+  id: string;
+  /** stable per-instance key for the skill */
+  instanceKey: string;
+  /** absolute path to the live SKILL.md that would have been renamed */
+  livePath: string;
+  /** realpath of livePath (the actual file outside the host's skills root) */
+  linkedTarget: string;
+  /**
+   * Copy-pasteable command the user can run to opt in. `null` when the bare
+   * `id` resolves to multiple inventory instances — `skills disable <id>`
+   * would then collapse to a single arbitrary instance via
+   * `new Map(skills.map((s) => [s.id, s]))` and could rename the wrong one.
+   * Consult `manualRepairHint` instead in that case.
+   */
+  fixCommand: string | null;
+  /**
+   * Set only when `fixCommand` is `null` (ambiguous id). Names the specific
+   * instance and points the user at a path-level repair so they can act on
+   * the correct skill without guessing.
+   */
+  manualRepairHint?: string;
+}
+
 export interface ReapplyResult {
   /** state had a disable record + live SKILL.md was back; we re-renamed it */
   reapplied: string[];
@@ -190,6 +215,14 @@ export interface ReapplyResult {
   recoveredCommits: string[];
   /** journal entries whose intent was rolled back (rename never completed) */
   recoveredRollbacks: string[];
+  /**
+   * Disable records whose live SKILL.md was re-created BUT now resolves
+   * through an out-of-root symlink. `reapplyMissing` refuses to silently
+   * rename those targets — `skills status` is intended to be a read-only
+   * inspection surface and must not mutate files outside the host's skills
+   * root. The user can opt back in via the printed `fixCommand`.
+   */
+  skipped: ReapplySkippedSymlink[];
 }
 
 export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResult> {
@@ -214,6 +247,7 @@ export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResul
     const conflicted: string[] = [];
     const recoveredCommits: string[] = [];
     const recoveredRollbacks: string[] = [];
+    const skipped: ReapplySkippedSymlink[] = [];
 
     // Step 0: reconcile the pending-op journal before any other inference.
     // A pending entry means a disable/enable was in flight; the file system
@@ -281,17 +315,75 @@ export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResul
       if (liveExists && disabledExists) {
         conflicted.push(rec.id);
       } else if (!disabledExists && liveExists) {
-        // upstream re-created it; re-rename
-        await rename(paths.livePath, paths.disabledPath);
-        reapplied.push(rec.id);
+        // Upstream re-created the live SKILL.md. Normally we re-rename it,
+        // but if the current inventory entry resolves through an out-of-root
+        // symlink (e.g. user-created link into a directory the host doesn't
+        // own), we MUST NOT silently rename it: that would mutate a file
+        // outside the host's skills root from a "read-only-looking" `skills
+        // status` call. The disable/enable commands gate this behind
+        // `--allow-symlink-target-mutation`; status mirrors that policy by
+        // skipping and surfacing a fix command for the user to run.
+        if (current && isOutOfRootMutableSymlinkSkill(current)) {
+          const linkedTarget = (await tryRealpath(paths.livePath)) ?? paths.livePath;
+          // `skills disable` resolves bare positional ids via a Map keyed on
+          // skill.id, which collapses duplicates to a single arbitrary
+          // instance. Emitting `disable <id>` would then potentially rename
+          // the wrong skill. When the current inventory has >1 instance
+          // sharing this id, surface a manual-repair hint that names the
+          // specific instanceKey instead of a copy-pasteable command.
+          const ambiguous = (idCounts.get(rec.id) ?? 0) > 1;
+          if (ambiguous) {
+            skipped.push({
+              id: rec.id,
+              instanceKey: rec.instanceKey,
+              livePath: paths.livePath,
+              linkedTarget,
+              fixCommand: null,
+              manualRepairHint:
+                `Multiple skills share id \`${rec.id}\`; manually rename ` +
+                `${paths.livePath} -> ${paths.disabledPath} or use the Web UI ` +
+                `to disable the specific instance (instanceKey: ${rec.instanceKey}).`,
+            });
+          } else {
+            skipped.push({
+              id: rec.id,
+              instanceKey: rec.instanceKey,
+              livePath: paths.livePath,
+              linkedTarget,
+              fixCommand: `agentic-skill-router skills disable ${rec.id} --yes --allow-symlink-target-mutation`,
+            });
+          }
+        } else {
+          await rename(paths.livePath, paths.disabledPath);
+          reapplied.push(rec.id);
+        }
       } else if (!disabledExists && !liveExists) {
         orphaned.push(rec.id);
       }
     }
 
     if (nextState !== state) await saveState(nextState, deps.statePath);
-    return { reapplied, orphaned, conflicted, recoveredCommits, recoveredRollbacks };
+    return { reapplied, orphaned, conflicted, recoveredCommits, recoveredRollbacks, skipped };
   });
+}
+
+/**
+ * Mirror of `isOutOfRootMutableSymlink` from `src/commands/apply.ts`. Kept
+ * private to apply.ts so reapplyMissing can reuse the same policy without
+ * pulling in a CLI command module from the runtime layer. A builtin remains
+ * protected by `canDisable=false` upstream; out-of-root user / plugin skills
+ * are visible but unsafe to rename without explicit consent.
+ */
+function isOutOfRootMutableSymlinkSkill(skill: Skill): boolean {
+  return skill.outOfRoot === true && skill.source !== "builtin";
+}
+
+async function tryRealpath(path: string): Promise<string | null> {
+  try {
+    return await realpath(path);
+  } catch {
+    return null;
+  }
 }
 
 interface PendingResolution {
