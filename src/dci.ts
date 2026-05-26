@@ -3,6 +3,7 @@ import { open as openFile, readFile } from "node:fs/promises";
 import { compact, isGenericTerm, termsFor } from "./text-match.ts";
 import type { Confidence, Skill } from "./types.ts";
 import { isRoutableDisabledSkill, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
+import { skillInstanceKey } from "./state.ts";
 
 export interface DciOptions {
   topK?: number;
@@ -482,14 +483,15 @@ export function dciSelectSkills(
   const seen = new Set<string>();
   for (const idOrRef of idOrRefs) {
     const skill = findRoutableSkillOrThrow(skills, idOrRef);
-    if (seen.has(skill.id)) continue;
+    const key = skillInstanceKey(skill.id, skill.skillMdPath);
+    if (seen.has(key)) continue;
     selected.push({
       ...skillRef(skill),
       action: "read-skill-file",
       confidence,
       reason,
     });
-    seen.add(skill.id);
+    seen.add(key);
   }
   if (selected.length === 0) throw new Error("select at least one disabled skill");
   if (selected.length > DCI_BUDGET.maxSelections) {

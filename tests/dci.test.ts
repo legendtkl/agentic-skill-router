@@ -642,6 +642,59 @@ test("DCI multi-select records a bounded set of disabled skills", async () => {
   }
 });
 
+test("DCI multi-select dedups by instance key so duplicate-id skills both appear", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const first = await writeCorpusSkill(corpus.root, {
+      id: "plugin:dup@local:tool",
+      name: "dup-instance-v1",
+      description: "duplicate logical skill instance one",
+      body: "Use this skill for dci-instance-key-v1.",
+      isDisabled: true,
+      source: "plugin",
+      pluginKey: "dup@local",
+    });
+    const second = await writeCorpusSkill(corpus.root, {
+      id: "plugin:dup@local:tool",
+      name: "dup-instance-v2",
+      description: "duplicate logical skill instance two",
+      body: "Use this skill for dci-instance-key-v2.",
+      isDisabled: true,
+      source: "plugin",
+      pluginKey: "dup@local",
+    });
+    const skills = [first, second];
+
+    const search = await dciSearchDisabledSkills(skills, "dci-instance-key", { topK: 2 });
+    assert.equal(search.matches.length, 2);
+
+    const selected = dciSelectSkills(
+      skills,
+      [search.matches[0]!.ref, search.matches[1]!.ref],
+      "medium",
+      "both duplicate-id instances must be preserved",
+    );
+    assert.equal(selected.selected.length, 2);
+    const selectedPaths = selected.selected.map((s) => s.skillMdPath).sort();
+    assert.deepEqual(selectedPaths, [first.skillMdPath, second.skillMdPath].sort());
+    // Both share the same logical id, but instance-key dedup must keep both.
+    assert.equal(selected.selected[0]!.id, "plugin:dup@local:tool");
+    assert.equal(selected.selected[1]!.id, "plugin:dup@local:tool");
+    assert.notEqual(selected.selected[0]!.skillMdPath, selected.selected[1]!.skillMdPath);
+
+    // Still dedup when the SAME instance ref is passed twice.
+    const dedupSame = dciSelectSkills(
+      skills,
+      [search.matches[0]!.ref, search.matches[0]!.ref],
+      "medium",
+      "identical refs collapse",
+    );
+    assert.equal(dedupSame.selected.length, 1);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("auto route upgrades a suspicious lexical winner to DCI evidence", async () => {
   const corpus = await makeCorpus(0);
   try {
