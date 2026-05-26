@@ -1,9 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { networkInterfaces } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep as pathSep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStrict } from "../args.ts";
 import { disableSkill, enableSkill } from "../apply.ts";
@@ -41,11 +41,18 @@ interface WebServerOptions {
   port?: number;
   bind?: string;
   dangerouslyBindPublic?: boolean;
+  /**
+   * Allowlist of directories that may be used as `projectPath` for
+   * project-scope `/api/skills` requests. Each entry is canonicalized
+   * (`resolve()` + `realpath()`) at server start. When omitted, defaults
+   * to `[process.cwd()]`.
+   */
+  projectRoots?: string[];
 }
 
 export async function cmdWeb(argv: string[], hostName: HostName): Promise<number> {
   if (argv.includes("-h") || argv.includes("--help")) {
-    console.log(`agentic-skill-router skills web [--port=N] [--bind=ADDR] [--dangerously-bind-public]
+    console.log(`agentic-skill-router skills web [--port=N] [--bind=ADDR] [--dangerously-bind-public] [--project-root=DIR ...]
 
 Starts a localhost web UI for viewing, disabling, and enabling skills.
 
@@ -55,6 +62,12 @@ UI on a public or LAN interface. Doing so allows anyone on the network to read
 and mutate local skill files; --dangerously-bind-public also requires the
 mutation token for read endpoints and enforces Origin/Referer/Host checks on
 mutations.
+
+Project-scope API requests (\`/api/skills?scope=project&projectPath=...\`) are
+restricted to an allowlist of directories. The allowlist defaults to the
+current working directory; pass --project-root=<dir> one or more times to
+override it. Each accepted path must equal or be a subdirectory of one of
+the allowed roots (after symlink resolution).
 `);
     return 0;
   }
@@ -67,6 +80,7 @@ mutations.
         port: { type: "string", short: "p" },
         bind: { type: "string" },
         "dangerously-bind-public": { type: "boolean" },
+        "project-root": { type: "string", multiple: true },
       },
     },
   });
@@ -75,14 +89,19 @@ mutations.
   if (port === null) return 2;
   const bind = (values.bind as string | undefined) ?? "127.0.0.1";
   const dangerouslyBindPublic = values["dangerously-bind-public"] === true;
+  const projectRootValues = values["project-root"] as string[] | undefined;
 
   try {
-    const { server, url } = await startWebServer({
+    const serverOpts: WebServerOptions = {
       hostName,
       port: port ?? 8787,
       bind,
       dangerouslyBindPublic,
-    });
+    };
+    if (projectRootValues && projectRootValues.length > 0) {
+      serverOpts.projectRoots = projectRootValues;
+    }
+    const { server, url } = await startWebServer(serverOpts);
     console.log(`agentic-skill-router web UI listening on ${url}`);
     console.log("Press Ctrl+C to stop.");
 
@@ -113,6 +132,9 @@ export async function startWebServer(opts: WebServerOptions): Promise<StartWebSe
         `Re-run with --dangerously-bind-public if you really want to expose the local skill manager to the network.`,
     );
   }
+  const projectRootAllowlist = await canonicalizeProjectRoots(
+    opts.projectRoots && opts.projectRoots.length > 0 ? opts.projectRoots : [process.cwd()],
+  );
   const basicAuth: BasicAuthCredential | null = !loopback
     ? { username: "agentic-skill-router", password: randomBytes(24).toString("base64url") }
     : null;
@@ -141,6 +163,7 @@ export async function startWebServer(opts: WebServerOptions): Promise<StartWebSe
     enforceOriginChecks,
     expectedHosts: enforceOriginChecks ? computeExpectedHosts(bind, opts.port ?? 8787) : null,
     basicAuth,
+    projectRootAllowlist,
   };
   const server = createServer((req, res) => {
     void handleRequest(req, res, opts.hostName, mutationToken, security);
@@ -175,6 +198,13 @@ interface SecurityOptions {
   enforceOriginChecks: boolean;
   expectedHosts: Set<string> | null;
   basicAuth: BasicAuthCredential | null;
+  /**
+   * Canonicalized list of directories accepted as `projectPath` for
+   * project-scope requests. Any request whose `projectPath` does not
+   * resolve to a path equal to or beneath one of these entries is
+   * rejected with HTTP 403.
+   */
+  projectRootAllowlist: string[];
 }
 
 interface BasicAuthCredential {
@@ -266,21 +296,21 @@ async function handleRequest(
       const requestedHost = parseWebHost(url.searchParams.get("agent") ?? url.searchParams.get("host"), hostName);
       const scope = parseScope(url.searchParams.get("scope"));
       const projectPath = url.searchParams.get("projectPath") ?? "";
-      const result = await listWebSkills(requestedHost, scope, projectPath);
+      const result = await listWebSkills(requestedHost, scope, projectPath, security.projectRootAllowlist);
       sendJson(res, 200, result);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/skills/disable") {
       assertMutationRequest(req, mutationToken, security);
       const body = await readJsonBody(req);
-      const result = await mutateWebSkill(hostName, body, "disable");
+      const result = await mutateWebSkill(hostName, body, "disable", security.projectRootAllowlist);
       sendJson(res, 200, result);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/skills/enable") {
       assertMutationRequest(req, mutationToken, security);
       const body = await readJsonBody(req);
-      const result = await mutateWebSkill(hostName, body, "enable");
+      const result = await mutateWebSkill(hostName, body, "enable", security.projectRootAllowlist);
       sendJson(res, 200, result);
       return;
     }
@@ -291,13 +321,18 @@ async function handleRequest(
   }
 }
 
-async function listWebSkills(hostName: HostName, scope: WebScope, projectPath: string): Promise<{
+async function listWebSkills(
+  hostName: HostName,
+  scope: WebScope,
+  projectPath: string,
+  projectRootAllowlist: string[],
+): Promise<{
   host: HostName;
   scope: WebScope;
   projectPath: string | null;
   skills: WebSkill[];
 }> {
-  const host = createScopedHost(hostName, scope, projectPath);
+  const host = await createScopedHost(hostName, scope, projectPath, projectRootAllowlist);
   const skills = filterScope(await host.listSkills(), scope);
   const usage = await host.usageStats();
   const projected = skills.map((skill) => ({
@@ -322,6 +357,7 @@ async function mutateWebSkill(
   defaultHostName: HostName,
   body: unknown,
   operation: "disable" | "enable",
+  projectRootAllowlist: string[],
 ): Promise<{ ok: true; skill: WebSkill; skills: WebSkill[] }> {
   if (!isRecord(body)) throw new WebHttpError(400, "request body must be a JSON object");
   const hostName = parseWebHost(readString(body, "agent") ?? readString(body, "host"), defaultHostName);
@@ -330,11 +366,26 @@ async function mutateWebSkill(
   const instanceKey = readString(body, "instanceKey");
   if (!instanceKey) throw new WebHttpError(400, "instanceKey is required");
 
-  const host = createScopedHost(hostName, scope, projectPath);
+  const host = await createScopedHost(hostName, scope, projectPath, projectRootAllowlist);
   const skills = filterScope(await host.listSkills(), scope);
   const target = skills.find((skill) => skillInstanceKey(skill.id, skill.skillMdPath) === instanceKey);
   if (!target) throw new WebHttpError(404, "skill not found");
   assertCanMutate(target);
+
+  // P1.G: validating the scan roots is not enough. An individual skill
+  // directory inside an allowlisted skills root can itself be a symlink
+  // to a path outside the allowlist (`<allowed>/.claude/skills/evil ->
+  // /outside/evil`). Production `walkSkillsDir` correctly marks such
+  // entries `outOfRoot: true`, which then makes them mutable via the
+  // explicit symlink-target path (`canMutateSymlink` /
+  // `allowOutOfRoot`) — a mutation renames the SKILL.md at the link
+  // target. For project-scope mutations we have an allowlist; refuse to
+  // rename any skill whose `SKILL.md` realpath escapes it. Global-scope
+  // mutations stay bounded by the host's own skill roots and are not
+  // affected by this allowlist check.
+  if (scope === "project") {
+    await assertProjectSkillTargetAllowed(target, projectRootAllowlist);
+  }
 
   const statePath = statePathForHost(host.name);
   const allowOutOfRoot = canMutateSymlink(target);
@@ -344,7 +395,7 @@ async function mutateWebSkill(
     await enableSkill(target, { statePath, host: host.name, allowOutOfRoot });
   }
 
-  const refreshed = await listWebSkills(hostName, scope, projectPath);
+  const refreshed = await listWebSkills(hostName, scope, projectPath, projectRootAllowlist);
   const changed = refreshed.skills.find((skill) => skill.instanceKey === instanceKey);
   if (!changed) throw new WebHttpError(500, "skill changed but could not be reloaded");
   return { ok: true, skill: changed, skills: refreshed.skills };
@@ -461,11 +512,314 @@ function statusForDomainError(err: unknown): number {
   return 500;
 }
 
-function createScopedHost(hostName: HostName, scope: WebScope, projectPath: string): Host {
+async function createScopedHost(
+  hostName: HostName,
+  scope: WebScope,
+  projectPath: string,
+  projectRootAllowlist: string[],
+): Promise<Host> {
   if (scope === "global") return createHost(hostName);
   const trimmed = projectPath.trim();
   if (trimmed === "") throw new WebHttpError(400, "projectPath is required for project scope");
-  return createHost(hostName, { cwd: resolve(trimmed) });
+  const resolved = resolve(trimmed);
+  // Canonicalize via the nearest existing ancestor so a missing leaf cannot
+  // hide a symlink jump (e.g. `/allowed/link/missing` where `link -> /outside`
+  // must NOT pass the allowlist check just because realpath of the full path
+  // throws and we fall back to the unresolved input).
+  const canonical = await canonicalizeWithMissingTail(resolved);
+  assertProjectPathAllowed(canonical, projectRootAllowlist, resolved);
+  // P1.B: the project host walks UP from cwd to the nearest `.git` ancestor
+  // and scans `<dir>/<skillsDir>` at every level on the way. A request inside
+  // an allowlisted subtree could otherwise reach skills directories above
+  // that subtree. Reject if any ancestor the project host would scan is
+  // outside the allowlist. When no `.git` ancestor exists, the production
+  // host only scans the start dir itself, so no parent check is required.
+  const scanAncestors = await collectScanAncestors(canonical);
+  assertAncestorsAllowed(scanAncestors, projectRootAllowlist, resolved);
+  // P1.E: also realpath each `<ancestor>/.claude/skills` and
+  // `<ancestor>/.agents/skills` that exists on disk. If the skills root
+  // itself is a symlink to a directory outside the allowlist,
+  // `walkSkillsDir` would follow it at the kernel level and surface skills
+  // from the outside tree with `outOfRoot=false` (because the per-entry
+  // symlink check in `scan.ts` only flips that flag for entries that are
+  // themselves symlinks, not for the case where the skills root container
+  // is a symlink). The result would be mutable skills whose rename
+  // operations escape the allowlist.
+  await assertProjectSkillRootsAllowed(scanAncestors, projectRootAllowlist, resolved);
+  // P1.D: pass the canonical (OS-resolved) cwd into the host. The host
+  // re-`resolve()`s but does NOT realpath, so passing the resolved-but-not-
+  // canonicalized form leaves a TOCTOU window in which a writable path
+  // component under the allowlist can be swapped to a symlink pointing
+  // outside between our validation and the scan. Passing the canonical
+  // path closes that window because the discovery walk runs on a path
+  // string that has already been OS-resolved against the allowlist.
+  //
+  // P1.F (residual risk, NOT fully closed here): all of the above checks
+  // run on canonical paths captured at validation time, but the
+  // subsequent host scan re-opens those paths as strings inside
+  // `walkSkillsDir` (`src/scan.ts`). An attacker with write access UNDER
+  // an allowlisted root can swap a path component (e.g. replace
+  // `<allowed>/.claude/skills` with a symlink to `/outside`) AFTER we
+  // validate and BEFORE the scan opens it. Fully closing this race
+  // requires pinning directory handles (`open()` -> fd, then operate via
+  // fd) across `walkSkillsDir`, `projectSkillRoots`, and the rename in
+  // `apply.ts`. The current threat model assumes the allowlisted
+  // directory tree is not attacker-writable; a follow-up will pin fds.
+  return createHost(hostName, { cwd: canonical });
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if ((err as NodeJS.ErrnoException).code === "ENOTDIR") return false;
+    return false;
+  }
+}
+
+/**
+ * Canonicalize `input` for the allowlist containment check.
+ *
+ * If `input` itself exists, returns `realpath(input)`. Otherwise walks up
+ * parents until one exists, realpaths that ancestor, then re-appends the
+ * missing tail. This prevents a missing-leaf realpath failure from masking
+ * a symlink jump along the requested path: e.g. when `/allowed/link` is a
+ * symlink to `/outside` and the caller asks for `/allowed/link/missing`,
+ * naive realpath throws and a fallback to the unresolved input would
+ * incorrectly pass `startsWith("/allowed/")`.
+ */
+async function canonicalizeWithMissingTail(input: string): Promise<string> {
+  // Fast path: the target exists; realpath gives the full canonical form.
+  try {
+    return await realpath(input);
+  } catch {
+    // Fall through to ancestor walk.
+  }
+  const tail: string[] = [];
+  let current = input;
+  while (true) {
+    const parent = dirname(current);
+    if (parent === current) {
+      // Reached the filesystem root without finding any existing ancestor.
+      // Nothing useful to canonicalize against; return the resolved input so
+      // the allowlist check sees the exact requested path (and rejects it
+      // unless it literally matches an allowlist entry).
+      return input;
+    }
+    tail.unshift(basename(current));
+    if (await pathExists(parent)) {
+      try {
+        const canonicalParent = await realpath(parent);
+        return tail.length === 0 ? canonicalParent : join(canonicalParent, ...tail);
+      } catch {
+        return input;
+      }
+    }
+    current = parent;
+  }
+}
+
+async function canonicalizeProjectRoots(roots: string[]): Promise<string[]> {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of roots) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (trimmed === "") continue;
+    const resolved = resolve(trimmed);
+    const canonical = await canonicalizeWithMissingTail(resolved);
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    out.push(canonical);
+  }
+  return out;
+}
+
+function isWithinAllowlist(canonical: string, projectRootAllowlist: string[]): boolean {
+  for (const root of projectRootAllowlist) {
+    if (canonical === root) return true;
+    if (canonical.startsWith(root + pathSep)) return true;
+  }
+  return false;
+}
+
+function assertProjectPathAllowed(
+  canonical: string,
+  projectRootAllowlist: string[],
+  originalResolved: string,
+): void {
+  if (projectRootAllowlist.length === 0) {
+    throw new WebHttpError(
+      403,
+      `projectPath \`${originalResolved}\` is outside the allowed project roots. ` +
+        `No project roots are configured; restart the web server with --project-root=<dir> to allow project-scope scans.`,
+    );
+  }
+  if (isWithinAllowlist(canonical, projectRootAllowlist)) return;
+  throw new WebHttpError(
+    403,
+    `projectPath \`${originalResolved}\` is outside the allowed project roots. ` +
+      `Allowed roots: ${projectRootAllowlist.join(", ")}`,
+  );
+}
+
+/**
+ * Returns the exact list of directories `src/hosts/project.ts:projectSkillRoots`
+ * will scan for the given canonical start dir:
+ *
+ *   - If no `.git` ancestor exists at or above `canonicalStart`, returns
+ *     `[canonicalStart]` only.
+ *   - If a `.git` ancestor is found, returns every directory from
+ *     `canonicalStart` up to and including the repo root.
+ *
+ * Because `canonicalStart` is already realpath-ed, pure-string `dirname()`
+ * walks the real filesystem tree (no symlinks remain in the prefix), so we
+ * don't need to realpath each parent again here. The skills-root check
+ * downstream realpaths the actual `<dir>/<skillsDir>` containers.
+ */
+async function collectScanAncestors(canonicalStart: string): Promise<string[]> {
+  const repoRoot = await findRepoRootLike(canonicalStart);
+  if (repoRoot === null) return [canonicalStart];
+  const dirs: string[] = [];
+  let current = canonicalStart;
+  while (true) {
+    dirs.push(current);
+    if (current === repoRoot) return dirs;
+    const parent = dirname(current);
+    if (parent === current) return dirs; // safety: never happens because repoRoot is an ancestor
+    current = parent;
+  }
+}
+
+/**
+ * Reject requests whose project host would scan a directory outside the
+ * allowlist. The ancestor list comes from `collectScanAncestors`, which
+ * mirrors production semantics exactly.
+ */
+function assertAncestorsAllowed(
+  scanAncestors: string[],
+  projectRootAllowlist: string[],
+  originalResolved: string,
+): void {
+  for (const dir of scanAncestors) {
+    if (isWithinAllowlist(dir, projectRootAllowlist)) continue;
+    throw new WebHttpError(
+      403,
+      `projectPath \`${originalResolved}\` would cause project skill discovery to scan ` +
+        `\`${dir}\`, which is outside the allowed project roots. ` +
+        `Allowed roots: ${projectRootAllowlist.join(", ")}`,
+    );
+  }
+}
+
+/**
+ * Reject project-scope mutations whose target `SKILL.md` realpath
+ * escapes the allowlist. This catches the case where the SKILLS-ROOT
+ * container is a real directory (passes `assertProjectSkillRootsAllowed`)
+ * but an individual skill subdirectory inside it is a symlink to a path
+ * outside the allowlist (e.g. `<allowed>/.claude/skills/evil ->
+ * /outside/evil`). The host marks such entries `outOfRoot: true`, which
+ * makes them mutable via the explicit symlink-target path; without this
+ * check the rename would land at the symlink target outside the
+ * allowlist.
+ *
+ * Builtin skills carry an empty `skillMdPath` and are filtered out by
+ * `assertCanMutate` before we get here, so we never realpath an empty
+ * string. A realpath failure (broken symlink, missing file) is treated
+ * as a rejection because we cannot prove containment.
+ */
+async function assertProjectSkillTargetAllowed(
+  target: Skill,
+  projectRootAllowlist: string[],
+): Promise<void> {
+  if (!target.skillMdPath || target.skillMdPath === "") {
+    // Defense-in-depth: builtin skills (empty path) should already be
+    // blocked by `assertCanMutate`; refuse if anything slipped through.
+    throw new WebHttpError(403, "skill has no on-disk path to validate against the allowlist");
+  }
+  let canonicalTarget: string;
+  try {
+    canonicalTarget = await realpath(target.skillMdPath);
+  } catch {
+    throw new WebHttpError(
+      403,
+      `skill \`${target.id}\` cannot be canonicalized for the allowlist check ` +
+        `(broken symlink or missing file at \`${target.skillMdPath}\`)`,
+    );
+  }
+  if (isWithinAllowlist(canonicalTarget, projectRootAllowlist)) return;
+  throw new WebHttpError(
+    403,
+    `skill \`${target.id}\` resolves to \`${canonicalTarget}\`, outside the allowed project roots. ` +
+      `Allowed roots: ${projectRootAllowlist.join(", ")}`,
+  );
+}
+
+/**
+ * Reject requests where one of the actual `<ancestor>/<skillsDir>`
+ * containers the host would open is a symlink (or otherwise resolves) to
+ * a directory outside the allowlist.
+ *
+ * Production `walkSkillsDir` (`src/scan.ts`) calls
+ * `readdir(skillsRoot, ...)`, which follows symlinks at the kernel level.
+ * The per-entry symlink check inside that function only flips
+ * `outOfRoot=true` for entries that are themselves symlinks — if the
+ * SKILLS-ROOT container is a symlink, every real subdirectory of the
+ * link target is reported as in-root and `canDisable: true`. A web
+ * mutation against such a skill then renames `SKILL.md` outside the
+ * allowlist via the symlink. We close that path here by realpath-ing
+ * each candidate skills root and requiring containment.
+ *
+ * Both `.claude/skills` and `.agents/skills` are checked even though
+ * only one matches the active host: the cost is two extra `lstat`s per
+ * ancestor and it avoids coupling this guard to host-name plumbing.
+ */
+async function assertProjectSkillRootsAllowed(
+  scanAncestors: string[],
+  projectRootAllowlist: string[],
+  originalResolved: string,
+): Promise<void> {
+  const skillsDirNames = [".claude/skills", ".agents/skills"];
+  for (const ancestor of scanAncestors) {
+    for (const skillsDirName of skillsDirNames) {
+      const candidate = join(ancestor, skillsDirName);
+      if (!(await pathExists(candidate))) continue;
+      let canonicalCandidate: string;
+      try {
+        canonicalCandidate = await realpath(candidate);
+      } catch {
+        // Broken symlink or transient error: production `walkSkillsDir`
+        // would treat it as ENOENT (no skills), so skip without rejecting.
+        continue;
+      }
+      if (isWithinAllowlist(canonicalCandidate, projectRootAllowlist)) continue;
+      throw new WebHttpError(
+        403,
+        `projectPath \`${originalResolved}\` exposes skill root \`${candidate}\` which ` +
+          `resolves to \`${canonicalCandidate}\`, outside the allowed project roots. ` +
+          `Allowed roots: ${projectRootAllowlist.join(", ")}`,
+      );
+    }
+  }
+}
+
+/**
+ * Mirror of `findRepoRoot` in `src/hosts/project.ts`: walk parents by
+ * pure-string `dirname` until a directory containing `.git` is found, or
+ * return `null` at the filesystem root. We operate on the canonical input
+ * so the walk matches what the production host will see when given the
+ * same canonical cwd.
+ */
+async function findRepoRootLike(start: string): Promise<string | null> {
+  let current = start;
+  while (true) {
+    if (await pathExists(join(current, ".git"))) return current;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
 }
 
 function filterScope(skills: Skill[], scope: WebScope): Skill[] {

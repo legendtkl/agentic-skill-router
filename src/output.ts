@@ -35,7 +35,7 @@ USAGE
   agentic-skill-router skills config get [--json]
   agentic-skill-router skills config set <key> <value>
   agentic-skill-router skills config path
-  agentic-skill-router skills web [--port=N] [--bind=ADDR] [--dangerously-bind-public]
+  agentic-skill-router skills web [--port=N] [--bind=ADDR] [--dangerously-bind-public] [--project-root=DIR ...]
 
 DURATION  bare integer = days. Suffixed: 30d / 2w / 3m / 1y
 CONFIG    ~/.agentic-skill-router/config.json   { "unusedForDays": 30, "routeMode": "auto" }
