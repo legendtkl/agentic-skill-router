@@ -12,7 +12,12 @@ import {
   skillInstanceKey,
   withStateLock,
 } from "./state.ts";
-import { BuiltinSkillCannotDisableError, SkillConflictError, SkillOutOfRootError } from "./types.ts";
+import {
+  BuiltinSkillCannotDisableError,
+  SkillConflictError,
+  SkillOutOfRootError,
+  SkillSymlinkTargetMismatchError,
+} from "./types.ts";
 import type { DisableRecord, HostName, PendingOp, Skill, State } from "./types.ts";
 
 export interface ApplyDeps {
@@ -63,7 +68,44 @@ export async function disableSkill(
     }
 
     const startedAt = (deps.now?.() ?? new Date()).toISOString();
-    const record: DisableRecord = {
+    // When the operation flows through an out-of-root symlink, capture the
+    // canonical "SKILL.md-form" path of the file we are about to track BEFORE
+    // the rename, so later enable/reapply can detect retargeting (#97).
+    //
+    // We store the SKILL.md-form (suffix stripped) rather than the raw
+    // realpath so a single recorded value works regardless of which side of
+    // the rename the on-disk file is on at check time:
+    //   - At disable time we realpath the live `SKILL.md`.
+    //   - At enable time we realpath the disabled marker (.agentic-skill-router-disabled).
+    //   - At reapply time we realpath the live `SKILL.md` again.
+    // All three resolve to the same external directory, and stripping the
+    // suffix on each side gives apples-to-apples comparison without having
+    // to remember which suffix the resolver happened to see.
+    const recordOutOfRoot = Boolean(skill.outOfRoot) && deps.allowOutOfRoot === true;
+    let canonicalAtDisable: string | undefined;
+    let canonicalLivePath: string | undefined;
+    if (recordOutOfRoot && liveExists) {
+      // Resolve the canonical of the live file pre-rename. canonicalLivePath
+      // is the realpath we will rename THROUGH (P1.B TOCTOU: rename via the
+      // canonical, not the in-root symlink path, so a concurrent symlink
+      // swap between this resolve and the rename cannot redirect the rename
+      // to a different file). canonicalAtDisable is the suffix-stripped form
+      // we persist for later comparison.
+      const resolvedLive = await tryRealpath(livePath);
+      if (resolvedLive !== null) {
+        canonicalLivePath = resolvedLive;
+        canonicalAtDisable = resolvedLive.endsWith(DISABLED_SUFFIX)
+          ? resolvedLive.slice(0, -DISABLED_SUFFIX.length)
+          : resolvedLive;
+      }
+    } else if (recordOutOfRoot && !liveExists) {
+      // Already-disabled marker through a symlink: resolve from the disabled
+      // path so the record carries the canonical for future checks.
+      const c = await canonicalSkillFile(disabledPath);
+      if (c !== null) canonicalAtDisable = c;
+    }
+
+    const baseRecord: DisableRecord = {
       instanceKey: skillInstanceKey(skill.id, disabledPath),
       id: skill.id,
       pluginKey: skill.pluginKey,
@@ -72,23 +114,27 @@ export async function disableSkill(
       source: skill.source,
       disabledAt: startedAt,
       reason,
+      ...(canonicalAtDisable ? { canonicalSkillMdPath: canonicalAtDisable } : {}),
+      ...(recordOutOfRoot ? { discoveredViaSymlink: true } : {}),
     };
 
     // Phase 1: write intent BEFORE the rename. On crash between this save and
     // the rename, the journal lets `status` either complete the rename or
     // roll back the intent without leaving a half-applied disable record.
+    // The journal entry carries the canonical so crash recovery can commit
+    // the record without re-resolving (#97 P1.C — see reconcilePendingOp).
     const initial = await loadState(deps.statePath, deps.host);
     // Snapshot any pre-existing disable record so a rollback can restore it
     // instead of silently forgetting the user's prior disabled intent.
-    const priorRecord = findDisableRecord(initial, record.instanceKey);
+    const priorRecord = findDisableRecord(initial, baseRecord.instanceKey);
     const pending: PendingOp = {
-      instanceKey: record.instanceKey,
+      instanceKey: baseRecord.instanceKey,
       op: "disable",
       id: skill.id,
       livePath,
       disabledPath,
       startedAt,
-      record,
+      record: baseRecord,
       ...(priorRecord ? { priorRecord } : {}),
     };
     const beforeRename = addPendingOp(initial, pending);
@@ -96,7 +142,19 @@ export async function disableSkill(
 
     let alreadyDisabled = false;
     if (liveExists) {
-      await rename(livePath, disabledPath);
+      // P1.B (TOCTOU): for out-of-root symlinks we have already resolved the
+      // canonical live path. Rename through it directly so a concurrent
+      // symlink swap between resolve and rename cannot redirect this rename
+      // to a different file. For in-root paths there is no symlink to swap,
+      // so the original livePath -> disabledPath rename is sufficient.
+      if (canonicalLivePath) {
+        const canonicalDisabledPath = canonicalLivePath.endsWith(DISABLED_SUFFIX)
+          ? canonicalLivePath
+          : canonicalLivePath + DISABLED_SUFFIX;
+        await rename(canonicalLivePath, canonicalDisabledPath);
+      } else {
+        await rename(livePath, disabledPath);
+      }
     } else {
       alreadyDisabled = true;
     }
@@ -105,7 +163,7 @@ export async function disableSkill(
     // pending entry in a single write. If THIS save fails, the next `status`
     // sees pending=disable + disabled file present and finishes the commit
     // idempotently.
-    const committed = removePendingOp(addDisableRecord(beforeRename, record), record.instanceKey);
+    const committed = removePendingOp(addDisableRecord(beforeRename, baseRecord), baseRecord.instanceKey);
     await saveState(committed, deps.statePath);
     return { state: committed, alreadyDisabled };
   });
@@ -122,7 +180,7 @@ export async function enableSkill(
   return withStateLock(deps.statePath, async () => {
     const { livePath, disabledPath } = pathsForSkill(skill);
     const instanceKey = skillInstanceKey(skill.id, livePath);
-    return enableSkillPaths(instanceKey, livePath, disabledPath, deps);
+    return enableSkillPaths(instanceKey, livePath, disabledPath, deps, undefined, skill.id);
   });
 }
 
@@ -223,6 +281,18 @@ export interface ReapplyResult {
    * root. The user can opt back in via the printed `fixCommand`.
    */
   skipped: ReapplySkippedSymlink[];
+  /**
+   * Disable records whose recorded `canonicalSkillMdPath` (#97) no longer
+   * matches the current realpath of the on-disk file — the symlink target
+   * was retargeted between disable and now. Distinct from `skipped`: that
+   * one fires whenever the current inventory entry is out-of-root (the
+   * broader #124 policy), while this one is the narrower belt-and-suspenders
+   * canonical-drift check that catches records the broader policy missed
+   * (e.g. record indicated an in-root mutation but the file's canonical
+   * drifted underneath, or `current.outOfRoot` is unexpectedly false). Each
+   * entry is formatted as `<id>: <recorded canonical> -> <current canonical>`.
+   */
+  symlinkMismatches: string[];
 }
 
 export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResult> {
@@ -248,6 +318,7 @@ export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResul
     const recoveredCommits: string[] = [];
     const recoveredRollbacks: string[] = [];
     const skipped: ReapplySkippedSymlink[] = [];
+    const symlinkMismatches: string[] = [];
 
     // Step 0: reconcile the pending-op journal before any other inference.
     // A pending entry means a disable/enable was in flight; the file system
@@ -315,14 +386,33 @@ export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResul
       if (liveExists && disabledExists) {
         conflicted.push(rec.id);
       } else if (!disabledExists && liveExists) {
-        // Upstream re-created the live SKILL.md. Normally we re-rename it,
-        // but if the current inventory entry resolves through an out-of-root
-        // symlink (e.g. user-created link into a directory the host doesn't
-        // own), we MUST NOT silently rename it: that would mutate a file
-        // outside the host's skills root from a "read-only-looking" `skills
-        // status` call. The disable/enable commands gate this behind
-        // `--allow-symlink-target-mutation`; status mirrors that policy by
-        // skipping and surfacing a fix command for the user to run.
+        // Upstream re-created the live SKILL.md. Two safety gates can refuse
+        // the silent re-rename, checked in precedence order:
+        //
+        //   1. (#124) If the current inventory entry is an out-of-root
+        //      mutable symlink, defer to the broader "skills status never
+        //      silently mutates out-of-root targets" policy. Emit a
+        //      `skipped` entry with a `fixCommand` (unambiguous id) or a
+        //      `manualRepairHint` (ambiguous id) so the user can opt back
+        //      in explicitly. This is the broader gate because it applies
+        //      to every out-of-root skill, including records written by
+        //      older versions that never captured a canonical.
+        //
+        //   2. (#97) Else, if this record captured a `canonicalSkillMdPath`
+        //      at disable time and the current realpath of the live file no
+        //      longer matches, refuse. This is the narrower
+        //      belt-and-suspenders check — it catches drift the broader
+        //      policy can miss (e.g. a record that predicates an in-root
+        //      mutation but the on-disk file's canonical drifted, or
+        //      `current.outOfRoot` is unexpectedly false because the
+        //      inventory scan was racy). Surface it as a
+        //      `symlinkMismatches` entry, distinct from `skipped`.
+        //
+        //   3. Else, rename. When we resolved a canonical realpath above,
+        //      prefer renaming through THAT (#97 P1.B TOCTOU hardening) —
+        //      re-traversing the in-root symlink path again could be
+        //      redirected by a concurrent symlink swap. Falls back to the
+        //      path-based rename for in-root skills.
         if (current && isOutOfRootMutableSymlinkSkill(current)) {
           const linkedTarget = (await tryRealpath(paths.livePath)) ?? paths.livePath;
           // `skills disable` resolves bare positional ids via a Map keyed on
@@ -353,17 +443,41 @@ export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResul
               fixCommand: `agentic-skill-router skills disable ${rec.id} --yes --allow-symlink-target-mutation`,
             });
           }
+          continue;
+        }
+
+        let canonicalLive: string | null = null;
+        if (rec.canonicalSkillMdPath) {
+          canonicalLive = await tryRealpath(paths.livePath);
+          if (canonicalLive) {
+            const currentCanonical = canonicalLive.endsWith(DISABLED_SUFFIX)
+              ? canonicalLive.slice(0, -DISABLED_SUFFIX.length)
+              : canonicalLive;
+            if (currentCanonical !== rec.canonicalSkillMdPath) {
+              symlinkMismatches.push(
+                `${rec.id}: ${rec.canonicalSkillMdPath} -> ${currentCanonical}`,
+              );
+              continue;
+            }
+          }
+        }
+
+        if (canonicalLive) {
+          const canonicalDisabled = canonicalLive.endsWith(DISABLED_SUFFIX)
+            ? canonicalLive
+            : canonicalLive + DISABLED_SUFFIX;
+          await rename(canonicalLive, canonicalDisabled);
         } else {
           await rename(paths.livePath, paths.disabledPath);
-          reapplied.push(rec.id);
         }
+        reapplied.push(rec.id);
       } else if (!disabledExists && !liveExists) {
         orphaned.push(rec.id);
       }
     }
 
     if (nextState !== state) await saveState(nextState, deps.statePath);
-    return { reapplied, orphaned, conflicted, recoveredCommits, recoveredRollbacks, skipped };
+    return { reapplied, orphaned, conflicted, recoveredCommits, recoveredRollbacks, skipped, symlinkMismatches };
   });
 }
 
@@ -428,7 +542,18 @@ async function reconcilePendingOp(
 
   if (pending.op === "disable") {
     if (disabledExists && !liveExists) {
-      const record = pending.record ?? state.disabledSkills.find((r) => r.instanceKey === pendingInstanceKey);
+      const baseRecord = pending.record ?? state.disabledSkills.find((r) => r.instanceKey === pendingInstanceKey);
+      // P1.C: a crash between rename and the post-rename canonical save (in
+      // the old two-phase shape), or any disable where the disable-time
+      // realpath silently failed, would leave the journal record flagged
+      // `discoveredViaSymlink: true` without a `canonicalSkillMdPath`. Then
+      // enableSkillPaths' guard would treat the missing canonical as legacy
+      // and silently skip the retarget check. Backfill the canonical now
+      // (the disabled marker is on disk, so realpath works) before
+      // committing the record so the safety net survives crash recovery.
+      const record = baseRecord && baseRecord.discoveredViaSymlink && !baseRecord.canonicalSkillMdPath
+        ? await backfillCanonical(baseRecord, pending.disabledPath)
+        : baseRecord;
       const withRecord = record ? addDisableRecord(state, record) : state;
       return { state: removePendingOp(withRecord, pendingInstanceKey), commit: "committed" };
     }
@@ -509,6 +634,28 @@ export async function findOrphanMarkers(
 }
 
 /**
+ * P1.C helper (#97): if a pending disable record is flagged as
+ * `discoveredViaSymlink: true` but lacks `canonicalSkillMdPath` (the
+ * disable-time realpath failed, or the record predates that field being
+ * captured pre-rename), resolve the canonical now from the on-disk disabled
+ * marker and fill it in. The on-disk file is the ground truth at this point
+ * (rename completed before the crash), so a successful realpath here is the
+ * canonical we would have written had the disable run to completion.
+ *
+ * If realpath still fails, return the record unchanged — the safety net
+ * cannot be reconstructed and the record stays "discoveredViaSymlink with no
+ * canonical" so a follow-up status sees the same shape and can keep trying.
+ * We deliberately do NOT throw here: refusing to commit a recovered record
+ * would leave the disk and state out of sync, which is worse than committing
+ * a record whose canonical the next status will attempt to backfill again.
+ */
+async function backfillCanonical(record: DisableRecord, disabledPath: string): Promise<DisableRecord> {
+  const c = await canonicalSkillFile(disabledPath);
+  if (c === null) return record;
+  return { ...record, canonicalSkillMdPath: c };
+}
+
+/**
  * Roll back the disable-record portion of a pending disable op. If the pending
  * op snapshotted a pre-existing record (`priorRecord`), restore it so the
  * user's previous disable intent survives. Otherwise drop the (uncommitted)
@@ -528,6 +675,26 @@ async function fileExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Compute the canonical "SKILL.md-form" path: realpath the on-disk file at
+ * `path`, then strip any trailing disabled-marker suffix. This gives a stable
+ * value regardless of whether the file currently lives at `SKILL.md` or
+ * `SKILL.md.agentic-skill-router-disabled`, so the recorded canonical can be
+ * compared apples-to-apples by enable, reapply, and the disable-time writer
+ * without depending on which side of the rename we are on.
+ *
+ * Returns null if realpath fails (no on-disk file yet, broken symlink,
+ * transient FS error). Callers MUST treat null as "no comparison possible"
+ * and skip the mismatch check — never fail the operation on a realpath error.
+ */
+async function canonicalSkillFile(path: string): Promise<string | null> {
+  const resolved = await tryRealpath(path);
+  if (resolved === null) return null;
+  return resolved.endsWith(DISABLED_SUFFIX)
+    ? resolved.slice(0, -DISABLED_SUFFIX.length)
+    : resolved;
 }
 
 function pathsForSkill(skill: Skill): { livePath: string; disabledPath: string } {
@@ -550,6 +717,7 @@ async function enableSkillPaths(
   disabledPath: string,
   deps: ApplyDeps,
   preloadedState?: State,
+  overrideId?: string,
 ): Promise<{ state: State; alreadyEnabled: boolean }> {
   const state = preloadedState ?? await loadState(deps.statePath, deps.host);
   const disabledExists = await fileExists(disabledPath);
@@ -560,10 +728,44 @@ async function enableSkillPaths(
   // record exists yet (e.g. enable called on a never-disabled skill), fall
   // back to the instanceKey itself so the journal still has a stable key.
   const matchingRecord = state.disabledSkills.find((r) => r.instanceKey === instanceKey);
-  const id = matchingRecord?.id ?? instanceKey;
+  const id = matchingRecord?.id ?? overrideId ?? instanceKey;
 
   if (liveExists && disabledExists) {
     throw new SkillConflictError(id, livePath);
+  }
+
+  // Symlink retarget guard (#97): if the recorded disable captured a
+  // canonical realpath, verify the file we are about to rename back still
+  // resolves to the same canonical target. A mismatch means the user (or
+  // some other tool) retargeted the symlink between disable and enable, and
+  // renaming through the new link would silently mutate an unrelated file.
+  // Refuse the rename and surface a manual-repair error.
+  //
+  // We compare the SKILL.md-form canonical (suffix stripped on both sides)
+  // so the recorded value matches regardless of which marker the on-disk
+  // file currently uses. `currentResolved` is the full realpath we will
+  // also use as the rename source to defeat the path-recomputation TOCTOU
+  // (P1.B).
+  let canonicalRenameSource: string | null = null;
+  if (matchingRecord?.canonicalSkillMdPath) {
+    const targetPath = disabledExists ? disabledPath : (liveExists ? livePath : null);
+    if (targetPath) {
+      const currentResolved = await tryRealpath(targetPath);
+      if (currentResolved) {
+        const currentCanonical = currentResolved.endsWith(DISABLED_SUFFIX)
+          ? currentResolved.slice(0, -DISABLED_SUFFIX.length)
+          : currentResolved;
+        if (currentCanonical !== matchingRecord.canonicalSkillMdPath) {
+          throw new SkillSymlinkTargetMismatchError(
+            id,
+            targetPath,
+            matchingRecord.canonicalSkillMdPath,
+            currentCanonical,
+          );
+        }
+        canonicalRenameSource = currentResolved;
+      }
+    }
   }
 
   // Phase 1: persist intent BEFORE renaming. If the post-rename save fails,
@@ -584,7 +786,18 @@ async function enableSkillPaths(
 
   let alreadyEnabled = false;
   if (disabledExists && !liveExists) {
-    await rename(disabledPath, livePath);
+    // P1.B (TOCTOU): when we resolved a canonical above, rename through it
+    // directly. The realpath we already computed *is* the file we just
+    // confirmed matches the recorded canonical; renaming via the in-root
+    // symlink path again would re-traverse the link and could be redirected
+    // by a concurrent swap. For non-symlink (in-root) skills there is no
+    // canonical to resolve and the path-based rename is sufficient.
+    if (canonicalRenameSource && canonicalRenameSource.endsWith(DISABLED_SUFFIX)) {
+      const canonicalLive = canonicalRenameSource.slice(0, -DISABLED_SUFFIX.length);
+      await rename(canonicalRenameSource, canonicalLive);
+    } else {
+      await rename(disabledPath, livePath);
+    }
   } else if (!disabledExists && liveExists) {
     alreadyEnabled = true;
   } else if (!disabledExists && !liveExists) {

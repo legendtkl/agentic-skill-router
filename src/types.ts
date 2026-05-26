@@ -91,6 +91,49 @@ export interface DisableRecord {
   source?: SkillSource;
   disabledAt: string;
   reason: string;
+  /**
+   * `realpath(skillMdPath)` captured at disable time. Only written when the
+   * disable went through an out-of-root symlink (i.e. `allowOutOfRoot=true`
+   * and the skill was flagged outOfRoot). Used by enable/reapply to detect
+   * if the symlink target was retargeted to a different file after disable;
+   * a mismatch refuses the rename and surfaces a manual-repair error so we
+   * never silently mutate an unrelated file the user did not pre-approve.
+   *
+   * Optional for back-compat with state files written before this field
+   * existed; absent value disables the mismatch check (no recorded canonical
+   * to compare against).
+   */
+  canonicalSkillMdPath?: string;
+  /**
+   * True when the disable mutated a file reached via an out-of-root symlink.
+   * Mirrors the `outOfRoot` skill flag at disable time so subsequent
+   * enable/reapply can decide whether to require the canonical-path check.
+   * Optional for back-compat.
+   */
+  discoveredViaSymlink?: boolean;
+}
+
+/**
+ * Raised when enable/reapply detects the symlink target underneath a recorded
+ * out-of-root disable was retargeted to a different real file between disable
+ * and the current operation. We refuse to rename the new target because the
+ * user only approved a mutation on the originally-disabled file.
+ */
+export class SkillSymlinkTargetMismatchError extends Error {
+  readonly recordedCanonical: string;
+  readonly currentCanonical: string;
+  constructor(skillId: string, skillMdPath: string, recordedCanonical: string, currentCanonical: string) {
+    super(
+      `Refusing to modify skill "${skillId}": the symlink at ${skillMdPath} now ` +
+      `resolves to ${currentCanonical}, but the disable record was captured for ` +
+      `${recordedCanonical}. Manual repair required — restore the symlink to its ` +
+      `original target, or remove the stale disable record from state and re-disable ` +
+      `the new target explicitly if that is the intended skill.`,
+    );
+    this.name = "SkillSymlinkTargetMismatchError";
+    this.recordedCanonical = recordedCanonical;
+    this.currentCanonical = currentCanonical;
+  }
 }
 
 /**

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, stat, writeFile, rename } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, stat, symlink, unlink, writeFile, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { disableSkill, enableSkill, enableSkillFromState, findOrphanMarkers, reapplyMissing } from "../src/apply.ts";
@@ -1077,6 +1077,505 @@ test("loadState synthesizes instanceKey for legacy pending ops missing the field
       loaded.pendingOps?.[0]?.instanceKey,
       skillInstanceKey(skill.id, disabledPath),
     );
+  } finally {
+    await cleanup();
+  }
+});
+
+/**
+ * Issue #97: a disable that traverses an out-of-root symlink must record the
+ * canonical realpath of the file it renamed. Without that, a later
+ * enable/reapply has no way to detect that the symlink was retargeted to a
+ * different external file between disable and enable, and would silently
+ * mutate the unrelated new target.
+ */
+async function setupSymlinkSkill(): Promise<{
+  workdir: string;
+  statePath: string;
+  externalDirA: string;
+  externalDirB: string;
+  symlinkSkillDir: string;
+  skill: Skill;
+  cleanup: () => Promise<void>;
+}> {
+  const workdir = await mkdtemp(join(tmpdir(), "agentic-skill-router-apply-symlink-"));
+  const externalDirA = join(workdir, "external", "skill-a");
+  const externalDirB = join(workdir, "external", "skill-b");
+  await mkdir(externalDirA, { recursive: true });
+  await mkdir(externalDirB, { recursive: true });
+  await writeFile(join(externalDirA, "SKILL.md"), "---\nname: linked\ndescription: a\n---\n");
+  await writeFile(join(externalDirB, "SKILL.md"), "---\nname: linked\ndescription: b\n---\n");
+
+  const skillsRoot = join(workdir, "skills");
+  await mkdir(skillsRoot, { recursive: true });
+  const symlinkSkillDir = join(skillsRoot, "linked");
+  await symlink(externalDirA, symlinkSkillDir);
+
+  const skillMdPath = join(symlinkSkillDir, "SKILL.md");
+  return {
+    workdir,
+    statePath: join(workdir, "state.json"),
+    externalDirA,
+    externalDirB,
+    symlinkSkillDir,
+    skill: {
+      id: "user:linked",
+      name: "linked",
+      description: "x",
+      source: "user",
+      pluginKey: null,
+      skillMdPath,
+      isDisabled: false,
+      isPluginDisabled: false,
+      // Mirror Host.listSkills() behavior: out-of-root symlinks have
+      // canDisable=false; allowOutOfRoot is the explicit caller opt-in.
+      canDisable: false,
+      conflict: false,
+      outOfRoot: true,
+    },
+    cleanup: () => rm(workdir, { recursive: true, force: true }),
+  };
+}
+
+test("disableSkill on out-of-root symlink records canonicalSkillMdPath in state (#97)", async () => {
+  const { skill, statePath, externalDirA, cleanup } = await setupSymlinkSkill();
+  try {
+    await disableSkill(skill, "manual", { statePath, allowOutOfRoot: true });
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 1);
+    const rec = state.disabledSkills[0]!;
+    // Recorded canonical resolves through the symlink to the real external file.
+    assert.equal(rec.discoveredViaSymlink, true);
+    assert.ok(rec.canonicalSkillMdPath, "canonicalSkillMdPath must be populated");
+    // The recorded canonical is SKILL.md-form (suffix stripped) so a single
+    // value works no matter which marker the on-disk file currently has —
+    // see canonicalSkillFile() in src/apply.ts.
+    const expectedCanonical = await realpath(join(externalDirA, "SKILL.md.agentic-skill-router-disabled"));
+    const expectedStripped = expectedCanonical.endsWith(".agentic-skill-router-disabled")
+      ? expectedCanonical.slice(0, -".agentic-skill-router-disabled".length)
+      : expectedCanonical;
+    assert.equal(rec.canonicalSkillMdPath, expectedStripped);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("disableSkill on in-root non-symlink skill does NOT add canonical fields (#97)", async () => {
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    await disableSkill(skill, "manual", { statePath });
+    const state = await loadState(statePath);
+    assert.equal(state.disabledSkills.length, 1);
+    const rec = state.disabledSkills[0]!;
+    assert.equal(rec.canonicalSkillMdPath, undefined);
+    assert.equal(rec.discoveredViaSymlink, undefined);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("enableSkill refuses when symlink target retargeted to a different external file (#97)", async () => {
+  const { skill, statePath, externalDirA, externalDirB, symlinkSkillDir, cleanup } = await setupSymlinkSkill();
+  try {
+    // Step 1: disable through the symlink. State now records the canonical
+    // realpath under externalDirA.
+    await disableSkill(skill, "manual", { statePath, allowOutOfRoot: true });
+
+    // Sanity: the external A file got renamed to the disabled marker.
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md.agentic-skill-router-disabled")), true);
+    // External B is still untouched.
+    assert.equal(await fileExists(join(externalDirB, "SKILL.md")), true);
+    assert.equal(await fileExists(join(externalDirB, "SKILL.md.agentic-skill-router-disabled")), false);
+
+    // Step 2: retarget the symlink to externalDirB. Now the in-root path
+    // resolves to a different external skill.
+    await unlink(symlinkSkillDir);
+    await symlink(externalDirB, symlinkSkillDir);
+
+    // Step 3: enable. The recorded canonical points at A's file, but the
+    // current realpath resolves to B's. enableSkill must refuse to rename
+    // and surface a SkillSymlinkTargetMismatchError naming BOTH canonical
+    // paths.
+    const disabledSkillForEnable: Skill = {
+      ...skill,
+      isDisabled: true,
+      skillMdPath: skill.skillMdPath + ".agentic-skill-router-disabled",
+      outOfRoot: true,
+    };
+    let captured: Error | null = null;
+    try {
+      await enableSkill(disabledSkillForEnable, { statePath, allowOutOfRoot: true });
+    } catch (err) {
+      captured = err as Error;
+    }
+    assert.ok(captured, "enableSkill must throw on canonical mismatch");
+    assert.equal(captured!.name, "SkillSymlinkTargetMismatchError");
+    // Canonicals are normalized to SKILL.md-form (suffix stripped) by both
+    // disable-time recording and enable-time comparison.
+    const canonicalARaw = await realpath(join(externalDirA, "SKILL.md.agentic-skill-router-disabled"));
+    const canonicalA = canonicalARaw.endsWith(".agentic-skill-router-disabled")
+      ? canonicalARaw.slice(0, -".agentic-skill-router-disabled".length)
+      : canonicalARaw;
+    // externalDirB still has the live SKILL.md (was never renamed).
+    const canonicalB = await realpath(join(externalDirB, "SKILL.md"));
+    assert.ok(
+      captured!.message.includes(canonicalA),
+      `error must name recorded canonical (${canonicalA}); got: ${captured!.message}`,
+    );
+    assert.ok(
+      captured!.message.includes(canonicalB),
+      `error must name current canonical (${canonicalB}); got: ${captured!.message}`,
+    );
+
+    // External B's SKILL.md must NOT have been renamed.
+    assert.equal(await fileExists(join(externalDirB, "SKILL.md")), true);
+    assert.equal(await fileExists(join(externalDirB, "SKILL.md.agentic-skill-router-disabled")), false);
+    // External A's disabled marker is still in place — nothing was mutated.
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md.agentic-skill-router-disabled")), true);
+
+    // The disable record stays so a follow-up `status` keeps reporting the
+    // mismatch until the user repairs the symlink.
+    const after = await loadState(statePath);
+    assert.equal(after.disabledSkills.length, 1);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("reapplyMissing precedence: out-of-root symlink wins over #97 canonical mismatch", async () => {
+  // Both #124 (broader: out-of-root inventory entry never silently mutated)
+  // and #97 (narrower: recorded canonical no longer matches current realpath)
+  // could refuse the live-restored re-rename here. The agreed precedence is
+  // that #124 fires FIRST so a single class of refusal (one `skipped` entry
+  // with a fixCommand) is surfaced consistently, regardless of whether we
+  // happened to record a canonical at disable time.
+  const { skill, statePath, externalDirA, externalDirB, symlinkSkillDir, cleanup } = await setupSymlinkSkill();
+  try {
+    await disableSkill(skill, "manual", { statePath, allowOutOfRoot: true });
+
+    // Restore the live file under external A so reapply sees `live present,
+    // disabled absent` — the branch where it would normally re-rename.
+    await rename(
+      join(externalDirA, "SKILL.md.agentic-skill-router-disabled"),
+      join(externalDirA, "SKILL.md"),
+    );
+
+    // Retarget the symlink to external B. This drives BOTH guards to want
+    // to fire: out-of-root inventory entry (still flagged), AND canonical
+    // mismatch (was A, now B).
+    await unlink(symlinkSkillDir);
+    await symlink(externalDirB, symlinkSkillDir);
+
+    // The inventory entry still carries outOfRoot=true, mirroring how
+    // Host.listSkills() would report this skill after the retarget.
+    const reScannedSkill: Skill = { ...skill, outOfRoot: true };
+    const result = await reapplyMissing({ statePath, skills: [reScannedSkill] });
+
+    // Precedence: out-of-root wins. The entry lands in `skipped`, NOT in
+    // `symlinkMismatches`, and `reapplied` stays empty.
+    assert.equal(result.reapplied.length, 0, "must not re-rename through retargeted symlink");
+    assert.equal(
+      result.symlinkMismatches.length,
+      0,
+      `out-of-root entry must NOT also appear in symlinkMismatches; got: ${JSON.stringify(result.symlinkMismatches)}`,
+    );
+    assert.equal(result.skipped.length, 1, `expected one skipped entry: ${JSON.stringify(result.skipped)}`);
+    const entry = result.skipped[0]!;
+    assert.equal(entry.id, skill.id);
+    assert.equal(typeof entry.fixCommand, "string");
+    assert.match(
+      entry.fixCommand!,
+      /agentic-skill-router skills disable user:linked --yes --allow-symlink-target-mutation/,
+    );
+
+    // Nothing on disk was mutated.
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md")), true);
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md.agentic-skill-router-disabled")), false);
+    assert.equal(await fileExists(join(externalDirB, "SKILL.md")), true);
+    assert.equal(await fileExists(join(externalDirB, "SKILL.md.agentic-skill-router-disabled")), false);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("reapplyMissing on out-of-root unchanged target lands in skipped (#124 policy)", async () => {
+  // Companion to the precedence test: even when the symlink target is
+  // unchanged and #97's canonical check would happily allow the rename,
+  // #124's broader "status never silently mutates out-of-root targets"
+  // policy refuses and surfaces a `skipped` entry with a copy-pasteable
+  // fix command. The original "happy path" test for #97 alone would have
+  // expected `reapplied`; after the #129 integration that policy moves the
+  // entry to `skipped` and the user opts back in explicitly.
+  const { skill, statePath, externalDirA, cleanup } = await setupSymlinkSkill();
+  try {
+    await disableSkill(skill, "manual", { statePath, allowOutOfRoot: true });
+
+    // Simulate upstream restoring the SKILL.md at the original external
+    // target. The symlink is NOT retargeted.
+    await rename(
+      join(externalDirA, "SKILL.md.agentic-skill-router-disabled"),
+      join(externalDirA, "SKILL.md"),
+    );
+
+    const reScannedSkill: Skill = { ...skill, outOfRoot: true };
+    const result = await reapplyMissing({ statePath, skills: [reScannedSkill] });
+    assert.equal(result.reapplied.length, 0, "out-of-root must not be silently re-renamed");
+    assert.equal(result.symlinkMismatches.length, 0, "canonical matches so no mismatch entry");
+    assert.equal(result.skipped.length, 1, `expected one skipped entry: ${JSON.stringify(result.skipped)}`);
+    const entry = result.skipped[0]!;
+    assert.equal(entry.id, skill.id);
+    assert.equal(typeof entry.fixCommand, "string");
+    // External target left alone — user must explicitly opt back in.
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md")), true);
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md.agentic-skill-router-disabled")), false);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("reapplyMissing surfaces symlinkMismatches when canonical drifts on a non-out-of-root inventory entry (#97)", async () => {
+  // The #97 mismatch path is the narrower belt-and-suspenders guard: it
+  // fires only when the broader #124 out-of-root policy has NOT already
+  // taken the entry. The realistic shape is a record that was disabled
+  // through an out-of-root symlink (so the canonical is recorded) but a
+  // subsequent inventory re-scan dropped the outOfRoot flag (filesystem
+  // race, broken symlink at scan time, or a host quirk) AND the canonical
+  // has since drifted. The mismatch check catches the drift even though
+  // #124 cannot see this entry as out-of-root anymore.
+  const { skill, statePath, externalDirA, externalDirB, symlinkSkillDir, cleanup } = await setupSymlinkSkill();
+  try {
+    await disableSkill(skill, "manual", { statePath, allowOutOfRoot: true });
+
+    // Restore the live file under external A so the reapply branch fires.
+    await rename(
+      join(externalDirA, "SKILL.md.agentic-skill-router-disabled"),
+      join(externalDirA, "SKILL.md"),
+    );
+
+    // Retarget the symlink to external B.
+    await unlink(symlinkSkillDir);
+    await symlink(externalDirB, symlinkSkillDir);
+
+    // Simulate the inventory re-scan returning the entry WITHOUT
+    // outOfRoot=true. The #124 gate cannot apply, so the #97 guard takes
+    // over and emits a `symlinkMismatches` entry instead.
+    const reScannedSkill: Skill = { ...skill, outOfRoot: false };
+    const result = await reapplyMissing({ statePath, skills: [reScannedSkill] });
+    assert.equal(result.skipped.length, 0, "non-out-of-root entry must not land in skipped");
+    assert.equal(result.reapplied.length, 0, "must not re-rename through retargeted symlink");
+    assert.equal(result.symlinkMismatches.length, 1);
+    assert.match(result.symlinkMismatches[0]!, new RegExp(`^${skill.id}: `));
+    const canonicalA = await realpath(join(externalDirA, "SKILL.md"));
+    const canonicalB = await realpath(join(externalDirB, "SKILL.md"));
+    assert.ok(result.symlinkMismatches[0]!.includes(canonicalA));
+    assert.ok(result.symlinkMismatches[0]!.includes(canonicalB));
+
+    // Nothing on disk was mutated.
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md")), true);
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md.agentic-skill-router-disabled")), false);
+    assert.equal(await fileExists(join(externalDirB, "SKILL.md")), true);
+    assert.equal(await fileExists(join(externalDirB, "SKILL.md.agentic-skill-router-disabled")), false);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("reapplyMissing reapplies cleanly when symlink target is unchanged and inventory hides outOfRoot (#97 happy path)", async () => {
+  // Regression guard for the original #97 P1.A defect: the recorded
+  // canonical used to be the post-rename `.agentic-skill-router-disabled` path
+  // while reapplyMissing realpath'd the `SKILL.md` (live) path, so the
+  // two strings never matched and every legitimate reapply was wrongly
+  // refused as a symlink retarget. With the SKILL.md-form normalization
+  // in canonicalSkillFile, this case must succeed.
+  //
+  // To exercise the #97 path (not #124's skipped path) we present the
+  // inventory entry as in-root (outOfRoot=false) — same shape as the
+  // belt-and-suspenders test above, just without the retarget.
+  const { skill, statePath, externalDirA, cleanup } = await setupSymlinkSkill();
+  try {
+    await disableSkill(skill, "manual", { statePath, allowOutOfRoot: true });
+
+    // Simulate upstream restoring the SKILL.md at the original external
+    // target. The symlink is NOT retargeted — this is the happy path.
+    await rename(
+      join(externalDirA, "SKILL.md.agentic-skill-router-disabled"),
+      join(externalDirA, "SKILL.md"),
+    );
+
+    const reScannedSkill: Skill = { ...skill, outOfRoot: false };
+    const result = await reapplyMissing({ statePath, skills: [reScannedSkill] });
+    assert.equal(result.skipped.length, 0, "in-root re-scan must not hit the #124 gate");
+    assert.equal(
+      result.symlinkMismatches.length,
+      0,
+      `unchanged-target reapply must not flag a mismatch; got: ${JSON.stringify(result.symlinkMismatches)}`,
+    );
+    assert.deepEqual(result.reapplied, [skill.id], "unchanged-target reapply must re-rename");
+    // The disabled marker should be back at the external target.
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md.agentic-skill-router-disabled")), true);
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md")), false);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("enableSkill succeeds when symlink target is unchanged (#97 happy path)", async () => {
+  // Companion to the reapply happy-path: a normal enable through an
+  // unchanged out-of-root symlink must restore the live file, not refuse.
+  const { skill, statePath, externalDirA, cleanup } = await setupSymlinkSkill();
+  try {
+    await disableSkill(skill, "manual", { statePath, allowOutOfRoot: true });
+
+    const disabledSkillForEnable: Skill = {
+      ...skill,
+      isDisabled: true,
+      skillMdPath: skill.skillMdPath + ".agentic-skill-router-disabled",
+      outOfRoot: true,
+    };
+    const result = await enableSkill(disabledSkillForEnable, {
+      statePath,
+      allowOutOfRoot: true,
+    });
+    assert.equal(result.alreadyEnabled, false);
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md")), true);
+    assert.equal(await fileExists(join(externalDirA, "SKILL.md.agentic-skill-router-disabled")), false);
+    const after = await loadState(statePath);
+    assert.equal(after.disabledSkills.length, 0, "state record cleared after happy-path enable");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("reconcilePendingOp backfills canonicalSkillMdPath on crash recovery (#97 P1.C)", async () => {
+  // Regression guard for P1.C from the first #97 review: a crash between
+  // rename and the post-rename canonical save (or a disable where the
+  // disable-time realpath silently failed) used to leave a recovered
+  // record carrying `discoveredViaSymlink: true` with no canonical. The
+  // enable-side guard then treated missing-canonical as legacy and
+  // silently bypassed the retarget check. status (which triggers
+  // reconcilePendingOp via reapplyMissing) must backfill the canonical
+  // from the on-disk disabled marker so the safety net survives crashes.
+  const { skill, statePath, externalDirA, symlinkSkillDir, cleanup } = await setupSymlinkSkill();
+  try {
+    // Pre-rename the disabled marker manually so the crash-recovery branch
+    // (disabled exists, live absent) fires for our hand-written journal.
+    await rename(
+      join(externalDirA, "SKILL.md"),
+      join(externalDirA, "SKILL.md.agentic-skill-router-disabled"),
+    );
+
+    // Hand-write a journal entry shaped like one the old code (or a failed
+    // realpath at disable time) would leave behind: the record carries
+    // `discoveredViaSymlink: true` but no `canonicalSkillMdPath`.
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
+    const instanceKey = skillInstanceKey(skill.id, disabledPath);
+    const journalState = {
+      schema: 1,
+      host: "claude-code",
+      disabledSkills: [],
+      pendingOps: [{
+        instanceKey,
+        op: "disable",
+        id: skill.id,
+        livePath: skill.skillMdPath,
+        disabledPath,
+        startedAt: "2026-05-22T00:00:00.000Z",
+        record: {
+          instanceKey,
+          id: skill.id,
+          pluginKey: null,
+          skillMdPath: disabledPath,
+          skillName: skill.name,
+          source: "user",
+          disabledAt: "2026-05-22T00:00:00.000Z",
+          reason: "manual",
+          discoveredViaSymlink: true,
+          // Intentionally no canonicalSkillMdPath.
+        },
+      }],
+    };
+    await writeFile(statePath, JSON.stringify(journalState));
+
+    const result = await reapplyMissing({ statePath, skills: [skill] });
+    assert.equal(result.recoveredCommits.length, 1, "must commit the pending disable on recovery");
+    assert.equal(result.recoveredCommits[0], skill.id);
+
+    const after = await loadState(statePath);
+    assert.equal(after.disabledSkills.length, 1);
+    const rec = after.disabledSkills[0]!;
+    // The backfill must populate canonicalSkillMdPath from the on-disk
+    // disabled marker. The recorded value is SKILL.md-form (suffix stripped).
+    assert.equal(rec.discoveredViaSymlink, true);
+    const expectedCanonical = await realpath(join(externalDirA, "SKILL.md.agentic-skill-router-disabled"));
+    const expectedStripped = expectedCanonical.endsWith(".agentic-skill-router-disabled")
+      ? expectedCanonical.slice(0, -".agentic-skill-router-disabled".length)
+      : expectedCanonical;
+    assert.equal(rec.canonicalSkillMdPath, expectedStripped);
+
+    // Cross-check: the safety net now works. Retarget the symlink and try
+    // to enable — must refuse.
+    await unlink(symlinkSkillDir);
+    const externalDirC = join(externalDirA, "..", "skill-c");
+    await mkdir(externalDirC, { recursive: true });
+    await writeFile(join(externalDirC, "SKILL.md"), "---\nname: linked\ndescription: c\n---\n");
+    await symlink(externalDirC, symlinkSkillDir);
+
+    const disabledSkillForEnable: Skill = {
+      ...skill,
+      isDisabled: true,
+      skillMdPath: disabledPath,
+      outOfRoot: true,
+    };
+    await assert.rejects(
+      () => enableSkill(disabledSkillForEnable, { statePath, allowOutOfRoot: true }),
+      (err: Error) => err.name === "SkillSymlinkTargetMismatchError",
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+test("legacy disable records without canonical fields still enable cleanly (#97 back-compat)", async () => {
+  // A state file written before issue #97 has no `canonicalSkillMdPath` or
+  // `discoveredViaSymlink` keys. loadState must accept the legacy shape and
+  // enable must operate exactly as before (no mismatch check, no refusal).
+  const { skill, statePath, cleanup } = await setup();
+  try {
+    // Pre-disable manually so we can hand-craft a legacy state record.
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
+    await rename(skill.skillMdPath, disabledPath);
+    const legacyState = {
+      schema: 1,
+      host: "claude-code",
+      disabledSkills: [{
+        // No instanceKey, canonicalSkillMdPath, or discoveredViaSymlink —
+        // exactly the shape an older version would have written.
+        id: skill.id,
+        pluginKey: null,
+        skillMdPath: disabledPath,
+        skillName: skill.name,
+        source: "user",
+        disabledAt: "2026-04-01T00:00:00.000Z",
+        reason: "legacy",
+      }],
+    };
+    await writeFile(statePath, JSON.stringify(legacyState));
+
+    // loadState synthesizes instanceKey from (id, skillMdPath) and leaves
+    // the new optional fields unset.
+    const loaded = await loadState(statePath);
+    assert.equal(loaded.disabledSkills.length, 1);
+    assert.equal(loaded.disabledSkills[0]!.canonicalSkillMdPath, undefined);
+    assert.equal(loaded.disabledSkills[0]!.discoveredViaSymlink, undefined);
+
+    // enable proceeds as it always did: file is renamed back, record removed.
+    const disabledSkill: Skill = { ...skill, isDisabled: true, skillMdPath: disabledPath };
+    const result = await enableSkill(disabledSkill, { statePath });
+    assert.equal(result.alreadyEnabled, false);
+    assert.equal(await fileExists(skill.skillMdPath), true);
+    assert.equal(await fileExists(disabledPath), false);
+    const after = await loadState(statePath);
+    assert.equal(after.disabledSkills.length, 0);
   } finally {
     await cleanup();
   }

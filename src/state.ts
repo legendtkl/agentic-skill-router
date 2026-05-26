@@ -75,6 +75,8 @@ function validateRecord(x: unknown): DisableRecord | null {
   if (x["skillName"] !== undefined && typeof x["skillName"] !== "string") return null;
   if (x["source"] !== undefined && !isSkillSource(x["source"])) return null;
   if (x["instanceKey"] !== undefined && typeof x["instanceKey"] !== "string") return null;
+  if (x["canonicalSkillMdPath"] !== undefined && typeof x["canonicalSkillMdPath"] !== "string") return null;
+  if (x["discoveredViaSymlink"] !== undefined && typeof x["discoveredViaSymlink"] !== "boolean") return null;
   // Migration safety: always canonicalize identity from `(id, skillMdPath)`.
   // This heals legacy/malformed keys on load and persists the corrected key on
   // the next save.
@@ -88,6 +90,10 @@ function validateRecord(x: unknown): DisableRecord | null {
     disabledAt: x["disabledAt"],
     reason: x["reason"],
     pluginKey: x["pluginKey"] as string | null,
+    ...(typeof x["canonicalSkillMdPath"] === "string" && x["canonicalSkillMdPath"] !== ""
+      ? { canonicalSkillMdPath: x["canonicalSkillMdPath"] }
+      : {}),
+    ...(x["discoveredViaSymlink"] === true ? { discoveredViaSymlink: true } : {}),
   };
 }
 
