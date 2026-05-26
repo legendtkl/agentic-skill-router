@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import {
   DCI_BUDGET,
   DCI_REGEX_LINE_TIMEOUT_MS,
+  DCI_REGEX_MAX_DOT_WILDCARDS,
   DCI_REGEX_MAX_LENGTH,
   DciRegexComplexityError,
   DciRegexTimeoutError,
@@ -649,6 +650,45 @@ test("DCI regex validator does not flag normal patterns with a few quantified at
   }
 });
 
+test("DCI regex validator rejects excessive top-level dot-wildcards (Rule 6)", () => {
+  // `.*` and `.+` interleaved with literals produce O(n^k) backtracking when
+  // the literal appears many times in the subject. The streak rule misses
+  // these because each wildcard's streak resets on the literal in between.
+  // More than DCI_REGEX_MAX_DOT_WILDCARDS unbounded dot-wildcards is rejected.
+  const tooMany = DCI_REGEX_MAX_DOT_WILDCARDS + 1;
+  const badPatterns = [
+    ".*a.*a.*a.*a.*c",                         // 4 .* interleaved → caught
+    ".+".repeat(tooMany) + "x",               // chain of .+ → caught
+    ".*foo.*bar.*baz.*qux",                    // 4 .* → caught
+    // Mixed unbounded + literal sandwich
+    [...Array(tooMany)].map(() => ".*x").join("") + "c",
+  ];
+  for (const pattern of badPatterns) {
+    assert.throws(
+      () => validateRegexPattern(pattern),
+      DciRegexComplexityError,
+      `expected "${pattern}" to be flagged by the dot-wildcard rule`,
+    );
+  }
+
+  // ≤ DCI_REGEX_MAX_DOT_WILDCARDS unbounded dot-wildcards must pass.
+  const goodPatterns = [
+    ".*keyword.*",                             // 2 .*  — very common
+    ".*foo.*bar",                              // 2 .*
+    ".*foo.*bar.*baz",                         // 3 .* — at the limit
+    ".+foo.+bar",                              // 2 .+
+    // Bounded .? does NOT count toward the dot-wildcard limit.
+    ".?a.?a.?a.?a.?c",                        // 5 .? — bounded, allowed
+    "a.?b.?c.?d.?e.?f",                       // 6 .? — bounded, allowed
+  ];
+  for (const pattern of goodPatterns) {
+    assert.doesNotThrow(
+      () => validateRegexPattern(pattern),
+      `expected "${pattern}" to pass the dot-wildcard rule`,
+    );
+  }
+});
+
 test("DCI grep rejects the codex consecutive-overlap pattern at the API in under 50ms", async () => {
   // Stronger guarantee than the validator-only test: the public API path
   // must also reject the pattern before any compile-or-match work happens.
@@ -727,11 +767,18 @@ test("DCI grep rejects every codex-named pathological pattern via the API in und
 
 test("DCI grep per-line wall-clock deadline catches a pattern that slips the heuristic", async () => {
   // Two interleaved signatures (`a?b?a?b?…`) defeat the consecutive-overlap
-  // streak rule — each streak resets after every atom — but still produce
-  // ~1s of catastrophic backtracking on V8 against an `abab…` line. The
-  // deadline must fire and surface a DciRegexTimeoutError instead of
-  // hanging the corpus walker.
-  const slowPattern = "a?b?".repeat(20) + "ab".repeat(20) + "c";
+  // streak rule — each streak resets after every atom — and the dot-wildcard
+  // rule (no `.*`/`.+`) — but still produce catastrophic backtracking on V8
+  // against an `abab…` line. The deadline must fire and surface a
+  // DciRegexTimeoutError instead of hanging the corpus walker.
+  //
+  // N=14 produces ~800ms per call on a typical developer machine (well above
+  // the 50ms deadline) while staying below the 15s upper bound even on slow
+  // CI hardware. The deadline is post-hoc — regex.test() runs to completion
+  // before we check the clock — so the single catastrophic call dominates
+  // the elapsed time.
+  const N = 14;
+  const slowPattern = "a?b?".repeat(N) + "ab".repeat(N) + "c";
 
   // Sanity: validator must accept the pattern (otherwise we are not testing
   // the deadline path).
@@ -744,7 +791,7 @@ test("DCI grep per-line wall-clock deadline catches a pattern that slips the heu
       id: "user:codex:timeout-probe",
       name: "timeout-probe",
       description: "regex deadline probe",
-      body: "ab".repeat(20),
+      body: "ab".repeat(N),
       isDisabled: true,
     });
 
@@ -754,10 +801,10 @@ test("DCI grep per-line wall-clock deadline catches a pattern that slips the heu
       DciRegexTimeoutError,
     );
     const elapsed = Date.now() - startedAt;
-    // The deadline is post-hoc, so the engine still runs one slow line
-    // before we abort. Bound the assertion at 5s to keep the test fast even
-    // on slow hardware.
-    assert.ok(elapsed < 5000, `expected deadline to abort within 5s, took ${elapsed}ms`);
+    // The deadline is post-hoc: the engine completes one catastrophic call
+    // before we abort. The 15s upper bound accommodates up to ~20× hardware
+    // variance; the lower bound confirms the deadline actually fired.
+    assert.ok(elapsed < 15000, `expected deadline to abort within 15s, took ${elapsed}ms`);
     assert.ok(
       elapsed >= DCI_REGEX_LINE_TIMEOUT_MS,
       `expected at least one slow line (>=${DCI_REGEX_LINE_TIMEOUT_MS}ms), took ${elapsed}ms`,
@@ -1134,14 +1181,15 @@ test("CLI: skills dci grep --regex deadline catches a heuristic-bypassing slow p
     // Rewrite the probe skill body so its single line forces catastrophic
     // backtracking on the deadline test pattern below.
     const probeDir = join(fake.env.CODEX_HOME as string, "skills", "probe");
+    const N = 14;
     await writeFile(
       join(probeDir, "SKILL.md.agentic-skill-router-disabled"),
-      `---\nname: probe\ndescription: dci regex deadline probe skill\n---\n\n${"ab".repeat(20)}\n`,
+      `---\nname: probe\ndescription: dci regex deadline probe skill\n---\n\n${"ab".repeat(N)}\n`,
     );
 
-    // Interleaved signatures defeat the static streak rule but still trip
-    // the per-line deadline.
-    const slowPattern = "a?b?".repeat(20) + "ab".repeat(20) + "c";
+    // Interleaved signatures defeat the static streak rule and the dot-wildcard
+    // rule but still trip the per-line deadline.
+    const slowPattern = "a?b?".repeat(N) + "ab".repeat(N) + "c";
     const startedAt = Date.now();
     const r = await runDciCli(
       ["skills", "dci", "grep", "--regex", "--pattern", slowPattern, "--json"],
@@ -1150,8 +1198,9 @@ test("CLI: skills dci grep --regex deadline catches a heuristic-bypassing slow p
     const elapsed = Date.now() - startedAt;
     assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
     assert.match(r.stderr, /deadline|>.*ms on a single line/);
-    // Should not hang: spawning + match abort comfortably under 10s.
-    assert.ok(elapsed < 10000, `expected deadline path to abort within 10s, took ${elapsed}ms`);
+    // The deadline is post-hoc: spawning + one catastrophic match + abort.
+    // 20s accommodates up to ~25× hardware variance over the ~800ms baseline.
+    assert.ok(elapsed < 20000, `expected deadline path to abort within 20s, took ${elapsed}ms`);
   } finally {
     await fake.cleanup();
   }

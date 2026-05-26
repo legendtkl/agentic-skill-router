@@ -922,6 +922,17 @@ export const DCI_REGEX_LINE_TIMEOUT_MS = 50;
 const DCI_REGEX_MAX_GROUP_BOUND = 10;
 
 /**
+ * Maximum number of top-level unbounded dot-wildcard atoms (`.*`, `.+`,
+ * `.{n,}`) allowed in a pattern. More than this limit creates O(n^k)
+ * backtracking when the literals between wildcards appear in the subject —
+ * for example `.*a.*a.*a.*a.*c` on a line of `a`s produces O(n^4) paths
+ * that the post-hoc per-line deadline cannot reliably pre-empt within
+ * bounds. Three wildcards allows common patterns like `.*foo.*bar.*baz`
+ * while rejecting longer chains.
+ */
+export const DCI_REGEX_MAX_DOT_WILDCARDS = 3;
+
+/**
  * Thrown when a user-supplied `--regex` pattern is rejected by the DCI
  * static complexity guard (length cap, nested-quantifier shapes, large
  * group bounds, prefix-overlap alternation in a quantified group). The CLI
@@ -1168,6 +1179,11 @@ interface QuantifiedAtom {
    * when stacked because the engine still has to choose split points.
    */
   overlapProne: boolean;
+  /**
+   * True iff the quantifier has a finite upper bound (`?`, `{n}`, `{n,m}`).
+   * Used by the dot-wildcard rule to distinguish `.*`/`.+`/`.{n,}` from `.?`.
+   */
+  bounded: boolean;
 }
 
 /**
@@ -1217,7 +1233,7 @@ function enumerateQuantifiedAtoms(pattern: string): QuantifiedAtom[] {
       i++;
       // Push a streak-breaker so two atoms separated by an anchor don't
       // count as consecutive.
-      atoms.push({ signature: `\0anchor:${ch}`, overlapProne: false });
+      atoms.push({ signature: `\0anchor:${ch}`, overlapProne: false, bounded: true });
       continue;
     }
 
@@ -1230,11 +1246,12 @@ function enumerateQuantifiedAtoms(pattern: string): QuantifiedAtom[] {
       atoms.push({
         signature: atom.signature,
         overlapProne: quantifier.overlapProne,
+        bounded: quantifier.bounded,
       });
     } else {
       // Unquantified atoms reset the streak (they consume exactly one
       // position of input, so two `a` in `aa` can't overlap).
-      atoms.push({ signature: `\0fixed:${atom.signature}`, overlapProne: false });
+      atoms.push({ signature: `\0fixed:${atom.signature}`, overlapProne: false, bounded: true });
     }
     i = consumed;
   }
@@ -1274,6 +1291,12 @@ function readAtom(pattern: string, start: number): ReadAtom | null {
 interface AtomQuantifier {
   consumed: number;
   overlapProne: boolean;
+  /**
+   * True iff the quantifier has a finite upper bound: `?`, `{n}`, `{n,m}`.
+   * False for `*`, `+`, `{n,}`. Used to distinguish unbounded dot-wildcards
+   * (`.*`, `.+`, `.{n,}`) from bounded ones (`.?`, `.{n,m}`).
+   */
+  bounded: boolean;
 }
 
 /**
@@ -1288,14 +1311,17 @@ interface AtomQuantifier {
 function parseQuantifierAt(pattern: string, at: number): AtomQuantifier | null {
   const ch = pattern[at];
   if (ch === undefined) return null;
-  if (ch === "*" || ch === "?") return { consumed: skipLazy(pattern, at + 1, 1), overlapProne: true };
-  if (ch === "+") return { consumed: skipLazy(pattern, at + 1, 1), overlapProne: true };
+  if (ch === "*") return { consumed: skipLazy(pattern, at + 1, 1), overlapProne: true, bounded: false };
+  if (ch === "?") return { consumed: skipLazy(pattern, at + 1, 1), overlapProne: true, bounded: true };
+  if (ch === "+") return { consumed: skipLazy(pattern, at + 1, 1), overlapProne: true, bounded: false };
   if (ch === "{") {
     const close = pattern.indexOf("}", at + 1);
     if (close < 0) return null;
     const body = pattern.slice(at, close + 1);
     if (!/^\{\d+(?:,\d*)?\}$/.test(body)) return null;
-    return { consumed: skipLazy(pattern, close + 1, body.length), overlapProne: true };
+    // `{n,}` has no upper bound; `{n}` and `{n,m}` are bounded.
+    const isOpen = /^\{\d+,\}$/.test(body);
+    return { consumed: skipLazy(pattern, close + 1, body.length), overlapProne: true, bounded: !isOpen };
   }
   return null;
 }
@@ -1321,6 +1347,12 @@ function skipLazy(pattern: string, after: number, baseConsumed: number): number 
  *      example `a*a*a*a*a*…`, `\d*\d*\d*…`, `[a-z]*[a-z]*…`. These have
  *      no groups and slip past every earlier rule but produce exponential
  *      backtracking that the post-hoc per-line deadline cannot pre-empt.
+ *   6. contains more than `DCI_REGEX_MAX_DOT_WILDCARDS` top-level unbounded
+ *      dot-wildcard atoms (`.*`, `.+`, `.{n,}`). Patterns like
+ *      `.*a.*a.*a.*a.*c` interleave dot-wildcards with literals that can
+ *      appear many times per line, producing O(n^k) backtracking (where k
+ *      is the wildcard count) that the streak rule misses because each `.*`
+ *      streak resets on the literal in between.
  *
  * The guard intentionally over-rejects: false positives surface as a clear
  * usage error on an explicitly power-user surface, while false negatives
@@ -1342,6 +1374,7 @@ export function validateRegexPattern(pattern: string): void {
   const atoms = enumerateQuantifiedAtoms(pattern);
   let streakSignature: string | null = null;
   let streakLength = 0;
+  let dotWildcardCount = 0;
   for (const atom of atoms) {
     if (atom.overlapProne && atom.signature === streakSignature) {
       streakLength++;
@@ -1360,6 +1393,25 @@ export function validateRegexPattern(pattern: string): void {
     } else {
       streakSignature = null;
       streakLength = 0;
+    }
+
+    // Rule 6: too many top-level unbounded dot-wildcards.
+    // `.*` and `.+` (and `.{n,}`) match any character, so interleaving them
+    // with a literal that appears k times per line yields O(k^count)
+    // backtracking — O(n^count) in the worst case. This is invisible to the
+    // streak rule because each wildcard's streak resets at the literal in
+    // between. Three wildcards allows patterns like `.*foo.*bar.*baz` while
+    // rejecting longer chains.
+    if (atom.signature === "." && atom.overlapProne && !atom.bounded) {
+      dotWildcardCount++;
+      if (dotWildcardCount > DCI_REGEX_MAX_DOT_WILDCARDS) {
+        throw new DciRegexComplexityError(
+          `--regex pattern has more than ${DCI_REGEX_MAX_DOT_WILDCARDS} top-level ` +
+            `unbounded dot-wildcards (.*/.+/.{n,}). ` +
+            `Patterns like .*x.*x.*x.*x.*c produce O(n^k) backtracking when x appears ` +
+            `in subject lines. Use a tighter pattern or drop --regex for literal matching.`,
+        );
+      }
     }
   }
 
