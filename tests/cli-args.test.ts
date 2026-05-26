@@ -14,6 +14,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(__dirname);
 const CLI_PATH = join(REPO_ROOT, "src", "cli.ts");
 
+async function assertFileAbsent(path: string): Promise<void> {
+  try {
+    await stat(path);
+  } catch (err) {
+    // Treating any error as "absent" can mask permission or transient FS
+    // failures and produce a false positive. Insist on ENOENT specifically.
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") return;
+    throw err;
+  }
+  assert.fail(`expected file to be absent: ${path}`);
+}
+
 async function makeFakeCodexUser(): Promise<{
   env: NodeJS.ProcessEnv;
   root: string;
@@ -389,13 +401,7 @@ test("skills disable on out-of-root symlink refuses without --allow-symlink-targ
     );
     // The live SKILL.md under the external dir is untouched.
     await stat(join(externalSkillDir, "SKILL.md"));
-    let stillNotRenamed = false;
-    try {
-      await stat(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
-    } catch {
-      stillNotRenamed = true;
-    }
-    assert.ok(stillNotRenamed, "linked target must not have been renamed");
+    await assertFileAbsent(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
   } finally {
     await fake.cleanup();
   }
@@ -417,6 +423,12 @@ test("skills disable on out-of-root symlink with --allow-symlink-target-mutation
       fake.env,
     );
     assert.match(disabled.stderr, /warning: user:codex:linked-skill is a symlink/);
+    const linkedSkillPath = join(fake.codexHome, "skills", "linked-skill", "SKILL.md");
+    const realSkillPath = join(externalSkillDir, "SKILL.md");
+    assert.ok(
+      disabled.stderr.includes(`${linkedSkillPath} -> ${realSkillPath}`),
+      `disable warning should identify linked target path; got: ${disabled.stderr}`,
+    );
     await stat(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
 
     // enable also requires the flag.
@@ -437,6 +449,12 @@ test("skills disable on out-of-root symlink with --allow-symlink-target-mutation
       fake.env,
     );
     assert.match(enabled.stderr, /warning: user:codex:linked-skill is a symlink/);
+    const linkedDisabledPath = join(fake.codexHome, "skills", "linked-skill", "SKILL.md.agentic-skill-router-disabled");
+    const realDisabledPath = join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled");
+    assert.ok(
+      enabled.stderr.includes(`${linkedDisabledPath} -> ${realDisabledPath}`),
+      `enable warning should identify linked target path; got: ${enabled.stderr}`,
+    );
     await stat(join(externalSkillDir, "SKILL.md"));
   } finally {
     await fake.cleanup();
@@ -474,13 +492,7 @@ test("skills disable --all-suggested --yes never mutates out-of-root symlinks an
 
     // The external (out-of-root) target must NOT have been renamed.
     await stat(join(externalSkillDir, "SKILL.md"));
-    let linkedUntouched = false;
-    try {
-      await stat(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
-    } catch {
-      linkedUntouched = true;
-    }
-    assert.ok(linkedUntouched, "linked target must remain live");
+    await assertFileAbsent(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
 
     // In-root suggestion did get disabled.
     await stat(join(inRootDir, "SKILL.md.agentic-skill-router-disabled"));
