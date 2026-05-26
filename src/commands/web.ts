@@ -372,6 +372,21 @@ async function mutateWebSkill(
   if (!target) throw new WebHttpError(404, "skill not found");
   assertCanMutate(target);
 
+  // P1.G: validating the scan roots is not enough. An individual skill
+  // directory inside an allowlisted skills root can itself be a symlink
+  // to a path outside the allowlist (`<allowed>/.claude/skills/evil ->
+  // /outside/evil`). Production `walkSkillsDir` correctly marks such
+  // entries `outOfRoot: true`, which then makes them mutable via the
+  // explicit symlink-target path (`canMutateSymlink` /
+  // `allowOutOfRoot`) — a mutation renames the SKILL.md at the link
+  // target. For project-scope mutations we have an allowlist; refuse to
+  // rename any skill whose `SKILL.md` realpath escapes it. Global-scope
+  // mutations stay bounded by the host's own skill roots and are not
+  // affected by this allowlist check.
+  if (scope === "project") {
+    await assertProjectSkillTargetAllowed(target, projectRootAllowlist);
+  }
+
   const statePath = statePathForHost(host.name);
   const allowOutOfRoot = canMutateSymlink(target);
   if (operation === "disable") {
@@ -718,6 +733,49 @@ function assertAncestorsAllowed(
  * only one matches the active host: the cost is two extra `lstat`s per
  * ancestor and it avoids coupling this guard to host-name plumbing.
  */
+/**
+ * Reject project-scope mutations whose target `SKILL.md` realpath
+ * escapes the allowlist. This catches the case where the SKILLS-ROOT
+ * container is a real directory (passes `assertProjectSkillRootsAllowed`)
+ * but an individual skill subdirectory inside it is a symlink to a path
+ * outside the allowlist (e.g. `<allowed>/.claude/skills/evil ->
+ * /outside/evil`). The host marks such entries `outOfRoot: true`, which
+ * makes them mutable via the explicit symlink-target path; without this
+ * check the rename would land at the symlink target outside the
+ * allowlist.
+ *
+ * Builtin skills carry an empty `skillMdPath` and are filtered out by
+ * `assertCanMutate` before we get here, so we never realpath an empty
+ * string. A realpath failure (broken symlink, missing file) is treated
+ * as a rejection because we cannot prove containment.
+ */
+async function assertProjectSkillTargetAllowed(
+  target: Skill,
+  projectRootAllowlist: string[],
+): Promise<void> {
+  if (!target.skillMdPath || target.skillMdPath === "") {
+    // Defense-in-depth: builtin skills (empty path) should already be
+    // blocked by `assertCanMutate`; refuse if anything slipped through.
+    throw new WebHttpError(403, "skill has no on-disk path to validate against the allowlist");
+  }
+  let canonicalTarget: string;
+  try {
+    canonicalTarget = await realpath(target.skillMdPath);
+  } catch {
+    throw new WebHttpError(
+      403,
+      `skill \`${target.id}\` cannot be canonicalized for the allowlist check ` +
+        `(broken symlink or missing file at \`${target.skillMdPath}\`)`,
+    );
+  }
+  if (isWithinAllowlist(canonicalTarget, projectRootAllowlist)) return;
+  throw new WebHttpError(
+    403,
+    `skill \`${target.id}\` resolves to \`${canonicalTarget}\`, outside the allowed project roots. ` +
+      `Allowed roots: ${projectRootAllowlist.join(", ")}`,
+  );
+}
+
 async function assertProjectSkillRootsAllowed(
   scanAncestors: string[],
   projectRootAllowlist: string[],

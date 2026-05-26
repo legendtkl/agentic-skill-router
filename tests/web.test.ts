@@ -1230,3 +1230,84 @@ test("web API rejects a project root whose .claude/skills container is a symlink
     await fixture.cleanup();
   }
 });
+
+test("web API rejects a project-scope mutation whose skill SKILL.md resolves outside the allowlist", async () => {
+  // P1.G: even when the scan roots all live inside the allowlist, an
+  // individual skill DIR inside the skills root can itself be a symlink
+  // pointing outside (`<allowed>/.claude/skills/evil -> /outside/evil`).
+  // Production marks such skills `outOfRoot: true`, which makes them
+  // mutable via the explicit symlink-target path. The disable mutation
+  // would otherwise rename `/outside/evil/SKILL.md`. The allowlist
+  // guard must realpath the target's `skillMdPath` and reject when it
+  // lands outside.
+  const fixture = await makeWebFixture();
+  const allowedRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-skilldir-allowed-"));
+  const outsideRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-skilldir-outside-"));
+  try {
+    await mkdir(join(allowedRoot, ".git"), { recursive: true });
+    // `.claude/skills` is a REAL directory (so the skills-root realpath
+    // check passes); the per-skill symlink is what we're testing.
+    await mkdir(join(allowedRoot, ".claude", "skills"), { recursive: true });
+    await mkdir(join(outsideRoot, "evil"), { recursive: true });
+    await writeFile(
+      join(outsideRoot, "evil", "SKILL.md"),
+      "---\nname: evil\ndescription: Per-skill symlink must not be mutable via project scope\n---\n",
+    );
+    await symlink(join(outsideRoot, "evil"), join(allowedRoot, ".claude", "skills", "evil"));
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url } = await startWebServer({
+          hostName: "claude-code",
+          port: 0,
+          projectRoots: [allowedRoot],
+        });
+        try {
+          const token = await readMutationToken(url);
+
+          // List response must include the skill (so the user can see
+          // and act on it manually) but must mark it outOfRoot.
+          const listRes = await fetch(
+            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`,
+          );
+          assert.equal(listRes.status, 200);
+          const listData = await listRes.json() as SkillsResponse;
+          const target = listData.skills.find((skill) => skill.id.endsWith(":evil"));
+          assert.ok(target, `expected evil skill in: ${listData.skills.map((s) => s.id).join(", ")}`);
+          assert.equal(target!.outOfRoot, true);
+
+          // Disable via the explicit symlink-target path must be
+          // rejected because the target SKILL.md resolves outside the
+          // allowlist.
+          const disableRes = await fetch(`${url}/api/skills/disable`, {
+            method: "POST",
+            headers: mutationHeaders(token),
+            body: JSON.stringify({
+              scope: "project",
+              projectPath: allowedRoot,
+              instanceKey: target!.instanceKey,
+            }),
+          });
+          assert.equal(disableRes.status, 403);
+          const body = await disableRes.json() as { error: string };
+          assert.match(body.error, /outside the allowed project roots/);
+
+          // The outside SKILL.md must still be intact (no rename leak).
+          await stat(join(outsideRoot, "evil", "SKILL.md"));
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    await rm(allowedRoot, { recursive: true, force: true });
+    await rm(outsideRoot, { recursive: true, force: true });
+    await fixture.cleanup();
+  }
+});
