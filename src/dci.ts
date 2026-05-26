@@ -1151,6 +1151,161 @@ function parseTrailingQuantifier(pattern: string, end: number): ParsedQuantifier
 }
 
 /**
+ * Maximum allowed streak of consecutive overlapping quantified atoms (e.g.
+ * `a*a*a*…`, `\d*\d*…`, `[a-z]*[a-z]*…`). Patterns at or below this length
+ * are not pathological in practice; patterns above it produce exponential
+ * backtracking that V8's irregexp engine cannot pre-empt.
+ */
+const DCI_REGEX_MAX_OVERLAP_STREAK = 4;
+
+interface QuantifiedAtom {
+  /** Canonical signature for overlap comparison. */
+  signature: string;
+  /**
+   * True iff the quantifier allows the atom to match zero or more times
+   * (`*`, `?`, `{0,…}`). Streaks of these atoms on the same signature are
+   * the dangerous case; required-repetition (`+`, `{1,}`) is also unsafe
+   * when stacked because the engine still has to choose split points.
+   */
+  overlapProne: boolean;
+}
+
+/**
+ * Walks the pattern and returns, in source order, the quantified atoms it
+ * finds at the top level (not inside a group). Each entry carries a
+ * canonical signature so the caller can detect runs of identical atoms.
+ *
+ * "Atom" here means a single character, escape sequence (`\d`, `\.`, …),
+ * `.`, or character class `[…]`. Groups are skipped because the
+ * group-quantifier rules in `validateRegexPattern` already cover them.
+ */
+function enumerateQuantifiedAtoms(pattern: string): QuantifiedAtom[] {
+  const atoms: QuantifiedAtom[] = [];
+  let i = 0;
+  while (i < pattern.length) {
+    const ch = pattern[i]!;
+
+    // Skip groups wholesale — their internals are scored by the group rules.
+    if (ch === "(") {
+      let depth = 1;
+      let j = i + 1;
+      let inCharClass = false;
+      while (j < pattern.length && depth > 0) {
+        const c = pattern[j]!;
+        if (c === "\\") { j += 2; continue; }
+        if (inCharClass) {
+          if (c === "]") inCharClass = false;
+          j++;
+          continue;
+        }
+        if (c === "[") { inCharClass = true; j++; continue; }
+        if (c === "(") depth++;
+        else if (c === ")") depth--;
+        j++;
+      }
+      // Skip any quantifier on the group as well so it does not register as
+      // an atom signature itself.
+      const afterGroup = j;
+      const groupQuantifier = parseQuantifierAt(pattern, afterGroup);
+      i = afterGroup + (groupQuantifier?.consumed ?? 0);
+      continue;
+    }
+
+    // Anchors and alternation reset the streak naturally — they are not
+    // atoms, so skip without recording.
+    if (ch === "^" || ch === "$" || ch === "|") {
+      i++;
+      // Push a streak-breaker so two atoms separated by an anchor don't
+      // count as consecutive.
+      atoms.push({ signature: `\0anchor:${ch}`, overlapProne: false });
+      continue;
+    }
+
+    // Parse one atom + optional quantifier.
+    const atom = readAtom(pattern, i);
+    if (!atom) { i++; continue; }
+    const quantifier = parseQuantifierAt(pattern, atom.end);
+    const consumed = atom.end + (quantifier?.consumed ?? 0);
+    if (quantifier) {
+      atoms.push({
+        signature: atom.signature,
+        overlapProne: quantifier.overlapProne,
+      });
+    } else {
+      // Unquantified atoms reset the streak (they consume exactly one
+      // position of input, so two `a` in `aa` can't overlap).
+      atoms.push({ signature: `\0fixed:${atom.signature}`, overlapProne: false });
+    }
+    i = consumed;
+  }
+  return atoms;
+}
+
+interface ReadAtom {
+  signature: string;
+  /** Exclusive end offset of the atom. */
+  end: number;
+}
+
+function readAtom(pattern: string, start: number): ReadAtom | null {
+  const ch = pattern[start];
+  if (ch === undefined) return null;
+  if (ch === "\\") {
+    const next = pattern[start + 1];
+    if (next === undefined) return null;
+    return { signature: `\\${next}`, end: start + 2 };
+  }
+  if (ch === "[") {
+    let j = start + 1;
+    while (j < pattern.length) {
+      const c = pattern[j]!;
+      if (c === "\\") { j += 2; continue; }
+      if (c === "]") { j++; break; }
+      j++;
+    }
+    return { signature: pattern.slice(start, j), end: j };
+  }
+  if (ch === ".") return { signature: ".", end: start + 1 };
+  // A bare quantifier or grouping character is not an atom on its own.
+  if ("+*?{}()|^$".includes(ch)) return null;
+  return { signature: ch, end: start + 1 };
+}
+
+interface AtomQuantifier {
+  consumed: number;
+  overlapProne: boolean;
+}
+
+/**
+ * Parses an optional quantifier at offset `at`. Returns `null` if no
+ * quantifier is present. `overlapProne` is true when the quantifier admits
+ * zero or one matches, i.e. when chained instances on the same atom can
+ * choose how many characters to claim — `*`, `?`, `+`, `{0,n}`, `{0,}`,
+ * `{1,n}`, `{1,}`. Fixed `{n}` with `n > 1` is also treated as overlap-
+ * prone because consecutive fixed runs can still produce O(n^k) splits
+ * when chained.
+ */
+function parseQuantifierAt(pattern: string, at: number): AtomQuantifier | null {
+  const ch = pattern[at];
+  if (ch === undefined) return null;
+  if (ch === "*" || ch === "?") return { consumed: skipLazy(pattern, at + 1, 1), overlapProne: true };
+  if (ch === "+") return { consumed: skipLazy(pattern, at + 1, 1), overlapProne: true };
+  if (ch === "{") {
+    const close = pattern.indexOf("}", at + 1);
+    if (close < 0) return null;
+    const body = pattern.slice(at, close + 1);
+    if (!/^\{\d+(?:,\d*)?\}$/.test(body)) return null;
+    return { consumed: skipLazy(pattern, close + 1, body.length), overlapProne: true };
+  }
+  return null;
+}
+
+/** Account for a trailing lazy `?` modifier on a quantifier. */
+function skipLazy(pattern: string, after: number, baseConsumed: number): number {
+  return pattern[after] === "?" ? baseConsumed + 1 : baseConsumed;
+}
+
+/**
  * Validates a user-supplied regex pattern against the DCI static complexity
  * guard. Throws `DciRegexComplexityError` for any pattern that:
  *   1. exceeds `DCI_REGEX_MAX_LENGTH`;
@@ -1160,7 +1315,12 @@ function parseTrailingQuantifier(pattern: string, end: number): ParsedQuantifier
  *   3. applies a `{n,}` quantifier with no upper bound, or `{n,m}` with
  *      `m > DCI_REGEX_MAX_GROUP_BOUND`, to a group;
  *   4. applies a quantifier to a group whose top-level alternatives share
- *      a common prefix (`(a|aa)+`, `(foo|foobar)+`, …).
+ *      a common prefix (`(a|aa)+`, `(foo|foobar)+`, …);
+ *   5. contains a streak of more than `DCI_REGEX_MAX_OVERLAP_STREAK`
+ *      consecutive quantified atoms with identical signatures — for
+ *      example `a*a*a*a*a*…`, `\d*\d*\d*…`, `[a-z]*[a-z]*…`. These have
+ *      no groups and slip past every earlier rule but produce exponential
+ *      backtracking that the post-hoc per-line deadline cannot pre-empt.
  *
  * The guard intentionally over-rejects: false positives surface as a clear
  * usage error on an explicitly power-user surface, while false negatives
@@ -1173,6 +1333,34 @@ export function validateRegexPattern(pattern: string): void {
       `--regex pattern is ${pattern.length} chars; max allowed is ${DCI_REGEX_MAX_LENGTH}. ` +
         `Use a shorter pattern or drop --regex for literal matching.`,
     );
+  }
+
+  // Rule 5: consecutive overlapping quantified atoms.
+  // Walk the top-level atom stream looking for `streak > MAX` of the same
+  // overlap-prone signature. This catches the codex pattern
+  // `"a*".repeat(24) + "b"` and friends before compilation.
+  const atoms = enumerateQuantifiedAtoms(pattern);
+  let streakSignature: string | null = null;
+  let streakLength = 0;
+  for (const atom of atoms) {
+    if (atom.overlapProne && atom.signature === streakSignature) {
+      streakLength++;
+      if (streakLength > DCI_REGEX_MAX_OVERLAP_STREAK) {
+        throw new DciRegexComplexityError(
+          `--regex pattern has more than ${DCI_REGEX_MAX_OVERLAP_STREAK} consecutive overlapping ` +
+            `quantified atoms with the same signature (${JSON.stringify(atom.signature)}). ` +
+            `Patterns like a*a*a*… / \\d*\\d*\\d*… / [a-z]*[a-z]*… produce exponential ` +
+            `backtracking that the per-line deadline cannot pre-empt. ` +
+            `Collapse to a single quantifier, or drop --regex for literal matching.`,
+        );
+      }
+    } else if (atom.overlapProne) {
+      streakSignature = atom.signature;
+      streakLength = 1;
+    } else {
+      streakSignature = null;
+      streakLength = 0;
+    }
   }
 
   const groups = enumerateGroups(pattern);

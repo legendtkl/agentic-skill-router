@@ -393,6 +393,10 @@ Static guard (rejects with exit code 2 and `DciRegexComplexityError`):
 - A quantifier applied to a group whose top-level alternatives share a
   common prefix — e.g. `(a|aa)+`, `(foo|foobar)+`.
 - `{n,}` with no upper bound, or `{n,m}` with `m > 10`, applied to a group.
+- More than 4 consecutive quantified atoms with the same signature — e.g.
+  `a*a*a*a*a*…`, `\d*\d*\d*…`, `[a-z]*[a-z]*…`. These patterns have no
+  groups and slip past every other rule but produce exponential
+  backtracking that the post-hoc per-line deadline cannot pre-empt.
 
 Runtime deadline (rejects with exit code 2 and `DciRegexTimeoutError`):
 

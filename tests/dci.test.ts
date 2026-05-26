@@ -606,6 +606,70 @@ test("DCI regex validator does not flag non-capturing group prefix as inner quan
   assert.doesNotThrow(() => validateRegexPattern("((?:foo))"));
 });
 
+test("DCI regex validator rejects consecutive overlapping quantified atoms", () => {
+  // Codex P1 follow-up #3: long runs of `a*a*a*…` style atoms have no
+  // groups so they slip past every earlier rule but produce exponential
+  // backtracking. They must be rejected statically and fast — before the
+  // regex is compiled, never mind matched.
+  const cases: Array<{ pattern: string; label: string }> = [
+    { pattern: "a*".repeat(24) + "b", label: "a* x24 + b" },
+    { pattern: "\\d*".repeat(10), label: "\\d* x10" },
+    { pattern: "[a-z]*".repeat(8), label: "[a-z]* x8" },
+    { pattern: "a+".repeat(6), label: "a+ x6" },
+    { pattern: "a?".repeat(6), label: "a? x6" },
+    { pattern: ".*".repeat(6), label: ".* x6" },
+    { pattern: "a{0,3}".repeat(6), label: "a{0,3} x6" },
+  ];
+  for (const { pattern, label } of cases) {
+    const startedAt = Date.now();
+    assert.throws(
+      () => validateRegexPattern(pattern),
+      DciRegexComplexityError,
+      `expected ${label} (${pattern}) to be flagged as overlapping streak`,
+    );
+    const elapsed = Date.now() - startedAt;
+    assert.ok(elapsed < 50, `expected ${label} to reject in <50ms, took ${elapsed}ms`);
+  }
+});
+
+test("DCI regex validator does not flag normal patterns with a few quantified atoms", () => {
+  // Regression set: each pattern is below the overlap-streak cap and must
+  // validate. Different signatures in a row are also fine — only same-
+  // signature runs trigger the rule.
+  for (const pattern of [
+    "a*b*c?",
+    "^\\d+\\.\\d+$",
+    "https?://[\\w.-]+",
+    "[a-z][0-9][a-z]",
+    "a*b*c*d*",
+    "\\d\\d\\d\\d\\d", // five unquantified atoms — must not trigger
+    "a*a*a*a*",        // exactly at the streak cap — still allowed
+  ]) {
+    assert.doesNotThrow(() => validateRegexPattern(pattern), `expected ${pattern} to pass`);
+  }
+});
+
+test("DCI grep rejects the codex consecutive-overlap pattern at the API in under 50ms", async () => {
+  // Stronger guarantee than the validator-only test: the public API path
+  // must also reject the pattern before any compile-or-match work happens.
+  const corpus = await makeCorpus(0);
+  try {
+    const pattern = "a*".repeat(24) + "b";
+    const startedAt = Date.now();
+    await assert.rejects(
+      () => dciGrepDisabledSkills(corpus.skills, pattern, { regex: true }),
+      DciRegexComplexityError,
+    );
+    const elapsed = Date.now() - startedAt;
+    assert.ok(
+      elapsed < 50,
+      `expected API to reject codex overlap pattern in <50ms, took ${elapsed}ms`,
+    );
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI grep surfaces complexity errors through DciRegexComplexityError, not crashes", async () => {
   const corpus = await makeCorpus(0);
   try {
@@ -662,11 +726,12 @@ test("DCI grep rejects every codex-named pathological pattern via the API in und
 });
 
 test("DCI grep per-line wall-clock deadline catches a pattern that slips the heuristic", async () => {
-  // This pattern uses no groups at all so it slips past the group-quantifier
-  // heuristic, but produces ~1s of catastrophic backtracking on V8 against a
-  // long `a`-only line. The deadline must fire and surface a
-  // DciRegexTimeoutError instead of hanging the corpus walker.
-  const slowPattern = "a?".repeat(40) + "a".repeat(40) + "b";
+  // Two interleaved signatures (`a?b?a?b?…`) defeat the consecutive-overlap
+  // streak rule — each streak resets after every atom — but still produce
+  // ~1s of catastrophic backtracking on V8 against an `abab…` line. The
+  // deadline must fire and surface a DciRegexTimeoutError instead of
+  // hanging the corpus walker.
+  const slowPattern = "a?b?".repeat(20) + "ab".repeat(20) + "c";
 
   // Sanity: validator must accept the pattern (otherwise we are not testing
   // the deadline path).
@@ -679,7 +744,7 @@ test("DCI grep per-line wall-clock deadline catches a pattern that slips the heu
       id: "user:codex:timeout-probe",
       name: "timeout-probe",
       description: "regex deadline probe",
-      body: "a".repeat(40),
+      body: "ab".repeat(20),
       isDisabled: true,
     });
 
@@ -691,7 +756,7 @@ test("DCI grep per-line wall-clock deadline catches a pattern that slips the heu
     const elapsed = Date.now() - startedAt;
     // The deadline is post-hoc, so the engine still runs one slow line
     // before we abort. Bound the assertion at 5s to keep the test fast even
-    // on slow hardware, but log if it ever approaches the limit.
+    // on slow hardware.
     assert.ok(elapsed < 5000, `expected deadline to abort within 5s, took ${elapsed}ms`);
     assert.ok(
       elapsed >= DCI_REGEX_LINE_TIMEOUT_MS,
@@ -1046,6 +1111,23 @@ test("CLI: skills dci grep --regex rejects every codex-named pathological patter
   }
 });
 
+test("CLI: skills dci grep --regex rejects the codex consecutive-overlap pattern with exit 2", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const pattern = "a*".repeat(24) + "b";
+    const startedAt = Date.now();
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", pattern], fake.env);
+    const elapsed = Date.now() - startedAt;
+    assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
+    assert.match(r.stderr, /consecutive overlapping/);
+    // The CLI spawns node + tsx, so allow a generous bound, but it must
+    // nowhere near approach the ~75s the unguarded engine would burn.
+    assert.ok(elapsed < 5000, `expected fast reject, took ${elapsed}ms`);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("CLI: skills dci grep --regex deadline catches a heuristic-bypassing slow pattern", async () => {
   const fake = await makeDciCliEnv();
   try {
@@ -1054,10 +1136,12 @@ test("CLI: skills dci grep --regex deadline catches a heuristic-bypassing slow p
     const probeDir = join(fake.env.CODEX_HOME as string, "skills", "probe");
     await writeFile(
       join(probeDir, "SKILL.md.agentic-skill-router-disabled"),
-      `---\nname: probe\ndescription: dci regex deadline probe skill\n---\n\n${"a".repeat(40)}\n`,
+      `---\nname: probe\ndescription: dci regex deadline probe skill\n---\n\n${"ab".repeat(20)}\n`,
     );
 
-    const slowPattern = "a?".repeat(40) + "a".repeat(40) + "b";
+    // Interleaved signatures defeat the static streak rule but still trip
+    // the per-line deadline.
+    const slowPattern = "a?b?".repeat(20) + "ab".repeat(20) + "c";
     const startedAt = Date.now();
     const r = await runDciCli(
       ["skills", "dci", "grep", "--regex", "--pattern", slowPattern, "--json"],
