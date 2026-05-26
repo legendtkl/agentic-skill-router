@@ -131,8 +131,9 @@ test("skills list rejects unknown option with exit code 2 and suggestion", async
     );
     // Happy path still works.
     const ok = await runCli(["skills", "list", "--json"], fake.env);
-    const parsed = JSON.parse(ok.stdout) as Array<{ id: string }>;
-    assert.ok(Array.isArray(parsed));
+    const parsed = JSON.parse(ok.stdout) as { skills: Array<{ id: string }>; usageDiagnostics: unknown };
+    assert.ok(Array.isArray(parsed.skills));
+    assert.ok(parsed.usageDiagnostics && typeof parsed.usageDiagnostics === "object");
   } finally {
     await fake.cleanup();
   }
@@ -147,7 +148,9 @@ test("skills suggest rejects unknown option with exit code 2", async () => {
       { option: "--unsed-for", suggestion: "--unused-for", commandName: "agentic-skill-router skills suggest" },
     );
     const ok = await runCli(["skills", "suggest", "--unused-for=365d", "--json"], fake.env);
-    assert.ok(ok.stdout.trim().startsWith("["));
+    const parsedSuggest = JSON.parse(ok.stdout) as { suggestions: unknown[]; usageDiagnostics: unknown };
+    assert.ok(Array.isArray(parsedSuggest.suggestions));
+    assert.ok(parsedSuggest.usageDiagnostics && typeof parsedSuggest.usageDiagnostics === "object");
   } finally {
     await fake.cleanup();
   }
@@ -375,8 +378,8 @@ test("skills disable on out-of-root symlink refuses without --allow-symlink-targ
     await symlink(externalSkillDir, join(fake.codexHome, "skills", "linked-skill"));
 
     const listed = await runCli(["skills", "list", "--json"], fake.env);
-    const parsed = JSON.parse(listed.stdout) as Array<{ id: string; outOfRoot: boolean; canDisable: boolean }>;
-    const linked = parsed.find((skill) => skill.id === "user:codex:linked-skill");
+    const parsed = JSON.parse(listed.stdout) as { skills: Array<{ id: string; outOfRoot: boolean; canDisable: boolean }> };
+    const linked = parsed.skills.find((skill) => skill.id === "user:codex:linked-skill");
     assert.ok(linked);
     assert.equal(linked!.outOfRoot, true);
     assert.equal(linked!.canDisable, false);
@@ -832,19 +835,20 @@ async function runOk(
   return runCli(args, env);
 }
 
-test("skills list --json emits parseable array of skills with expected keys", async () => {
+test("skills list --json emits parseable envelope with skills array and usageDiagnostics", async () => {
   const fake = await makeFakeCodexUser();
   try {
     const { stdout, stderr } = await runOk(["skills", "list", "--json"], fake.env);
     assert.equal(stderr, "", `stderr must be empty on success; got: ${stderr}`);
-    const parsed = JSON.parse(stdout) as Array<Record<string, unknown>>;
-    assert.ok(Array.isArray(parsed), "list --json must be an array");
-    assert.ok(parsed.length >= 2, `expected fixture to expose >=2 skills, got ${parsed.length}`);
+    const parsed = JSON.parse(stdout) as { skills: Array<Record<string, unknown>>; usageDiagnostics: Record<string, unknown> };
+    assert.ok(parsed && typeof parsed === "object", "list --json must be an envelope object");
+    assert.ok(Array.isArray(parsed.skills), "list --json must expose a `skills` array");
+    assert.ok(parsed.skills.length >= 2, `expected fixture to expose >=2 skills, got ${parsed.skills.length}`);
     const requiredKeys = [
       "id", "name", "source", "isDisabled", "isPluginDisabled",
       "canDisable", "conflict", "outOfRoot", "description", "lastUsed", "callCount",
     ];
-    for (const entry of parsed) {
+    for (const entry of parsed.skills) {
       for (const key of requiredKeys) {
         assert.ok(key in entry, `list --json entry missing required key ${key}: ${JSON.stringify(entry)}`);
       }
@@ -854,9 +858,14 @@ test("skills list --json emits parseable array of skills with expected keys", as
       assert.equal(typeof entry.isDisabled, "boolean");
     }
     // Fixture sanity: both disabled and live skills present.
-    const ids = parsed.map((p) => p.id);
+    const ids = parsed.skills.map((p) => p.id);
     assert.ok(ids.includes("user:codex:lark-mail"), `expected lark-mail in list; got ${ids.join(",")}`);
     assert.ok(ids.includes("user:codex:brand"), `expected brand in list; got ${ids.join(",")}`);
+    const diag = parsed.usageDiagnostics;
+    assert.ok(diag && typeof diag === "object", "usageDiagnostics must be an object");
+    for (const key of ["scannedFiles", "cachedFiles", "parsedFiles", "skippedDirs", "durationMs"]) {
+      assert.equal(typeof diag[key], "number", `usageDiagnostics.${key} must be a number`);
+    }
   } finally {
     await fake.cleanup();
   }
@@ -929,7 +938,7 @@ test("skills dci budget --json emits parseable budget object", async () => {
   }
 });
 
-test("skills suggest --json emits parseable array", async () => {
+test("skills suggest --json emits parseable envelope with suggestions array and usageDiagnostics", async () => {
   const fake = await makeFakeCodexUser();
   try {
     const { stdout, stderr } = await runOk(
@@ -937,14 +946,20 @@ test("skills suggest --json emits parseable array", async () => {
       fake.env,
     );
     assert.equal(stderr, "", `stderr must be empty on success; got: ${stderr}`);
-    const parsed = JSON.parse(stdout) as unknown[];
-    assert.ok(Array.isArray(parsed), "suggest --json must be an array");
+    const parsed = JSON.parse(stdout) as { suggestions: unknown[]; usageDiagnostics: Record<string, unknown> };
+    assert.ok(parsed && typeof parsed === "object", "suggest --json must be an envelope object");
+    assert.ok(Array.isArray(parsed.suggestions), "suggest --json must expose a `suggestions` array");
     // Schema for each suggestion entry when present.
-    for (const entry of parsed) {
+    for (const entry of parsed.suggestions) {
       const e = entry as Record<string, unknown>;
       for (const key of ["id", "name", "source", "reason", "confidence", "details"]) {
         assert.ok(key in e, `suggest entry missing key ${key}: ${JSON.stringify(e)}`);
       }
+    }
+    const diag = parsed.usageDiagnostics;
+    assert.ok(diag && typeof diag === "object", "usageDiagnostics must be an object");
+    for (const key of ["scannedFiles", "cachedFiles", "parsedFiles", "skippedDirs", "durationMs"]) {
+      assert.equal(typeof diag[key], "number", `usageDiagnostics.${key} must be a number`);
     }
   } finally {
     await fake.cleanup();
@@ -1235,10 +1250,10 @@ test("skills list --json: stdout is pure JSON, stderr is empty", async () => {
     const { stdout, stderr } = await runOk(["skills", "list", "--json"], fake.env);
     assert.equal(stderr, "", `stderr must be empty on success; got: ${stderr}`);
     // No leading/trailing junk - JSON.parse on the raw stdout must work.
-    const parsed = JSON.parse(stdout);
-    assert.ok(Array.isArray(parsed));
-    // Trailing newline is fine, but the first non-whitespace char must be "[".
-    assert.match(stdout.trimStart()[0] ?? "", /\[/);
+    const parsed = JSON.parse(stdout) as { skills: unknown };
+    assert.ok(parsed && typeof parsed === "object" && Array.isArray(parsed.skills));
+    // Trailing newline is fine, but the first non-whitespace char must be "{".
+    assert.match(stdout.trimStart()[0] ?? "", /\{/);
   } finally {
     await fake.cleanup();
   }

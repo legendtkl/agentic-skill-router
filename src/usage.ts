@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { atomicWriteJson } from "./atomic-write.ts";
-import type { HostName, Skill, UsageStat } from "./types.ts";
+import type { HostName, Skill, UsageDiagnostics, UsageStat } from "./types.ts";
 
 /**
  * Returns true when another plugin skill in `inventory` shares the same
@@ -162,6 +162,22 @@ export interface CollectUsageOptions {
   host?: HostName;
   /** Override the cache file path (mostly for tests). */
   cachePath?: string;
+  /**
+   * Optional cutoff: any transcript file whose mtime is strictly older than
+   * `since` is skipped (no parse, no cache lookup) and counted as `cachedFiles`
+   * in the diagnostics. Pass `null` or omit to scan every file.
+   *
+   * Note: directory enumeration still walks every subdirectory under the
+   * transcript root because a directory's own mtime does not reliably reflect
+   * the recency of its contents. The `since` filter only bounds *parse* cost,
+   * not enumeration cost.
+   */
+  since?: Date | null;
+}
+
+export interface CollectUsageResult {
+  usage: Map<string, UsageStat>;
+  diagnostics: UsageDiagnostics;
 }
 
 /**
@@ -188,37 +204,107 @@ export async function collectUsageStats(
   projectsDir: string,
   opts: CollectUsageOptions = {},
 ): Promise<Map<string, UsageStat>> {
-  const files = await listJsonlFiles(projectsDir);
+  const result = await collectUsageStatsDetailed(projectsDir, opts);
+  return result.usage;
+}
+
+/**
+ * Detailed variant of {@link collectUsageStats} that returns the aggregated
+ * usage map *together with* a {@link UsageDiagnostics} record describing how
+ * many files were enumerated, parsed, served from cache, how many directories
+ * were skipped due to permission errors, and how long the scan took.
+ *
+ * Honors the optional `since` cutoff: files whose mtime is older than `since`
+ * are skipped without parsing and counted as `cachedFiles` (we treat
+ * "didn't parse" as a single bucket regardless of cause). When the on-disk
+ * cache holds an entry for such a file we still consult that entry so the
+ * caller never sees a regression in coverage just because the cutoff moved
+ * forward — old cache entries are still merged into the result. If the cache
+ * has no entry, the file is dropped entirely from this scan.
+ */
+export async function collectUsageStatsDetailed(
+  projectsDir: string,
+  opts: CollectUsageOptions = {},
+): Promise<CollectUsageResult> {
+  const startedAt = Date.now();
+  const enumeration = await listJsonlFilesWithSkips(projectsDir);
+  const files = enumeration.files;
 
   const cachePath = opts.cachePath ?? (opts.host ? usageCachePathForHost(opts.host) : null);
   const useCache = cachePath !== null && !cacheBypassed();
   const previous = useCache ? await readCache(cachePath) : null;
   const next: Record<string, CachedFileEntry> = {};
 
+  const sinceMs = opts.since instanceof Date && !Number.isNaN(opts.since.getTime())
+    ? opts.since.getTime()
+    : null;
+
   const stats = new Map<string, MutableStat>();
 
+  let scannedFiles = 0;
+  let cachedFiles = 0;
+  let parsedFiles = 0;
+
   for (const file of files) {
-    let fileStats: SerializedStat[] | null = null;
+    // Stat up front whenever we need either the cache key OR the since cutoff.
     let size = 0;
     let mtimeMs = 0;
-    if (useCache) {
+    let haveMeta = false;
+    if (useCache || sinceMs !== null) {
       const meta = await safeStat(file);
       if (!meta) continue; // file disappeared between listing and stat
       size = meta.size;
       mtimeMs = meta.mtimeMs;
+      haveMeta = true;
+    }
+
+    scannedFiles += 1;
+
+    let fileStats: SerializedStat[] | null = null;
+    let servedWithoutParse = false;
+
+    if (useCache) {
       const cached = previous?.files[file];
       if (cached && cached.size === size && cached.mtimeMs === mtimeMs) {
         fileStats = cached.stats;
+        servedWithoutParse = true;
       }
+    }
+
+    // Apply the since cutoff: if we still need to parse the file but its mtime
+    // is older than the cutoff, skip the parse. Reuse any cached stats so
+    // historical attribution is preserved even when the cutoff hides the file
+    // from re-scanning.
+    if (!fileStats && sinceMs !== null && haveMeta && mtimeMs < sinceMs) {
+      // Try the cache one more time without the size/mtime equality check —
+      // an old cache hit is still better than dropping the file entirely.
+      const stale = previous?.files[file];
+      if (stale) {
+        fileStats = stale.stats;
+        // Re-emit the stale entry into `next` so it survives this scan; we
+        // intentionally use the *stale* size/mtime so a future scan can still
+        // detect a real change and re-parse.
+        next[file] = { size: stale.size, mtimeMs: stale.mtimeMs, stats: stale.stats };
+      }
+      cachedFiles += 1;
+      if (fileStats) mergeSerialized(stats, fileStats);
+      continue;
     }
 
     if (!fileStats) {
       try {
         fileStats = await scanFileSerialized(file);
       } catch (err: unknown) {
-        if (isSkippableScanError(err)) continue;
+        if (isSkippableScanError(err)) {
+          // Treat a per-file permission failure the same as a missing file:
+          // it occupied a slot in `scannedFiles` but contributed nothing.
+          continue;
+        }
         throw err;
       }
+      parsedFiles += 1;
+    } else if (servedWithoutParse) {
+      cachedFiles += 1;
     }
 
     if (useCache) {
@@ -241,7 +327,15 @@ export async function collectUsageStats(
       firstSeen: m.firstSeen,
     });
   }
-  return out;
+
+  const diagnostics: UsageDiagnostics = {
+    scannedFiles,
+    cachedFiles,
+    parsedFiles,
+    skippedDirs: enumeration.skippedDirs,
+    durationMs: Date.now() - startedAt,
+  };
+  return { usage: out, diagnostics };
 }
 
 function isSkippableScanError(err: unknown): boolean {
@@ -249,34 +343,47 @@ function isSkippableScanError(err: unknown): boolean {
   return code === "ENOENT" || code === "EACCES" || code === "EPERM";
 }
 
-async function listJsonlFiles(root: string): Promise<string[]> {
+interface EnumerationResult {
+  files: string[];
+  skippedDirs: number;
+}
+
+async function listJsonlFilesWithSkips(root: string): Promise<EnumerationResult> {
+  const out: string[] = [];
+  const skipped = { count: 0 };
+  await walkJsonl(root, out, skipped);
+  return { files: out, skippedDirs: skipped.count };
+}
+
+async function walkJsonl(root: string, out: string[], skipped: { count: number }): Promise<void> {
   let entries;
   try {
     entries = await readdir(root, { withFileTypes: true });
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") return [];
+    if (code === "ENOENT") return;
     // Treat unreadable transcript subtrees (e.g. mode-000 dirs left over by
     // other tooling) as empty rather than letting a single permission error
     // crash `skills list` / `skills suggest`. Surface a one-line warning so
-    // the user can investigate without losing the rest of the scan.
+    // the user can investigate without losing the rest of the scan, and bump
+    // the diagnostics counter so callers can see how many subtrees were
+    // silently dropped.
     if (code === "EACCES" || code === "EPERM") {
+      skipped.count += 1;
       console.error(`agentic-skill-router: skipping unreadable transcript dir ${root} (${code})`);
-      return [];
+      return;
     }
     throw err;
   }
-  const out: string[] = [];
   for (const ent of entries) {
     if (ent.name.startsWith(".")) continue;
     const path = join(root, ent.name);
     if (ent.isDirectory()) {
-      out.push(...await listJsonlFiles(path));
+      await walkJsonl(path, out, skipped);
     } else if (ent.isFile() && ent.name.endsWith(".jsonl")) {
       out.push(path);
     }
   }
-  return out;
 }
 
 async function safeStat(path: string): Promise<{ size: number; mtimeMs: number } | null> {

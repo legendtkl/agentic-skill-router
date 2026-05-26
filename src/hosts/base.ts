@@ -1,4 +1,17 @@
-import type { HostName, Skill, UsageStat } from "../types.ts";
+import type { HostName, Skill, UsageDiagnostics, UsageStat } from "../types.ts";
+
+/**
+ * Options accepted by {@link Host.usageStats} and
+ * {@link Host.usageStatsDetailed}. Hosts forward these through to
+ * {@link import("../usage.ts").collectUsageStatsDetailed}.
+ */
+export interface HostUsageOptions {
+  /**
+   * Optional cutoff: transcripts older than `since` are skipped during the
+   * parse pass. Directory enumeration is unaffected.
+   */
+  since?: Date | null;
+}
 
 /**
  * A `Host` is responsible solely for discovering skills and reporting their
@@ -12,6 +25,19 @@ import type { HostName, Skill, UsageStat } from "../types.ts";
 export interface Host {
   readonly name: HostName;
   listSkills(): Promise<Skill[]>;
-  usageStats(): Promise<Map<string, UsageStat>>;
+  /**
+   * Back-compat helper that returns only the usage map. New callers should
+   * prefer {@link usageStatsDetailed} so the per-scan diagnostics survive.
+   */
+  usageStats(opts?: HostUsageOptions): Promise<Map<string, UsageStat>>;
+  /**
+   * Returns both the usage map and a {@link UsageDiagnostics} record
+   * describing the scan (files enumerated, parsed, served from cache,
+   * directories skipped due to permission errors, and wall-clock duration).
+   */
+  usageStatsDetailed(opts?: HostUsageOptions): Promise<{
+    usage: Map<string, UsageStat>;
+    diagnostics: UsageDiagnostics;
+  }>;
   skillRoots(): Promise<string[]>;
 }

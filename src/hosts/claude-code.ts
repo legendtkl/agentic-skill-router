@@ -1,15 +1,15 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Host } from "./base.ts";
+import type { Host, HostUsageOptions } from "./base.ts";
 import { projectSkillRoots } from "./project.ts";
-import type { Skill, UsageStat } from "../types.ts";
+import type { Skill, UsageDiagnostics, UsageStat } from "../types.ts";
 import {
   readClaudeSettings,
   readInstalledPlugins,
   readSkillFrontmatterDetailed,
   walkSkillsDir,
 } from "../scan.ts";
-import { collectUsageStats } from "../usage.ts";
+import { collectUsageStatsDetailed } from "../usage.ts";
 
 /**
  * Skills built into the Claude Code binary itself. We can't reach their
@@ -168,8 +168,17 @@ export class ClaudeCodeHost implements Host {
     return out;
   }
 
-  async usageStats(): Promise<Map<string, UsageStat>> {
-    return collectUsageStats(this.projectsDir, { host: this.name });
+  async usageStats(opts: HostUsageOptions = {}): Promise<Map<string, UsageStat>> {
+    return (await this.usageStatsDetailed(opts)).usage;
+  }
+
+  async usageStatsDetailed(
+    opts: HostUsageOptions = {},
+  ): Promise<{ usage: Map<string, UsageStat>; diagnostics: UsageDiagnostics }> {
+    return collectUsageStatsDetailed(this.projectsDir, {
+      host: this.name,
+      ...(opts.since !== undefined ? { since: opts.since } : {}),
+    });
   }
 
   async skillRoots(): Promise<string[]> {

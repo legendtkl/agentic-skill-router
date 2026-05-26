@@ -325,3 +325,78 @@ test("skills config set rejects extra trailing argument", async () => {
     await fx.cleanup();
   }
 });
+
+// ─── usageSinceDays end-to-end (issue #112) ─────────────────────────────────
+
+test("skills config set usageSinceDays writes value and config get reflects it", async () => {
+  const fx = await makeFixture();
+  try {
+    const { stdout, stderr } = await runCli(
+      ["skills", "config", "set", "usageSinceDays", "14"],
+      fx.env,
+    );
+    assert.equal(stderr, "");
+    assert.match(stdout, /set usageSinceDays = 14/);
+
+    const got = await runCli(["skills", "config", "get", "--json"], fx.env);
+    const parsed = JSON.parse(got.stdout) as { config: Record<string, unknown> };
+    assert.equal(parsed.config.usageSinceDays, 14);
+  } finally {
+    await fx.cleanup();
+  }
+});
+
+test("skills list honors usageSinceDays in config and reports diagnostics", async () => {
+  const { utimes } = await import("node:fs/promises");
+  const fx = await makeFixture();
+  try {
+    // Stage two transcripts under the Codex sessions dir: one within the
+    // cutoff, one well before it. The Codex host reads ${CODEX_HOME}/sessions.
+    // fx.configPath is <root>/.agentic-skill-router/config.json — dirname twice
+    // recovers <root>, where we drop a sibling ".codex" home.
+    const fxRoot = dirname(dirname(fx.configPath));
+    const codexHome = join(fxRoot, ".codex");
+    const sessionsDir = join(codexHome, "sessions");
+    const oldSession = join(sessionsDir, "old", "session.jsonl");
+    const newSession = join(sessionsDir, "new", "session.jsonl");
+    await mkdir(join(sessionsDir, "old"), { recursive: true });
+    await mkdir(join(sessionsDir, "new"), { recursive: true });
+    const mkLine = (skill: string, ts: string) => JSON.stringify({
+      timestamp: ts,
+      message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
+    });
+    await writeFile(oldSession, mkLine("old-skill", "2020-01-01T00:00:00Z") + "\n");
+    await writeFile(newSession, mkLine("new-skill", new Date().toISOString()) + "\n");
+    const longAgo = new Date(Date.now() - 365 * 86_400_000);
+    await utimes(oldSession, longAgo, longAgo);
+
+    // Tell the Codex host where to look.
+    const env = { ...fx.env, CODEX_HOME: codexHome };
+
+    // Configure a 7-day cutoff.
+    await runCli(["skills", "config", "set", "usageSinceDays", "7"], env);
+
+    const { stdout, stderr } = await runCli(["skills", "list", "--json"], env);
+    assert.equal(stderr, "", `stderr must be empty; got: ${stderr}`);
+    const parsed = JSON.parse(stdout) as {
+      skills: unknown[];
+      usageDiagnostics: { scannedFiles: number; parsedFiles: number; cachedFiles: number };
+    };
+    assert.equal(parsed.usageDiagnostics.scannedFiles, 2, "both files are enumerated");
+    assert.equal(parsed.usageDiagnostics.parsedFiles, 1, "old file is skipped by the cutoff");
+    assert.equal(parsed.usageDiagnostics.cachedFiles, 1, "since-skipped files are counted as cached");
+  } finally {
+    await fx.cleanup();
+  }
+});
+
+test("skills list text output prints the usage diagnostics line", async () => {
+  const fx = await makeFixture();
+  try {
+    const { stdout, stderr } = await runCli(["skills", "list"], fx.env);
+    assert.equal(stderr, "");
+    assert.match(stdout, /usage: scanned \d+ files \(parsed \d+, cached \d+, skipped \d+ dirs\) in \d+ms/);
+  } finally {
+    await fx.cleanup();
+  }
+});

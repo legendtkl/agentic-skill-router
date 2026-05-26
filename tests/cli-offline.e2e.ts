@@ -88,10 +88,10 @@ test(
       assert.match(config, /\[plugins\."agentic-skill-router@local"\]\nenabled = true/);
 
       // The installed CLI must auto-detect the Codex host from the plugin bundle.
-      const listed = await runRouterJson<SkillListItem[]>(routerBin, ["skills", "list", "--json"], fresh.env);
+      const listed = await runRouterJson<{ skills: SkillListItem[] }>(routerBin, ["skills", "list", "--json"], fresh.env);
       const fixtureId = `user:codex:${FIXTURE_SKILL_NAME}`;
       assert.ok(
-        listed.some((item) => item.id === fixtureId),
+        listed.skills.some((item) => item.id === fixtureId),
         `expected ${fixtureId} in skills list`,
       );
 
