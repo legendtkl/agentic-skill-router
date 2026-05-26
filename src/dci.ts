@@ -890,16 +890,78 @@ function compareScored(a: ScoredLoadedSkill, b: ScoredLoadedSkill): number {
   return a.skill.id.localeCompare(b.skill.id);
 }
 
+/**
+ * Maximum allowed length of a user-supplied `--regex` pattern.
+ *
+ * `--regex` is a power-user surface that can be supplied by an LLM in
+ * agent-facing mode, so we bound the pattern length to keep both compilation
+ * and per-line matching cheap. Real-world skill grep patterns are short;
+ * patterns over the cap almost always indicate accidental input, an
+ * obfuscation attempt, or a ReDoS payload.
+ */
+export const DCI_REGEX_MAX_LENGTH = 200;
+
+/**
+ * Thrown when a user-supplied `--regex` pattern is rejected by the DCI
+ * complexity guard (length cap or nested-quantifier heuristic). The CLI
+ * layer catches this and exits with code 2 so it surfaces as a usage error
+ * rather than an internal crash.
+ */
+export class DciRegexComplexityError extends Error {
+  override name = "DciRegexComplexityError";
+}
+
+// Heuristic for catastrophic-backtracking shapes such as `(a+)+`, `(.*)*`,
+// `(\d+)+$`. The check is intentionally loose: a quantifier (`+` or `*`)
+// followed by `)` and another quantifier is a strong signal of nested
+// repetition. False positives are acceptable because `--regex` is documented
+// as power-user mode; if a caller hits this they can fall back to literal
+// mode or rephrase the pattern.
+const NESTED_QUANTIFIER_HEURISTIC = /[+*]\)[+*?]/;
+
+/**
+ * Validates a user-supplied regex pattern against the DCI complexity guard.
+ *
+ * Throws `DciRegexComplexityError` for patterns that exceed the length cap
+ * or look like a catastrophic-backtracking shape. Exported so the CLI layer
+ * can fail fast before any matching work begins; `createGrepMatcher` also
+ * calls it so any direct API consumer is protected.
+ */
+export function validateRegexPattern(pattern: string): void {
+  if (pattern.length > DCI_REGEX_MAX_LENGTH) {
+    throw new DciRegexComplexityError(
+      `--regex pattern is ${pattern.length} chars; max allowed is ${DCI_REGEX_MAX_LENGTH}. ` +
+        `Use a shorter pattern or drop --regex for literal matching.`,
+    );
+  }
+  if (NESTED_QUANTIFIER_HEURISTIC.test(pattern)) {
+    throw new DciRegexComplexityError(
+      `--regex pattern looks like a catastrophic-backtracking shape ` +
+        `(nested quantifier such as (a+)+ / (.*)*). ` +
+        `Rewrite without nested repetition, or drop --regex for literal matching.`,
+    );
+  }
+}
+
 function createGrepMatcher(pattern: string, mode: "literal" | "regex"): (line: string) => boolean {
   if (mode === "literal") {
     const needle = normalizeLiteral(pattern);
     return (line) => normalizeLiteral(line).includes(needle);
   }
+  validateRegexPattern(pattern);
   const regex = new RegExp(pattern, "iu");
   return (line) => {
-    const matched = regex.test(line);
-    regex.lastIndex = 0;
-    return matched;
+    try {
+      const matched = regex.test(line);
+      regex.lastIndex = 0;
+      return matched;
+    } catch {
+      // Defensive: per-line RegExp errors are not expected for compiled
+      // patterns, but normalize to a non-match so a single bad line cannot
+      // bubble an uncaught exception out of the API layer.
+      regex.lastIndex = 0;
+      return false;
+    }
   };
 }
 

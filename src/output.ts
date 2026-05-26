@@ -22,6 +22,9 @@ USAGE
   agentic-skill-router skills corpus select <id-or-name-or-ref> --query=<text> --confidence=high|medium --reason=<text> [--json]
   agentic-skill-router skills dci search --query=<text> [--query=<text>...] [--metadata-only] [--json] [--top-k=N]
   agentic-skill-router skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
+                                       (--regex is advanced/power-user mode;
+                                       patterns are length-capped and screened
+                                       for catastrophic-backtracking shapes.)
   agentic-skill-router skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]
   agentic-skill-router skills dci open <id-or-ref> [--line=N] [--window=N] [--json]
   agentic-skill-router skills dci inspect <id-or-ref> [--json]

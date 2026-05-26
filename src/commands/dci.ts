@@ -1,6 +1,7 @@
 import { parseStrict } from "../args.ts";
 import {
   DCI_BUDGET,
+  DciRegexComplexityError,
   dciFindInSkill,
   dciGrepDisabledSkills,
   dciInspectSkill,
@@ -8,6 +9,7 @@ import {
   dciReadSkill,
   dciSearchDisabledSkills,
   dciSelectSkills,
+  validateRegexPattern,
 } from "../dci.ts";
 import { createHost } from "../host-resolve.ts";
 import {
@@ -118,25 +120,38 @@ async function cmdDciGrep(argv: string[], hostName: HostName): Promise<number> {
   if (maxSnippets === null) return 2;
   if (values.regex) {
     try {
+      validateRegexPattern(pattern);
       new RegExp(pattern, "iu");
     } catch (err) {
+      if (err instanceof DciRegexComplexityError) {
+        console.error(err.message);
+        return 2;
+      }
       console.error(`invalid --regex pattern: ${(err as Error).message}`);
       return 2;
     }
   }
 
   const host = createHost(hostName);
-  const result = await dciGrepDisabledSkills(await host.listSkills(), pattern, {
-    regex: Boolean(values.regex),
-    ...(topK === undefined ? {} : { topK }),
-    ...(maxSnippets === undefined ? {} : { maxSnippets }),
-  });
-  if (values.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-    return 0;
+  try {
+    const result = await dciGrepDisabledSkills(await host.listSkills(), pattern, {
+      regex: Boolean(values.regex),
+      ...(topK === undefined ? {} : { topK }),
+      ...(maxSnippets === undefined ? {} : { maxSnippets }),
+    });
+    if (values.json) {
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+      return 0;
+    }
+    printDciMatches(result.matches);
+    return result.matches.length > 0 ? 0 : 1;
+  } catch (err) {
+    if (err instanceof DciRegexComplexityError) {
+      console.error(err.message);
+      return 2;
+    }
+    throw err;
   }
-  printDciMatches(result.matches);
-  return result.matches.length > 0 ? 0 : 1;
 }
 
 async function cmdDciFind(argv: string[], hostName: HostName): Promise<number> {
@@ -167,8 +182,13 @@ async function cmdDciFind(argv: string[], hostName: HostName): Promise<number> {
   if (maxSnippets === null) return 2;
   if (values.regex) {
     try {
+      validateRegexPattern(pattern);
       new RegExp(pattern, "iu");
     } catch (err) {
+      if (err instanceof DciRegexComplexityError) {
+        console.error(err.message);
+        return 2;
+      }
       console.error(`invalid --regex pattern: ${(err as Error).message}`);
       return 2;
     }

@@ -1,10 +1,15 @@
+import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import {
   DCI_BUDGET,
+  DCI_REGEX_MAX_LENGTH,
+  DciRegexComplexityError,
   dciFindInSkill,
   dciGrepDisabledSkills,
   dciInspectSkill,
@@ -15,6 +20,7 @@ import {
   dciSelectSkill,
   dciSelectSkills,
   routableDisabledSkills,
+  validateRegexPattern,
 } from "../src/dci.ts";
 import { routeDisabledSkillsAuto } from "../src/auto-route.ts";
 import { routeDisabledSkills } from "../src/route.ts";
@@ -544,6 +550,59 @@ test("DCI grep treats patterns literally unless regex is explicit", async () => 
   }
 });
 
+test("DCI regex validator rejects over-length patterns with a clear error", () => {
+  assert.doesNotThrow(() => validateRegexPattern("a".repeat(DCI_REGEX_MAX_LENGTH)));
+  const tooLong = "a".repeat(DCI_REGEX_MAX_LENGTH + 1);
+  assert.throws(
+    () => validateRegexPattern(tooLong),
+    (err: unknown) => {
+      if (!(err instanceof DciRegexComplexityError)) return false;
+      return err.message.includes(String(DCI_REGEX_MAX_LENGTH));
+    },
+  );
+});
+
+test("DCI regex validator rejects nested-quantifier ReDoS shapes", () => {
+  for (const pattern of ["(a+)+$", "(.*)*", "(.+)+", "(\\d+)+$", "(ab+)+x"]) {
+    assert.throws(
+      () => validateRegexPattern(pattern),
+      DciRegexComplexityError,
+      `expected ${pattern} to be flagged as ReDoS-shaped`,
+    );
+  }
+  // Safe patterns must continue to pass the heuristic.
+  for (const pattern of ["^foo", "dci-.*-repair", "[a-z]+", "orchid|ledger"]) {
+    assert.doesNotThrow(() => validateRegexPattern(pattern), `expected ${pattern} to pass`);
+  }
+});
+
+test("DCI grep surfaces complexity errors through DciRegexComplexityError, not crashes", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    // Literal mode is unaffected by the regex guard, including for patterns
+    // that would be flagged when --regex is set.
+    const literal = await dciGrepDisabledSkills(corpus.skills, "(a+)+$");
+    assert.equal(literal.mode, "literal");
+    assert.equal(literal.matches.length, 0);
+
+    // A safe regex still works (regression guard).
+    const safe = await dciGrepDisabledSkills(corpus.skills, "^anything", { regex: true });
+    assert.equal(safe.mode, "regex");
+
+    // Dangerous regex is rejected synchronously at the API boundary.
+    await assert.rejects(
+      () => dciGrepDisabledSkills(corpus.skills, "(a+)+$", { regex: true }),
+      DciRegexComplexityError,
+    );
+    await assert.rejects(
+      () => dciGrepDisabledSkills(corpus.skills, "a".repeat(DCI_REGEX_MAX_LENGTH + 1), { regex: true }),
+      DciRegexComplexityError,
+    );
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI find and open operate on a single disabled candidate ref", async () => {
   const corpus = await makeCorpus();
   try {
@@ -759,5 +818,111 @@ test("auto route upgrades umbrella skills to DCI evidence", async () => {
     assert.equal(auto.selected?.skill.id, "user:codex:bytedance-auth");
   } finally {
     await corpus.cleanup();
+  }
+});
+
+// ────────────────── CLI-level regex guard tests ──────────────────
+
+const execFileAsync = promisify(execFile);
+const DCI_TEST_DIR = dirname(fileURLToPath(import.meta.url));
+const DCI_REPO_ROOT = dirname(DCI_TEST_DIR);
+const DCI_CLI_PATH = join(DCI_REPO_ROOT, "src", "cli.ts");
+
+async function makeDciCliEnv(): Promise<{ env: NodeJS.ProcessEnv; cleanup: () => Promise<void> }> {
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-dci-cli-"));
+  const codexHome = join(root, ".codex");
+  const stateDir = join(root, ".agentic-skill-router");
+  const disabledDir = join(codexHome, "skills", "probe");
+  await mkdir(disabledDir, { recursive: true });
+  await writeFile(
+    join(disabledDir, "SKILL.md.agentic-skill-router-disabled"),
+    "---\nname: probe\ndescription: dci regex guard probe skill\n---\n\nfoo bar baz\n",
+  );
+  await mkdir(stateDir, { recursive: true });
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    AGENTIC_SKILL_ROUTER_HOST: "codex",
+    CODEX_HOME: codexHome,
+    AGENTS_HOME: join(root, ".agents"),
+    AGENTIC_SKILL_ROUTER_CWD: root,
+    AGENTIC_SKILL_ROUTER_STATE_DIR: stateDir,
+  };
+  return { env, cleanup: () => rm(root, { recursive: true, force: true }) };
+}
+
+async function runDciCli(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  try {
+    const ok = await execFileAsync(process.execPath, ["--import", "tsx", DCI_CLI_PATH, ...args], { env });
+    return { code: 0, stdout: ok.stdout ?? "", stderr: ok.stderr ?? "" };
+  } catch (err) {
+    const e = err as { code?: number; stdout?: string; stderr?: string };
+    return { code: typeof e.code === "number" ? e.code : 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
+  }
+}
+
+test("CLI: skills dci grep --regex with invalid regex exits 2 without crashing", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", "[unclosed"], fake.env);
+    assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
+    assert.match(r.stderr, /invalid --regex pattern/);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex rejects over-length pattern with complexity error", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const longPattern = "a".repeat(DCI_REGEX_MAX_LENGTH + 1);
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", longPattern], fake.env);
+    assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
+    assert.match(r.stderr, new RegExp(String(DCI_REGEX_MAX_LENGTH)));
+    assert.match(r.stderr, /chars/);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex rejects (a+)+$ nested-quantifier shape", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", "(a+)+$"], fake.env);
+    assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
+    assert.match(r.stderr, /catastrophic-backtracking|nested quantifier/i);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep without --regex is unaffected by the guard", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    // Literal mode must accept the same pattern the guard would reject in regex
+    // mode. It will simply find no matches in the probe skill body.
+    const r = await runDciCli(["skills", "dci", "grep", "--pattern", "(a+)+$", "--json"], fake.env);
+    // Exit 1 means "no matches" — that is the unaffected literal behavior.
+    assert.ok(r.code === 0 || r.code === 1, `expected exit 0/1, got ${r.code}; stderr=${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /catastrophic|complexity|chars/i);
+    const parsed = JSON.parse(r.stdout) as { mode: string };
+    assert.equal(parsed.mode, "literal");
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex with a safe pattern still routes (regression)", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", "^foo", "--json"], fake.env);
+    assert.equal(r.code, 0, `expected exit 0, got ${r.code}; stderr=${r.stderr}`);
+    const parsed = JSON.parse(r.stdout) as { mode: string; matches: Array<{ id: string }> };
+    assert.equal(parsed.mode, "regex");
+    assert.ok(parsed.matches.some((m) => m.id === "user:codex:probe"));
+  } finally {
+    await fake.cleanup();
   }
 });

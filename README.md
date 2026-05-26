@@ -373,6 +373,22 @@ definition. `metadataHitRate` is reported in `auto` and `metadata` modes; it
 is `n/a` in `lexical` and `dci`. `dciEscalationRate` is meaningful only in
 `auto` mode and is `n/a` elsewhere.
 
+### DCI grep/find `--regex` is power-user mode
+
+`skills dci grep` and `skills dci find` default to literal substring matching,
+which is the recommended path for both humans and agents. Passing `--regex`
+enables ECMAScript regex matching against every line of every disabled
+`SKILL.md` and is treated as an advanced/power-user surface. To protect the
+shared corpus walker from catastrophic-backtracking (ReDoS) inputs, the CLI
+applies two guards before compiling the pattern:
+
+- A length cap (currently 200 characters). Longer patterns are rejected with
+  exit code 2 and a usage error naming the cap.
+- A nested-quantifier heuristic that rejects shapes like `(a+)+`, `(.*)*`,
+  or `(\d+)+$`. The heuristic is intentionally loose, so it can occasionally
+  flag a safe pattern; if that happens, rewrite the pattern without nested
+  repetition or drop `--regex` and use literal mode.
+
 Layout:
 
 ```text
