@@ -899,13 +899,14 @@ test("skills status --json emits parseable object with expected keys", async () 
     const parsed = JSON.parse(stdout) as Record<string, unknown>;
     for (const key of [
       "disabledCount", "reapplied", "orphaned", "conflicted",
-      "recoveredCommits", "recoveredRollbacks", "skipped", "orphanMarkers",
+      "recoveredCommits", "recoveredRollbacks", "skipped",
+      "symlinkMismatches", "orphanMarkers",
       "disabled", "pendingOps", "routed",
     ]) {
       assert.ok(key in parsed, `status --json missing key ${key}: ${JSON.stringify(parsed)}`);
     }
     assert.equal(typeof parsed.disabledCount, "number");
-    for (const arrKey of ["reapplied", "orphaned", "conflicted", "recoveredCommits", "recoveredRollbacks", "skipped", "orphanMarkers", "disabled", "pendingOps", "routed"]) {
+    for (const arrKey of ["reapplied", "orphaned", "conflicted", "recoveredCommits", "recoveredRollbacks", "skipped", "symlinkMismatches", "orphanMarkers", "disabled", "pendingOps", "routed"]) {
       assert.ok(Array.isArray(parsed[arrKey]), `${arrKey} must be an array`);
     }
   } finally {

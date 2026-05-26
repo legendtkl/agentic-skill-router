@@ -30,12 +30,13 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
       recoveredCommits: reapplyResult.recoveredCommits,
       recoveredRollbacks: reapplyResult.recoveredRollbacks,
       skipped: reapplyResult.skipped,
+      symlinkMismatches: reapplyResult.symlinkMismatches,
       orphanMarkers,
       disabled: state.disabledSkills,
       pendingOps: state.pendingOps ?? [],
       routed: state.routedSkills ?? [],
     }, null, 2) + "\n");
-    return reapplyResult.conflicted.length > 0 ? 1 : 0;
+    return reapplyResult.conflicted.length > 0 || reapplyResult.symlinkMismatches.length > 0 ? 1 : 0;
   }
   console.log(`disabled skills: ${state.disabledSkills.length}`);
   for (const r of state.disabledSkills) {
@@ -77,6 +78,11 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
     for (const id of reapplyResult.conflicted) console.log(`  ${id}`);
     console.log(`Manually delete one file (typically the .agentic-skill-router-disabled to fully enable, or the SKILL.md to fully disable) and re-run \`status\`.`);
   }
+  if (reapplyResult.symlinkMismatches.length > 0) {
+    console.log(`\n⚠ SYMLINK RETARGETED — recorded canonical target no longer matches current realpath; manual repair required:`);
+    for (const line of reapplyResult.symlinkMismatches) console.log(`  ${line}`);
+    console.log(`Restore the symlink to its original target, or remove the stale disable record from state and re-disable the new target explicitly.`);
+  }
   if (orphanMarkers.length > 0) {
     console.log(`\norphan disabled markers (no state record; left from a previous tool or crash):`);
     for (const p of orphanMarkers) console.log(`  ${p}`);
@@ -93,5 +99,5 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
       console.log(`  ${r.id}  (${r.routeCount} route(s), last ${r.lastRoutedAt}, ${r.lastConfidence})`);
     }
   }
-  return reapplyResult.conflicted.length > 0 ? 1 : 0;
+  return reapplyResult.conflicted.length > 0 || reapplyResult.symlinkMismatches.length > 0 ? 1 : 0;
 }
