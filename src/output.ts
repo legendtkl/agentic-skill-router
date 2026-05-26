@@ -70,6 +70,7 @@ export function projectSkill(s: Skill, usage: Map<string, UsageStat>, inventory?
     callCount: u?.callCount ?? 0,
     ...(ambiguous ? { attributionAmbiguous: true } : {}),
     ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
+    ...(s.builtinListSource ? { builtinListSource: s.builtinListSource } : {}),
   };
 }
 
