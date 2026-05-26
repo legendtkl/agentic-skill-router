@@ -1285,6 +1285,205 @@ test("parse error: stderr carries the message, stdout stays empty", async () => 
   }
 });
 
+test("skills enable refuses state-only out-of-root record without --allow-symlink-target-mutation (#125)", async () => {
+  // Regression guard for issues #100 + #125. The inventory-path enable flow
+  // is already gated by PR #123 (`--allow-symlink-target-mutation`), but the
+  // state-only branch (`enableSkillFromState`) reached when no inventory
+  // entry matches the record's instanceKey used to skip the gate entirely.
+  // Construct that scenario directly by hand-writing a state record whose
+  // `skillMdPath` is textually inside the codex skills tree but whose realpath
+  // resolves to a SKILL.md.agentic-skill-router-disabled outside any host
+  // skill root.
+  const fake = await makeFakeCodexUser();
+  try {
+    // Plant the real out-of-root file (this is the file the unguarded
+    // rename would mutate).
+    const externalSkillDir = join(fake.root, "external-skills", "drifted-skill");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalDisabled,
+      "---\nname: drifted-skill\ndescription: drifted out-of-root\n---\n",
+    );
+
+    // Symlink the codex-side parent directory at a path the host's scan does
+    // not surface as `drifted-skill` (we deliberately give the inventory dir
+    // a distinct name so the instanceKey won't match the state record).
+    const codexInRootDir = join(fake.codexHome, "skills", "drifted-stub");
+    await symlink(externalSkillDir, codexInRootDir);
+
+    // The recorded `skillMdPath` points at the codex-side symlinked path.
+    // realpath() will follow the link and land on `externalDisabled`, which
+    // sits outside the codex skill root → must trip the gate.
+    const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
+
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const state = {
+      schema: 1,
+      host: "codex",
+      disabledSkills: [
+        {
+          id: "user:codex:drifted-skill",
+          skillMdPath: recordedDisabledPath,
+          skillName: "drifted-skill",
+          source: "user",
+          pluginKey: null,
+          disabledAt: new Date().toISOString(),
+          reason: "manual",
+        },
+      ],
+    };
+    await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
+
+    // Step 1: enable without the flag must fail with the same refusal text
+    // the inventory branch produces, and the disabled marker MUST NOT be
+    // renamed at the linked target.
+    let refused: unknown;
+    try {
+      await runCli(["skills", "enable", "user:codex:drifted-skill"], fake.env);
+    } catch (err) {
+      refused = err;
+    }
+    assert.ok(refused, "state-only enable without flag must fail");
+    assert.equal((refused as { code?: number }).code, 1);
+    const refusedStderr = (refused as { stderr?: string }).stderr ?? "";
+    assert.match(refusedStderr, /refusing to enable user:codex:drifted-skill/);
+    assert.match(refusedStderr, /symlink target outside this host's skills root/);
+    assert.match(refusedStderr, /--allow-symlink-target-mutation/);
+    assert.ok(
+      refusedStderr.includes(externalSkillDir),
+      `refusal must disclose the realpath target; got: ${refusedStderr}`,
+    );
+    // Load-bearing safety: the out-of-root disabled marker is still present
+    // and the live file was NOT silently created by an unguarded rename.
+    await stat(externalDisabled);
+    await assertFileAbsent(externalLive);
+
+    // Step 2: re-run with the flag — same state-only path now succeeds.
+    const enabled = await runCli(
+      ["skills", "enable", "user:codex:drifted-skill", "--allow-symlink-target-mutation"],
+      fake.env,
+    );
+    assert.equal(
+      enabled.stderr.includes("refusing to enable"),
+      false,
+      `enable with flag should not refuse; got: ${enabled.stderr}`,
+    );
+    await stat(externalLive);
+    await assertFileAbsent(externalDisabled);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable on an in-root state record still works without --allow-symlink-target-mutation", async () => {
+  // Regression guard: the new state-path realpath gate must NOT break the
+  // common case where the state record points at an in-root SKILL.md (no
+  // symlink involved). This is the bread-and-butter `skills enable` path.
+  const fake = await makeFakeCodexUser();
+  try {
+    // `fake.disabledSkillId` is `user:codex:lark-mail`. The fixture drops the
+    // `.agentic-skill-router-disabled` marker directly on disk but no state
+    // record exists for it — calling `skills enable` should still succeed via
+    // the inventory path here. To exercise the state-only branch with an
+    // in-root path, disable a separate live skill via the CLI first, then
+    // enable it.
+    const liveSkillDir = join(fake.codexHome, "skills", "in-root-disabled");
+    await mkdir(liveSkillDir, { recursive: true });
+    await writeFile(
+      join(liveSkillDir, "SKILL.md"),
+      "---\nname: in-root-disabled\ndescription: in-root skill\n---\n",
+    );
+
+    await runCli(["skills", "disable", "user:codex:in-root-disabled", "--yes"], fake.env);
+    await stat(join(liveSkillDir, "SKILL.md.agentic-skill-router-disabled"));
+
+    // The skill is still in inventory (as a disabled entry); the cmdEnable
+    // inventory path will pick it up — but the in-root realpath check would
+    // also pass on the state-only branch. Verify the happy path still returns
+    // 0 and renames the file back.
+    const enabled = await runCli(["skills", "enable", "user:codex:in-root-disabled"], fake.env);
+    assert.equal(enabled.stderr.includes("refusing to enable"), false);
+    await stat(join(liveSkillDir, "SKILL.md"));
+    await assertFileAbsent(join(liveSkillDir, "SKILL.md.agentic-skill-router-disabled"));
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable rejects a tampered state record whose skillMdPath escapes the host's skill roots (#100)", async () => {
+  // Threat scenario from issue #100: the state file is plain JSON; a tampered
+  // or hand-edited record could direct `skills enable` to rename an arbitrary
+  // file outside the host's skill roots. Even when the on-disk path contains
+  // path-traversal segments that resolve outside the roots, the realpath gate
+  // in `enableSkillFromState` must refuse without --allow-symlink-target-mutation.
+  const fake = await makeFakeCodexUser();
+  try {
+    // Plant a file at a path that obviously lives outside the codex skills
+    // root, then hand-write a state record claiming it is a disabled skill.
+    const escapedDir = join(fake.root, "totally-outside", "evil-skill");
+    await mkdir(escapedDir, { recursive: true });
+    const escapedDisabled = join(escapedDir, "SKILL.md.agentic-skill-router-disabled");
+    await writeFile(
+      escapedDisabled,
+      "---\nname: evil-skill\ndescription: planted file outside skill roots\n---\n",
+    );
+    // Use a path that survives realpath but is unambiguously not under any
+    // codex skill root. We embed a `..` segment so the recorded `skillMdPath`
+    // textually points "into" the skills tree but resolves elsewhere; the
+    // realpath gate must catch this regardless of textual prefix matching.
+    const traversalPath = join(
+      fake.codexHome,
+      "skills",
+      "decoy",
+      "..",
+      "..",
+      "..",
+      "totally-outside",
+      "evil-skill",
+      "SKILL.md.agentic-skill-router-disabled",
+    );
+
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const state = {
+      schema: 1,
+      host: "codex",
+      disabledSkills: [
+        {
+          id: "user:codex:evil-skill",
+          skillMdPath: traversalPath,
+          skillName: "evil-skill",
+          source: "user",
+          pluginKey: null,
+          disabledAt: new Date().toISOString(),
+          reason: "tampered",
+        },
+      ],
+    };
+    await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
+
+    let refused: unknown;
+    try {
+      await runCli(["skills", "enable", "user:codex:evil-skill"], fake.env);
+    } catch (err) {
+      refused = err;
+    }
+    assert.ok(refused, "enable of a tampered out-of-root state record must fail");
+    assert.equal((refused as { code?: number }).code, 1);
+    const refusedStderr = (refused as { stderr?: string }).stderr ?? "";
+    assert.match(refusedStderr, /refusing to enable user:codex:evil-skill/);
+    assert.match(refusedStderr, /--allow-symlink-target-mutation/);
+    // Load-bearing: the planted file MUST still be on disk under its disabled
+    // name. A silent rename of an arbitrary local path is exactly what #100
+    // warned about.
+    await stat(escapedDisabled);
+    await assertFileAbsent(join(escapedDir, "SKILL.md"));
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("user error: stderr carries the message, stdout stays empty", async () => {
   const fake = await makeFakeCodexUser();
   try {

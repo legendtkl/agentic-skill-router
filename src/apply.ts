@@ -1,5 +1,5 @@
 import { readdir, realpath, rename, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { DISABLED_SUFFIX } from "./scan.ts";
 import {
   addDisableRecord,
@@ -35,6 +35,19 @@ export interface ApplyDeps {
    * explicitly warned the user.
    */
   allowOutOfRoot?: boolean;
+  /**
+   * Skill roots currently advertised by the active host (typically
+   * `await host.skillRoots()`). When supplied, `enableSkillFromState`
+   * re-validates the state-recorded `skillMdPath` against these roots before
+   * renaming so a tampered or stale state record cannot direct a rename to an
+   * arbitrary filesystem path (#100), and so out-of-root drift discovered
+   * since the disable was recorded gets gated by `allowOutOfRoot` exactly the
+   * way the inventory-path CLI flow already gates it (#125).
+   *
+   * Optional for backward compatibility: callers that don't have a host on
+   * hand (legacy tests, library consumers) skip the gate, just like before.
+   */
+  allowedSkillRoots?: string[];
 }
 
 export async function disableSkill(
@@ -202,6 +215,27 @@ export async function enableSkillFromState(
     const { livePath, disabledPath } = pathsForRecord(rec);
     const liveBefore = await fileExists(livePath);
     const disabledBefore = await fileExists(disabledPath);
+    // Re-validate the state-recorded path against the host's current skill
+    // roots BEFORE renaming. The state file is plain JSON and might be
+    // tampered, hand-edited, or stale; without this gate
+    // `enableSkillFromState` would happily rename arbitrary local paths a
+    // record points at (#100) and would also bypass the out-of-root symlink
+    // gate the inventory-path enable flow already enforces (#125).
+    if (deps.allowedSkillRoots && deps.allowedSkillRoots.length > 0) {
+      // Prefer the file that actually exists on disk; fall back to the
+      // disabled marker (the canonical resting location for a disable record)
+      // so a missing live file still produces a useful realpath comparison.
+      const probePath = liveBefore ? livePath : disabledPath;
+      const realTarget = await tryRealpath(probePath);
+      // If neither file exists, there is nothing to rename and no path to
+      // re-validate; let the downstream state-cleanup branch handle it.
+      if (realTarget !== null) {
+        const rootsResolved = await resolveExistingPaths(deps.allowedSkillRoots);
+        if (!isPathUnderAnyRoot(realTarget, rootsResolved) && !deps.allowOutOfRoot) {
+          throw new Error(symlinkMutationRefusalMessage(rec.id, probePath, realTarget));
+        }
+      }
+    }
     const result = await enableSkillPaths(rec.instanceKey, livePath, disabledPath, deps, state);
     return {
       ...result,
@@ -210,6 +244,52 @@ export async function enableSkillFromState(
       instanceKey: rec.instanceKey,
     };
   });
+}
+
+/**
+ * Mirror of the inventory-path `symlinkMutationRefusal` error in
+ * `src/commands/apply.ts`. Kept in apply.ts so the state-only enable flow
+ * surfaces an identical refusal message (same flag hint, same linked-target
+ * disclosure) without pulling a CLI module into the runtime layer.
+ */
+function symlinkMutationRefusalMessage(skillId: string, livePath: string, realTarget: string): string {
+  const linkedPart = realTarget !== livePath ? `${livePath} -> ${realTarget}` : livePath;
+  return (
+    `refusing to enable ${skillId}: skill resolves to a symlink target outside this host's skills root ` +
+    `(linked target: ${linkedPart}). ` +
+    `Re-run with --allow-symlink-target-mutation to modify the linked target.`
+  );
+}
+
+/**
+ * Resolve each candidate root to its realpath if it exists. Non-existent
+ * roots are silently skipped — the host may advertise project-scope roots
+ * that don't exist in every workspace, and a missing root cannot contain
+ * any path anyway.
+ */
+async function resolveExistingPaths(paths: string[]): Promise<string[]> {
+  const resolved: string[] = [];
+  for (const p of paths) {
+    const real = await tryRealpath(p);
+    if (real !== null) resolved.push(real);
+  }
+  return resolved;
+}
+
+/**
+ * Returns true when `candidate` is the same path as one of `roots` or sits
+ * underneath one of them. All inputs are expected to be absolute realpaths;
+ * comparison is segment-based (so `/a/b` does NOT match `/a/banana`).
+ */
+function isPathUnderAnyRoot(candidate: string, roots: string[]): boolean {
+  const c = resolve(candidate);
+  for (const root of roots) {
+    const r = resolve(root);
+    if (c === r) return true;
+    const prefix = r.endsWith(sep) ? r : r + sep;
+    if (c.startsWith(prefix)) return true;
+  }
+  return false;
 }
 
 function resolveDisableRecord(state: State, idOrInstanceKey: string): DisableRecord {
