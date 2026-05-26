@@ -902,8 +902,29 @@ function compareScored(a: ScoredLoadedSkill, b: ScoredLoadedSkill): number {
 export const DCI_REGEX_MAX_LENGTH = 200;
 
 /**
+ * Per-line wall-clock budget for a `--regex` match. Backstops the static
+ * heuristic for any pathological pattern it fails to flag up front. A real
+ * non-pathological regex over a single SKILL.md line completes in well under
+ * a millisecond on modern hardware; tripping this budget is strong evidence
+ * of catastrophic backtracking.
+ *
+ * The deadline is post-hoc — we cannot pre-empt the engine without a Worker
+ * — so a single line can still spike past this value. After the first trip
+ * the matcher stops calling the engine entirely so aggregate damage is
+ * bounded to one slow line.
+ */
+export const DCI_REGEX_LINE_TIMEOUT_MS = 50;
+
+/**
+ * Largest `{n,m}` upper bound allowed on a quantifier applied to a group.
+ * Higher bounds combined with backtracking-prone groups blow up quickly.
+ */
+const DCI_REGEX_MAX_GROUP_BOUND = 10;
+
+/**
  * Thrown when a user-supplied `--regex` pattern is rejected by the DCI
- * complexity guard (length cap or nested-quantifier heuristic). The CLI
+ * static complexity guard (length cap, nested-quantifier shapes, large
+ * group bounds, prefix-overlap alternation in a quantified group). The CLI
  * layer catches this and exits with code 2 so it surfaces as a usage error
  * rather than an internal crash.
  */
@@ -911,21 +932,240 @@ export class DciRegexComplexityError extends Error {
   override name = "DciRegexComplexityError";
 }
 
-// Heuristic for catastrophic-backtracking shapes such as `(a+)+`, `(.*)*`,
-// `(\d+)+$`. The check is intentionally loose: a quantifier (`+` or `*`)
-// followed by `)` and another quantifier is a strong signal of nested
-// repetition. False positives are acceptable because `--regex` is documented
-// as power-user mode; if a caller hits this they can fall back to literal
-// mode or rephrase the pattern.
-const NESTED_QUANTIFIER_HEURISTIC = /[+*]\)[+*?]/;
+/**
+ * Thrown when a user-supplied `--regex` pattern is compiled successfully and
+ * passes the static guard but a single per-line match exceeds
+ * `DCI_REGEX_LINE_TIMEOUT_MS`. The CLI layer catches this and exits with
+ * code 2 just like `DciRegexComplexityError`.
+ */
+export class DciRegexTimeoutError extends Error {
+  override name = "DciRegexTimeoutError";
+}
+
+interface RegexGroup {
+  /** Inclusive offset of the opening `(`. */
+  start: number;
+  /** Inclusive offset of the closing `)`. */
+  end: number;
+  /** Inner body between `(` and `)`, with group prefix (e.g. `?:`) stripped. */
+  body: string;
+}
 
 /**
- * Validates a user-supplied regex pattern against the DCI complexity guard.
+ * Walks a pattern to enumerate non-escaped, non-character-class top-level
+ * groups (parenthesized subpatterns) along with their bodies. Tracks
+ * brackets and escapes so `\(`, `[(]`, and `\\` do not confuse the depth
+ * counter. Returns groups in source order; nested groups appear as separate
+ * entries.
+ */
+function enumerateGroups(pattern: string): RegexGroup[] {
+  const groups: RegexGroup[] = [];
+  const stack: number[] = [];
+  let i = 0;
+  let inCharClass = false;
+  while (i < pattern.length) {
+    const ch = pattern[i]!;
+    if (ch === "\\") {
+      i += 2;
+      continue;
+    }
+    if (inCharClass) {
+      if (ch === "]") inCharClass = false;
+      i++;
+      continue;
+    }
+    if (ch === "[") {
+      inCharClass = true;
+      i++;
+      continue;
+    }
+    if (ch === "(") {
+      stack.push(i);
+      i++;
+      continue;
+    }
+    if (ch === ")") {
+      const start = stack.pop();
+      if (start !== undefined) {
+        let body = pattern.slice(start + 1, i);
+        // Strip a leading group prefix like `?:`, `?=`, `?!`, `?<name>`, `?<=`, `?<!`.
+        if (body.startsWith("?")) {
+          const prefixMatch = body.match(/^\?(?::|=|!|<=|<!|<[^>]*>)/);
+          if (prefixMatch) body = body.slice(prefixMatch[0].length);
+        }
+        groups.push({ start, end: i, body });
+      }
+      i++;
+      continue;
+    }
+    i++;
+  }
+  return groups;
+}
+
+/**
+ * True iff `body` contains an unescaped quantifier (`+`, `*`, `?`, or `{n…}`)
+ * outside a character class — i.e. another repetition lives inside the
+ * group. Skips past nested group prefixes (`(?:`, `(?=`, `(?!`, `(?<…>`,
+ * `(?<=`, `(?<!`) so their `?` characters do not look like quantifiers.
+ * Lookarounds are not unwrapped because a quantifier inside one is just as
+ * backtracking-prone as one at the top level.
+ */
+function containsInnerQuantifier(body: string): boolean {
+  let i = 0;
+  let inCharClass = false;
+  while (i < body.length) {
+    const ch = body[i]!;
+    if (ch === "\\") {
+      i += 2;
+      continue;
+    }
+    if (inCharClass) {
+      if (ch === "]") inCharClass = false;
+      i++;
+      continue;
+    }
+    if (ch === "[") {
+      inCharClass = true;
+      i++;
+      continue;
+    }
+    if (ch === "(") {
+      // Skip past a group prefix such as `?:`, `?=`, `?!`, `?<name>`,
+      // `?<=`, `?<!` so its `?` is not counted as a quantifier.
+      const rest = body.slice(i + 1);
+      const prefixMatch = rest.match(/^\?(?::|=|!|<=|<!|<[^>]*>)/);
+      i += 1 + (prefixMatch ? prefixMatch[0].length : 0);
+      continue;
+    }
+    if (ch === ")") {
+      i++;
+      continue;
+    }
+    if (ch === "+" || ch === "*" || ch === "?") return true;
+    if (ch === "{") {
+      // Match `{n}`, `{n,}`, or `{n,m}`. Anything else is a literal `{`.
+      const close = body.indexOf("}", i + 1);
+      if (close > i && /^\{\d+(?:,\d*)?\}$/.test(body.slice(i, close + 1))) {
+        return true;
+      }
+    }
+    i++;
+  }
+  return false;
+}
+
+/**
+ * Splits a group body on top-level `|` alternation, respecting nested
+ * parens, escapes, and character classes. Returns the original body as a
+ * single-element array when no alternation is present.
+ */
+function splitTopLevelAlternation(body: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let inCharClass = false;
+  let start = 0;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]!;
+    if (ch === "\\") {
+      i++;
+      continue;
+    }
+    if (inCharClass) {
+      if (ch === "]") inCharClass = false;
+      continue;
+    }
+    if (ch === "[") {
+      inCharClass = true;
+      continue;
+    }
+    if (ch === "(") {
+      depth++;
+      continue;
+    }
+    if (ch === ")") {
+      if (depth > 0) depth--;
+      continue;
+    }
+    if (ch === "|" && depth === 0) {
+      parts.push(body.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(body.slice(start));
+  return parts;
+}
+
+/**
+ * True iff two of the supplied alternatives share a non-trivial common
+ * prefix — the canonical pathological example is `(a|aa)+`, where the
+ * engine has two ways to match the same input. Length 1 prefixes count
+ * because they are still enough to multiply backtracking branches in a
+ * quantified group.
+ */
+function hasOverlappingAlternatives(alternatives: string[]): boolean {
+  for (let i = 0; i < alternatives.length; i++) {
+    for (let j = i + 1; j < alternatives.length; j++) {
+      const a = alternatives[i]!;
+      const b = alternatives[j]!;
+      if (a.length === 0 || b.length === 0) continue;
+      if (a === b) return true;
+      if (a.startsWith(b) || b.startsWith(a)) return true;
+    }
+  }
+  return false;
+}
+
+interface ParsedQuantifier {
+  consumed: number;
+  /** Upper bound; `null` means open (e.g. `{2,}`) or unbounded (`+`/`*`). */
+  upper: number | null;
+}
+
+/**
+ * Inspects the quantifier that follows a group's closing `)` at offset
+ * `end`. Returns `null` if no quantifier is present. Handles `+`, `*`, `?`,
+ * `{n}`, `{n,}`, `{n,m}` and ignores a trailing lazy `?` modifier.
+ */
+function parseTrailingQuantifier(pattern: string, end: number): ParsedQuantifier | null {
+  const ch = pattern[end + 1];
+  if (ch === undefined) return null;
+  if (ch === "+" || ch === "*") return { consumed: 1, upper: null };
+  if (ch === "?") return { consumed: 1, upper: 1 };
+  if (ch === "{") {
+    const close = pattern.indexOf("}", end + 2);
+    if (close < 0) return null;
+    const body = pattern.slice(end + 1, close + 1);
+    const match = body.match(/^\{(\d+)(?:,(\d*))?\}$/);
+    if (!match) return null;
+    if (match[2] === undefined) {
+      // `{n}` — fixed repetition; treat as bounded.
+      const upper = Number(match[1]);
+      return { consumed: body.length, upper: Number.isFinite(upper) ? upper : null };
+    }
+    if (match[2] === "") return { consumed: body.length, upper: null };
+    const upper = Number(match[2]);
+    return { consumed: body.length, upper: Number.isFinite(upper) ? upper : null };
+  }
+  return null;
+}
+
+/**
+ * Validates a user-supplied regex pattern against the DCI static complexity
+ * guard. Throws `DciRegexComplexityError` for any pattern that:
+ *   1. exceeds `DCI_REGEX_MAX_LENGTH`;
+ *   2. applies a quantifier to a group whose body itself contains a
+ *      quantifier (classic nested-repetition ReDoS — `(a+)+`, `(a?)+`,
+ *      `(a{1,})+`, `(a+){2,}` …);
+ *   3. applies a `{n,}` quantifier with no upper bound, or `{n,m}` with
+ *      `m > DCI_REGEX_MAX_GROUP_BOUND`, to a group;
+ *   4. applies a quantifier to a group whose top-level alternatives share
+ *      a common prefix (`(a|aa)+`, `(foo|foobar)+`, …).
  *
- * Throws `DciRegexComplexityError` for patterns that exceed the length cap
- * or look like a catastrophic-backtracking shape. Exported so the CLI layer
- * can fail fast before any matching work begins; `createGrepMatcher` also
- * calls it so any direct API consumer is protected.
+ * The guard intentionally over-rejects: false positives surface as a clear
+ * usage error on an explicitly power-user surface, while false negatives
+ * stay caught by the per-line wall-clock deadline in `createGrepMatcher`.
+ * Exported so the CLI layer can fail fast before any matching work begins.
  */
 export function validateRegexPattern(pattern: string): void {
   if (pattern.length > DCI_REGEX_MAX_LENGTH) {
@@ -934,12 +1174,53 @@ export function validateRegexPattern(pattern: string): void {
         `Use a shorter pattern or drop --regex for literal matching.`,
     );
   }
-  if (NESTED_QUANTIFIER_HEURISTIC.test(pattern)) {
-    throw new DciRegexComplexityError(
-      `--regex pattern looks like a catastrophic-backtracking shape ` +
-        `(nested quantifier such as (a+)+ / (.*)*). ` +
-        `Rewrite without nested repetition, or drop --regex for literal matching.`,
-    );
+
+  const groups = enumerateGroups(pattern);
+  for (const group of groups) {
+    const quantifier = parseTrailingQuantifier(pattern, group.end);
+    if (!quantifier) continue;
+
+    // Bounded fixed repetition (`{n}` with small n) is treated like the
+    // unquantified group: we still drop into the alternation check, but a
+    // single-shot bound is not by itself a ReDoS lever.
+    const isOpenRepetition = quantifier.upper === null;
+    const isLargeBoundedRepetition =
+      quantifier.upper !== null && quantifier.upper > DCI_REGEX_MAX_GROUP_BOUND;
+    const isRepetition = isOpenRepetition || isLargeBoundedRepetition;
+
+    if (isRepetition) {
+      if (containsInnerQuantifier(group.body)) {
+        throw new DciRegexComplexityError(
+          `--regex pattern looks like a catastrophic-backtracking shape: a quantifier ` +
+            `is applied to a group whose body contains another quantifier ` +
+            `(e.g. (a+)+, (a?)+, (a+){2,}, (a{1,})+). ` +
+            `Rewrite without nested repetition, or drop --regex for literal matching.`,
+        );
+      }
+      const alternatives = splitTopLevelAlternation(group.body);
+      if (alternatives.length > 1 && hasOverlappingAlternatives(alternatives)) {
+        throw new DciRegexComplexityError(
+          `--regex pattern looks like a catastrophic-backtracking shape: a quantified ` +
+            `group contains alternation with overlapping alternatives ` +
+            `(e.g. (a|aa)+, (foo|foobar)+). ` +
+            `Rewrite without overlapping alternatives, or drop --regex for literal matching.`,
+        );
+      }
+      if (isLargeBoundedRepetition) {
+        throw new DciRegexComplexityError(
+          `--regex pattern applies a large {n,m} bound (>${DCI_REGEX_MAX_GROUP_BOUND}) to a group. ` +
+            `Tighten the bound, or drop --regex for literal matching.`,
+        );
+      }
+      if (isOpenRepetition && quantifier.upper === null && /\{\d+,\}/.test(pattern.slice(group.end))) {
+        // `{n,}` with no upper bound directly on a group: reject even when
+        // the inner body looks tame; the engine still has to enumerate runs.
+        throw new DciRegexComplexityError(
+          `--regex pattern applies an open-ended {n,} repetition to a group. ` +
+            `Use a fixed upper bound, or drop --regex for literal matching.`,
+        );
+      }
+    }
   }
 }
 
@@ -950,12 +1231,34 @@ function createGrepMatcher(pattern: string, mode: "literal" | "regex"): (line: s
   }
   validateRegexPattern(pattern);
   const regex = new RegExp(pattern, "iu");
+  // Latched flag: once a single line trips the per-line deadline, we stop
+  // calling the engine entirely. This bounds aggregate damage from any
+  // pathological pattern that slips past the static heuristic.
+  let timedOut = false;
+  let timeoutPattern = pattern;
   return (line) => {
+    if (timedOut) {
+      throw new DciRegexTimeoutError(
+        `--regex pattern exceeded the per-line ${DCI_REGEX_LINE_TIMEOUT_MS}ms match deadline ` +
+          `on a prior line; aborting further matches for ${JSON.stringify(timeoutPattern)}. ` +
+          `Rewrite without nested repetition / overlapping alternation, or drop --regex.`,
+      );
+    }
+    const startedAt = Date.now();
     try {
       const matched = regex.test(line);
       regex.lastIndex = 0;
+      if (Date.now() - startedAt > DCI_REGEX_LINE_TIMEOUT_MS) {
+        timedOut = true;
+        throw new DciRegexTimeoutError(
+          `--regex match took > ${DCI_REGEX_LINE_TIMEOUT_MS}ms on a single line ` +
+            `for ${JSON.stringify(timeoutPattern)}; aborting. ` +
+            `Rewrite without nested repetition / overlapping alternation, or drop --regex.`,
+        );
+      }
       return matched;
-    } catch {
+    } catch (err) {
+      if (err instanceof DciRegexTimeoutError) throw err;
       // Defensive: per-line RegExp errors are not expected for compiled
       // patterns, but normalize to a non-match so a single bad line cannot
       // bubble an uncaught exception out of the API layer.

@@ -8,8 +8,10 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import {
   DCI_BUDGET,
+  DCI_REGEX_LINE_TIMEOUT_MS,
   DCI_REGEX_MAX_LENGTH,
   DciRegexComplexityError,
+  DciRegexTimeoutError,
   dciFindInSkill,
   dciGrepDisabledSkills,
   dciInspectSkill,
@@ -563,7 +565,18 @@ test("DCI regex validator rejects over-length patterns with a clear error", () =
 });
 
 test("DCI regex validator rejects nested-quantifier ReDoS shapes", () => {
-  for (const pattern of ["(a+)+$", "(.*)*", "(.+)+", "(\\d+)+$", "(ab+)+x"]) {
+  // Codex P1 follow-up: every pattern below must be flagged by the static
+  // heuristic. The first set is from the original issue; the second set is
+  // from the codex follow-up that broke the narrow first-pass heuristic.
+  const original = ["(a+)+$", "(.*)*", "(.+)+", "(\\d+)+$", "(ab+)+x"];
+  const codexFollowUp = [
+    "(a+){2,}$",
+    "([a-z]+){2,}$",
+    "(a{1,})+$",
+    "(a?)+$",
+    "^(a|aa)+$",
+  ];
+  for (const pattern of [...original, ...codexFollowUp]) {
     assert.throws(
       () => validateRegexPattern(pattern),
       DciRegexComplexityError,
@@ -574,6 +587,23 @@ test("DCI regex validator rejects nested-quantifier ReDoS shapes", () => {
   for (const pattern of ["^foo", "dci-.*-repair", "[a-z]+", "orchid|ledger"]) {
     assert.doesNotThrow(() => validateRegexPattern(pattern), `expected ${pattern} to pass`);
   }
+});
+
+test("DCI regex validator rejects open or oversized group bounds", () => {
+  // `{n,}` directly on a group is rejected even when the inner body is tame.
+  assert.throws(() => validateRegexPattern("(a){2,}"), DciRegexComplexityError);
+  // `{n,m}` with `m` larger than the small allowed bound is rejected.
+  assert.throws(() => validateRegexPattern("(a){2,50}"), DciRegexComplexityError);
+  // Small bounded repetition on a plain group is fine.
+  assert.doesNotThrow(() => validateRegexPattern("(abc){3}"));
+  assert.doesNotThrow(() => validateRegexPattern("(abc){1,5}"));
+});
+
+test("DCI regex validator does not flag non-capturing group prefix as inner quantifier", () => {
+  // `(?:...)` inside an outer quantified group must not be treated as a
+  // nested quantifier just because of the leading `?`.
+  assert.doesNotThrow(() => validateRegexPattern("((?:foo)bar)+"));
+  assert.doesNotThrow(() => validateRegexPattern("((?:foo))"));
 });
 
 test("DCI grep surfaces complexity errors through DciRegexComplexityError, not crashes", async () => {
@@ -600,6 +630,75 @@ test("DCI grep surfaces complexity errors through DciRegexComplexityError, not c
     );
   } finally {
     await corpus.cleanup();
+  }
+});
+
+test("DCI grep rejects every codex-named pathological pattern via the API in under 100ms", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const patterns = [
+      "(a+){2,}$",
+      "([a-z]+){2,}$",
+      "(a{1,})+$",
+      "(a?)+$",
+      "^(a|aa)+$",
+    ];
+    for (const pattern of patterns) {
+      const startedAt = Date.now();
+      await assert.rejects(
+        () => dciGrepDisabledSkills(corpus.skills, pattern, { regex: true }),
+        DciRegexComplexityError,
+        `expected ${pattern} to be rejected at the API boundary`,
+      );
+      const elapsed = Date.now() - startedAt;
+      assert.ok(
+        elapsed < 100,
+        `expected ${pattern} to reject quickly without hanging, took ${elapsed}ms`,
+      );
+    }
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI grep per-line wall-clock deadline catches a pattern that slips the heuristic", async () => {
+  // This pattern uses no groups at all so it slips past the group-quantifier
+  // heuristic, but produces ~1s of catastrophic backtracking on V8 against a
+  // long `a`-only line. The deadline must fire and surface a
+  // DciRegexTimeoutError instead of hanging the corpus walker.
+  const slowPattern = "a?".repeat(40) + "a".repeat(40) + "b";
+
+  // Sanity: validator must accept the pattern (otherwise we are not testing
+  // the deadline path).
+  assert.doesNotThrow(() => validateRegexPattern(slowPattern));
+
+  // Build a single-skill corpus whose body line forces the backtracking path.
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-dci-timeout-"));
+  try {
+    const skill = await writeCorpusSkill(root, {
+      id: "user:codex:timeout-probe",
+      name: "timeout-probe",
+      description: "regex deadline probe",
+      body: "a".repeat(40),
+      isDisabled: true,
+    });
+
+    const startedAt = Date.now();
+    await assert.rejects(
+      () => dciGrepDisabledSkills([skill], slowPattern, { regex: true }),
+      DciRegexTimeoutError,
+    );
+    const elapsed = Date.now() - startedAt;
+    // The deadline is post-hoc, so the engine still runs one slow line
+    // before we abort. Bound the assertion at 5s to keep the test fast even
+    // on slow hardware, but log if it ever approaches the limit.
+    assert.ok(elapsed < 5000, `expected deadline to abort within 5s, took ${elapsed}ms`);
+    assert.ok(
+      elapsed >= DCI_REGEX_LINE_TIMEOUT_MS,
+      `expected at least one slow line (>=${DCI_REGEX_LINE_TIMEOUT_MS}ms), took ${elapsed}ms`,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 
@@ -922,6 +1021,53 @@ test("CLI: skills dci grep --regex with a safe pattern still routes (regression)
     const parsed = JSON.parse(r.stdout) as { mode: string; matches: Array<{ id: string }> };
     assert.equal(parsed.mode, "regex");
     assert.ok(parsed.matches.some((m) => m.id === "user:codex:probe"));
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex rejects every codex-named pathological pattern with exit 2", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const patterns = [
+      "(a+){2,}$",
+      "([a-z]+){2,}$",
+      "(a{1,})+$",
+      "(a?)+$",
+      "^(a|aa)+$",
+    ];
+    for (const pattern of patterns) {
+      const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", pattern], fake.env);
+      assert.equal(r.code, 2, `expected exit 2 for ${pattern}, got ${r.code}; stderr=${r.stderr}`);
+      assert.match(r.stderr, /catastrophic|overlapping|open-ended|large \{n,m\} bound/);
+    }
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex deadline catches a heuristic-bypassing slow pattern", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    // Rewrite the probe skill body so its single line forces catastrophic
+    // backtracking on the deadline test pattern below.
+    const probeDir = join(fake.env.CODEX_HOME as string, "skills", "probe");
+    await writeFile(
+      join(probeDir, "SKILL.md.agentic-skill-router-disabled"),
+      `---\nname: probe\ndescription: dci regex deadline probe skill\n---\n\n${"a".repeat(40)}\n`,
+    );
+
+    const slowPattern = "a?".repeat(40) + "a".repeat(40) + "b";
+    const startedAt = Date.now();
+    const r = await runDciCli(
+      ["skills", "dci", "grep", "--regex", "--pattern", slowPattern, "--json"],
+      fake.env,
+    );
+    const elapsed = Date.now() - startedAt;
+    assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
+    assert.match(r.stderr, /deadline|>.*ms on a single line/);
+    // Should not hang: spawning + match abort comfortably under 10s.
+    assert.ok(elapsed < 10000, `expected deadline path to abort within 10s, took ${elapsed}ms`);
   } finally {
     await fake.cleanup();
   }

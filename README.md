@@ -380,14 +380,30 @@ which is the recommended path for both humans and agents. Passing `--regex`
 enables ECMAScript regex matching against every line of every disabled
 `SKILL.md` and is treated as an advanced/power-user surface. To protect the
 shared corpus walker from catastrophic-backtracking (ReDoS) inputs, the CLI
-applies two guards before compiling the pattern:
+applies a static guard before compiling the pattern AND a per-line wall-clock
+deadline at match time:
 
-- A length cap (currently 200 characters). Longer patterns are rejected with
-  exit code 2 and a usage error naming the cap.
-- A nested-quantifier heuristic that rejects shapes like `(a+)+`, `(.*)*`,
-  or `(\d+)+$`. The heuristic is intentionally loose, so it can occasionally
-  flag a safe pattern; if that happens, rewrite the pattern without nested
-  repetition or drop `--regex` and use literal mode.
+Static guard (rejects with exit code 2 and `DciRegexComplexityError`):
+
+- Length cap (200 characters).
+- A quantifier (`+`, `*`, `?`, `{n,}`, `{n,m}` with `m > 10`) applied to a
+  group whose body itself contains another quantifier — the canonical
+  nested-repetition ReDoS shape. Covers `(a+)+`, `(.*)*`, `(a?)+`,
+  `(a{1,})+`, `(a+){2,}`, `([a-z]+){2,}`, and so on.
+- A quantifier applied to a group whose top-level alternatives share a
+  common prefix — e.g. `(a|aa)+`, `(foo|foobar)+`.
+- `{n,}` with no upper bound, or `{n,m}` with `m > 10`, applied to a group.
+
+Runtime deadline (rejects with exit code 2 and `DciRegexTimeoutError`):
+
+- A single per-line match that exceeds 50ms is treated as catastrophic and
+  aborts further matching for that pattern. The deadline is post-hoc — the
+  engine cannot be pre-empted without a Worker — so one slow line can still
+  burn its 50ms, but aggregate damage stays bounded.
+
+The static heuristic is intentionally over-rejecting on a power-user surface;
+if it flags a pattern you believe is safe, rewrite without nested repetition
+or overlapping alternatives, or drop `--regex` for literal mode.
 
 Layout:
 

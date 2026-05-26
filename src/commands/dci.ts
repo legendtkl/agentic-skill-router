@@ -2,6 +2,7 @@ import { parseStrict } from "../args.ts";
 import {
   DCI_BUDGET,
   DciRegexComplexityError,
+  DciRegexTimeoutError,
   dciFindInSkill,
   dciGrepDisabledSkills,
   dciInspectSkill,
@@ -146,7 +147,7 @@ async function cmdDciGrep(argv: string[], hostName: HostName): Promise<number> {
     printDciMatches(result.matches);
     return result.matches.length > 0 ? 0 : 1;
   } catch (err) {
-    if (err instanceof DciRegexComplexityError) {
+    if (err instanceof DciRegexComplexityError || err instanceof DciRegexTimeoutError) {
       console.error(err.message);
       return 2;
     }
