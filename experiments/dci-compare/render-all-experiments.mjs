@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// render-all-experiments.mjs — Single, self-contained HTML report covering ALL
-// experiments in REPORT-claudemd-optimized.md. Everything is inlined: no
-// external links, no separate trace files. Sections are organized by
-// (host, dataset-size) to make Claude Code vs Codex comparisons obvious.
+// render-all-experiments.mjs — Single self-contained HTML covering every
+// experiment in REPORT-claudemd-optimized.md. Uses all-traces.json
+// (produced by extract-all-traces.mjs) as the primary data source so that
+// per-query metrics (turns/cost/ctx_end/duration) and execution traces are
+// available for *every* run, not just §9.
 //
 // Usage: node render-all-experiments.mjs [--out=runs/report-all-experiments.html]
 
@@ -30,8 +31,12 @@ function dollars(x) {
   if (x == null || !Number.isFinite(x)) return "—";
   return "$" + x.toFixed(2);
 }
+function dollarsSmall(x) {
+  if (x == null || !Number.isFinite(x)) return "—";
+  return "$" + x.toFixed(3);
+}
 function secs(ms) {
-  if (!ms) return "—";
+  if (ms == null || !Number.isFinite(ms)) return "—";
   return Math.round(ms / 1000) + "s";
 }
 function escapeHtml(s) {
@@ -43,145 +48,92 @@ function truncate(s, n = 220) {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
-// ---------- data loaders ----------
-
-async function loadJson(p) {
-  if (!existsSync(p)) return null;
-  return JSON.parse(await readFile(p, "utf8"));
+// Aggregate metrics across all queries of a (experiment, variant)
+function aggregateMetrics(variantData) {
+  let n = 0, hits = 0, sumTurns = 0, sumCost = 0, sumDur = 0;
+  let sumCtxEnd = 0, sumInput = 0, sumOutput = 0, sumReasoning = 0, sumCacheRead = 0, sumCacheCreate = 0;
+  let ctxCount = 0, costCount = 0, turnsCount = 0, durCount = 0;
+  for (const q of Object.values(variantData)) {
+    n++;
+    if (q.hit) hits++;
+    const m = q.metrics || {};
+    if (m.turns != null) { sumTurns += m.turns; turnsCount++; }
+    if (m.costUsd != null) { sumCost += m.costUsd; costCount++; }
+    if (m.durationMs != null) { sumDur += m.durationMs; durCount++; }
+    if (m.ctxEnd != null) { sumCtxEnd += m.ctxEnd; ctxCount++; }
+    if (m.inputTokens != null) sumInput += m.inputTokens;
+    if (m.outputTokens != null) sumOutput += m.outputTokens;
+    if (m.reasoningTokens != null) sumReasoning += m.reasoningTokens;
+    if (m.cacheRead != null) sumCacheRead += m.cacheRead;
+    if (m.cacheCreate != null) sumCacheCreate += m.cacheCreate;
+  }
+  return {
+    n, hits, accuracy: n ? hits / n : 0,
+    sumTurns, sumCost, sumDur, sumInput, sumOutput, sumReasoning, sumCacheRead, sumCacheCreate,
+    avgCtxEnd: ctxCount ? sumCtxEnd / ctxCount : 0,
+    avgTurns: turnsCount ? sumTurns / turnsCount : 0,
+  };
 }
 
-async function loadText(p) {
-  if (!existsSync(p)) return null;
-  return await readFile(p, "utf8");
+function accCls(acc) {
+  if (acc >= 0.9) return "hit";
+  if (acc >= 0.7) return "mid";
+  return "miss";
 }
 
-async function loadClaudePaired() {
-  const metrics = await loadJson(join(ROOT, "experiments/dci-compare/runs/routing-only-9x24-claudemd/summary-metrics.json"));
-  if (!metrics) return null;
-  // Per-query matched data is in the rendered HTML (no JSONL transcripts saved)
-  const html = await loadText(join(ROOT, "experiments/dci-compare/runs/routing-only-9x24-claudemd/report.html"));
-  const perQuery = {}; // {variant: [{qid, with: {hit, matched}, without: {hit, matched}}, ...]}
-  if (html) {
-    const sections = html.split(/<h3>([A-Za-z-]+)<\/h3>/);
-    for (let i = 1; i < sections.length; i += 2) {
-      const variant = sections[i];
-      const content = sections[i + 1];
-      const rows = [...content.matchAll(/<tr><td class="qid">([^<]+)<\/td><td class="(ok|fail)">([^<]+)<\/td><td class="(ok|fail)">([^<]+)<\/td><\/tr>/g)];
-      perQuery[variant] = rows.map(m => ({
-        qid: m[1],
-        with: { hit: m[2] === "ok", matched: m[3].replace(/\s*\([T-]\)\s*$/, "") },
-        without: { hit: m[4] === "ok", matched: m[5].replace(/\s*\([T-]\)\s*$/, "") },
-      }));
+// ---------- variant SKILL.md loader ----------
+
+async function loadAllVariants() {
+  const result = { dciCompare: { claude: {}, codex: {} }, skillrouterEasy: { claude: {}, codex: {} } };
+  const dirs = [
+    { kind: "dciCompare", host: "claude", path: join(ROOT, "experiments/dci-compare/variants/routing-only") },
+    { kind: "dciCompare", host: "codex", path: join(ROOT, "experiments/dci-compare/variants/routing-only-codex") },
+    { kind: "skillrouterEasy", host: "claude", path: join(ROOT, "experiments/skillrouter-easy/variants/claude") },
+    { kind: "skillrouterEasy", host: "codex", path: join(ROOT, "experiments/skillrouter-easy/variants/codex") },
+  ];
+  for (const d of dirs) {
+    if (!existsSync(d.path)) continue;
+    const files = await readdir(d.path);
+    for (const f of files) {
+      if (!f.endsWith(".SKILL.md")) continue;
+      const id = f.replace(/\.SKILL\.md$/, "");
+      result[d.kind][d.host][id] = await readFile(join(d.path, f), "utf8");
     }
   }
-  return { metrics, perQuery };
+  return result;
 }
 
-async function loadCodexSmall() {
-  const p = join(ROOT, "experiments/dci-compare/runs/codex-routing-only-9x24/summary.json");
-  return await loadJson(p);
-}
-
-async function loadCodexExtensions() {
-  const variants = [
-    { id: "D-agentic (metadata-only)", corpus: 150, dir: "codex-routing-only-d-agentic-metadata-24-20260524", knownCost: 3.595 },
-    { id: "K-bounded", corpus: 150, dir: "codex-routing-only-k-24-20260524", knownCost: 3.553 },
-    { id: "K-lite (high)", corpus: 150, dir: "codex-routing-only-k-lite-24-high-20260524", knownCost: 3.516 },
-    { id: "K-lite (fixed)", corpus: 150, dir: "codex-routing-only-k-lite-fix-24-20260524", knownCost: 3.321 },
-    { id: "L-agentic", corpus: 150, dir: "codex-routing-only-l-agentic-24-20260525-v2", knownCost: 2.768 },
-    { id: "L-agentic (1K)", corpus: 1000, dir: "codex-routing-only-l-agentic-1k-24-20260525", knownCost: 3.442 },
-    { id: "M-bm25", corpus: 150, dir: "codex-routing-only-m-bm25-index-fix-24-20260525", knownCost: 2.982 },
-  ];
-  const rows = [];
-  for (const v of variants) {
-    const d = await loadJson(join(ROOT, "experiments/dci-compare/runs", v.dir, "summary.json"));
-    if (!d) continue;
-    const s = (d.variantStats || [])[0];
-    if (!s) continue;
-    rows.push({ ...v, stats: s, runs: d.runs || [] });
-  }
-  return rows;
-}
-
+// Scaling-J / Easy summary loaders for sections without rich JSONL traces
 async function loadScalingHard() {
   const cells = [
-    { label: "J-v2 × 150 (Claude Code)", host: "claude", path: "experiments/scaling-jbounded/runs/sweep24-v2-150-cmd/cells.json" },
-    { label: "J-v2 × 79K Hard (Claude Code)", host: "claude", path: "experiments/scaling-jbounded/runs/sweep24-v2-full-cmd/cells.json" },
+    { label: "J-v2 × 150 (Claude Code)", path: "experiments/scaling-jbounded/runs/sweep24-v2-150-cmd/cells.json" },
+    { label: "J-v2 × 79K Hard (Claude Code)", path: "experiments/scaling-jbounded/runs/sweep24-v2-full-cmd/cells.json" },
   ];
   const rows = [];
   for (const c of cells) {
-    const d = await loadJson(join(ROOT, c.path));
-    if (!d) continue;
+    const p = join(ROOT, c.path);
+    if (!existsSync(p)) continue;
+    const d = JSON.parse(await readFile(p, "utf8"));
     rows.push({ ...c, agg: d.aggregate, cells: d.cells });
   }
   return rows;
 }
 
-async function loadCodexHard() {
-  const variants = [
-    { id: "M-bm25", queryset: "paper-core single", corpus: 79141, dir: "codex-routing-only-paper-single-hard-m-bm25-24-20260525", knownCost: 6.822 },
-    { id: "J-bounded-v2", queryset: "paper-core single", corpus: 79141, dir: "codex-routing-only-paper-single-hard-j-v2-24-20260525", knownCost: 12.436 },
-    { id: "M-bm25", queryset: "current 24 subset", corpus: 79141, dir: "codex-routing-only-m-bm25-skillrouter-hard-24-20260525", knownCost: 6.347 },
-  ];
-  const rows = [];
-  for (const v of variants) {
-    const d = await loadJson(join(ROOT, "experiments/dci-compare/runs", v.dir, "summary.json"));
-    if (!d) continue;
-    const s = (d.variantStats || [])[0];
-    if (!s) continue;
-    rows.push({ ...v, stats: s, runs: d.runs || [] });
-  }
-  return rows;
-}
-
-async function loadEasy78K() {
+async function loadEasy78KSummaries() {
+  // For per-tier (single/multi) split which all-traces.json doesn't preserve
   const cellNames = ["claude-J-bounded-v2", "claude-K-bounded", "claude-M-bm25", "codex-J-bounded-v2", "codex-K-bounded", "codex-M-bm25"];
-  const rows = [];
+  const result = {};
   for (const name of cellNames) {
-    const s = await loadJson(join(ROOT, "experiments/skillrouter-easy/runs", name, "summary.json"));
-    if (!s) continue;
-    const [host, ...rest] = name.split("-");
-    rows.push({ host, variant: rest.join("-"), summary: s });
-  }
-  return rows;
-}
-
-async function loadEasy78KTraces() {
-  // traces-compact.json: { "claude-J-bounded-v2": { "<query>": {hit1, top1, top_k, gt, tier, steps: [...]}, ... }, ... }
-  return await loadJson(join(ROOT, "experiments/skillrouter-easy/runs/traces-compact.json"));
-}
-
-async function loadAllVariants() {
-  const result = { dciCompare: { claude: {}, codex: {} }, skillrouterEasy: { claude: {}, codex: {} } };
-  // dci-compare variants (Claude path = routing-only/, Codex path = routing-only-codex/)
-  const claudeVariantsDir = join(ROOT, "experiments/dci-compare/variants/routing-only");
-  const codexVariantsDir = join(ROOT, "experiments/dci-compare/variants/routing-only-codex");
-  for (const dir of [{ host: "claude", path: claudeVariantsDir }, { host: "codex", path: codexVariantsDir }]) {
-    if (!existsSync(dir.path)) continue;
-    const files = await readdir(dir.path);
-    for (const f of files) {
-      if (!f.endsWith(".SKILL.md")) continue;
-      const id = f.replace(/\.SKILL\.md$/, "");
-      result.dciCompare[dir.host][id] = await loadText(join(dir.path, f));
-    }
-  }
-  // skillrouter-easy variants
-  for (const host of ["claude", "codex"]) {
-    const dir = join(ROOT, "experiments/skillrouter-easy/variants", host);
-    if (!existsSync(dir)) continue;
-    const files = await readdir(dir);
-    for (const f of files) {
-      if (!f.endsWith(".SKILL.md")) continue;
-      const id = f.replace(/\.SKILL\.md$/, "");
-      result.skillrouterEasy[host][id] = await loadText(join(dir, f));
-    }
+    const p = join(ROOT, "experiments/skillrouter-easy/runs", name, "summary.json");
+    if (!existsSync(p)) continue;
+    result[name] = JSON.parse(await readFile(p, "utf8"));
   }
   return result;
 }
 
 // ---------- constants ----------
 
-const PAPER_BASELINES_EASY = {
+const PAPER_EASY = {
   "BM25 (nd, Easy)": 0.000,
   "Qwen3-Emb-0.6B (nd, Easy)": 0.227,
   "Qwen3-Emb-8B (nd, Easy)": 0.307,
@@ -190,18 +142,6 @@ const PAPER_BASELINES_EASY = {
   "Qwen3-Emb-8B (full, Easy)": 0.653,
   "SR-Emb-0.6B (full, Easy)": 0.667,
   "SR-Emb × SR-Rank (full, A-Hit@1 avg)": 0.760,
-};
-
-const PAPER_BASELINES_HARD = {
-  "BM25 (nd, Hard)": 0.000,
-  "Qwen3-Emb-0.6B (nd, Hard)": 0.147,
-  "Qwen3-Emb-8B (nd, Hard)": 0.200,
-  "Qwen3-Emb-0.6B × GPT-5.4-mini (nd, Hard)": 0.293,
-};
-
-const KNOWN_COSTS_CODEX_9 = {
-  "G-native": 1.816, "A-router": 4.485, "B-cc": 4.853, "C-lite": 3.594,
-  "D-agentic": 2.870, "E-digest": 2.946, "H-bounded": 4.348, "I-meta": 3.310, "J-bounded": 2.415,
 };
 
 // ---------- styles + header ----------
@@ -219,16 +159,15 @@ function renderHeader() {
     --emerald: #059669;
     --amber: #d97706;
     --rose: #e11d48;
-    --slate: #475569;
   }
-  body { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; margin: 0; padding: 24px; max-width: 1500px; margin: 0 auto; color: #111; background: #fafafa; }
+  body { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; margin: 0; padding: 24px; max-width: 1600px; margin: 0 auto; color: #111; background: #fafafa; }
   h1 { margin: 0 0 6px; font-size: 24px; }
   h2 { margin: 32px 0 12px; font-size: 19px; padding-bottom: 6px; border-bottom: 2px solid #d1d5db; }
   h3 { margin: 18px 0 8px; font-size: 15px; color: #1f2937; }
   h4 { margin: 12px 0 6px; font-size: 13px; color: #4b5563; font-weight: 600; }
   p.intro { color: #4b5563; font-size: 13px; line-height: 1.55; }
   table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin: 8px 0; }
-  th, td { padding: 6px 9px; text-align: left; border-bottom: 1px solid #eef2f7; }
+  th, td { padding: 6px 9px; text-align: left; border-bottom: 1px solid #eef2f7; vertical-align: top; }
   th { background: #f3f4f6; font-weight: 600; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .hit { color: var(--emerald); font-weight: 600; }
@@ -239,8 +178,6 @@ function renderHeader() {
   .pill-claude { background: var(--claude); }
   .pill-codex { background: var(--codex); }
   .pill-paper { background: var(--paper); }
-  .pill-best { background: #059669; }
-  .pill-gray { background: #94a3b8; }
   .badge { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10.5px; font-weight: 600; background: #e5e7eb; color: #1f2937; margin-left: 4px; }
   .takeaway { background: #f0f9ff; border-left: 3px solid #0284c7; padding: 8px 12px; margin: 8px 0; font-size: 13px; color: #0c4a6e; border-radius: 0 4px 4px 0; }
   .note { background: #fffbeb; border-left: 3px solid #f59e0b; padding: 8px 12px; margin: 8px 0; font-size: 13px; color: #78350f; border-radius: 0 4px 4px 0; }
@@ -249,6 +186,7 @@ function renderHeader() {
   .panel h3 { margin-top: 0; }
   details { background: white; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px; margin: 6px 0; }
   details > summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+  details details { background: #f9fafb; }
   code { background: #f1f5f9; padding: 0 4px; border-radius: 3px; font-size: 12px; }
   pre.code { background: #1e293b; color: #e2e8f0; padding: 12px 14px; border-radius: 6px; overflow-x: auto; font-size: 11.5px; line-height: 1.5; max-height: 600px; }
   pre.code code { background: none; color: inherit; padding: 0; font-size: inherit; }
@@ -258,18 +196,20 @@ function renderHeader() {
   .toc li { margin: 3px 0; }
   .matrix-row td { font-size: 11.5px; padding: 4px 6px; }
   .matrix-row .gt { color: #6b7280; font-style: italic; }
+  .matrix-row .meta { color: #94a3b8; font-size: 10px; display: block; }
   .footnote { font-size: 12px; color: #6b7280; margin-top: 4px; }
-  .bar-wrap { width: 80px; height: 10px; background: #e5e7eb; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }
+  .bar-wrap { width: 100px; height: 10px; background: #e5e7eb; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }
   .bar-fill { height: 100%; background: var(--claude); }
   .bar-fill.codex { background: var(--codex); }
   .bar-fill.paper { background: var(--paper); }
   .coverage-table td { text-align: center; }
   .coverage-yes { background: #d1fae5; color: #065f46; font-weight: 600; }
   .coverage-no { background: #fee2e2; color: #991b1b; }
-  /* trace card layout */
   .trace-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 10px; margin-top: 8px; }
   .trace-card { background: #fafafa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 10px; }
   .trace-card .head { font-weight: 600; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+  .trace-card .meta-row { font-size: 11px; color: #6b7280; margin-bottom: 4px; }
+  .trace-card .meta-row span { margin-right: 8px; }
   .tline { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; max-height: 280px; overflow-y: auto; }
   .tline .step { padding: 3px 0; border-bottom: 1px dashed #eee; }
   .tline .step:last-child { border-bottom: none; }
@@ -282,11 +222,13 @@ function renderHeader() {
 <h1>Disabled-Skill Routing — All Experiments</h1>
 <p class="intro">
   Single self-contained HTML covering every experiment in
-  <code>REPORT-claudemd-optimized.md</code>. All sections, per-query matrices,
-  execution traces, and variant SKILL.md implementations are inlined — no
-  external file references. Organized by <b>dataset size</b> (150 → 1K → 79K Hard
-  → 78K Easy 75-core), and within each size split by <b>host</b>
-  (<span class="pill pill-claude">claude</span> vs <span class="pill pill-codex">codex</span>).
+  <code>REPORT-claudemd-optimized.md</code>. All sections, aggregate tables, per-query matrices,
+  execution traces (where transcripts survived), and variant SKILL.md
+  implementations are inlined — no external file references. Organized by
+  <b>dataset size</b> (150 → 1K → 79K Hard → 78K Easy 75-core), and within each
+  size split by <b>host</b>
+  (<span class="pill pill-claude">claude</span> = Opus 4.7,
+  <span class="pill pill-codex">codex</span> = GPT-5.5 high reasoning).
   Paper baselines (SkillRouter arXiv:2603.22455) shown as
   <span class="pill pill-paper">paper</span> rows where comparable.
 </p>
@@ -298,60 +240,52 @@ function renderToc() {
   <b>Sections:</b>
   <ul>
     <li><a href="#coverage">0. Experiment coverage matrix</a> — what was run on which host</li>
-    <li><a href="#small-claude">1. 150-skill × Claude Code</a> — 9 variants paired (with/without CLAUDE.md), per-query matrix included</li>
-    <li><a href="#small-codex">2. 150-skill × Codex</a> — initial 9 + 7 follow-on iterations</li>
-    <li><a href="#medium-codex">3. 1K synthetic × Codex</a> — L-agentic scale check (Codex only)</li>
-    <li><a href="#hard-claude">4. 79K Hard × Claude Code</a> — J-bounded-v2 large-pool stress</li>
+    <li><a href="#small-claude">1. 150-skill × Claude Code</a> — 9 variants × with/without CLAUDE.md (paired), per-query matrix + traces</li>
+    <li><a href="#small-codex">2. 150-skill × Codex</a> — 16 variants (9 initial + 7 follow-on), per-query matrix + traces</li>
+    <li><a href="#medium-codex">3. 1K synthetic × Codex</a> — L-agentic scale check</li>
+    <li><a href="#hard-claude">4. 79K Hard × Claude Code</a> — J-bounded-v2 large-pool stress (no traces)</li>
     <li><a href="#hard-codex">5. 79K Hard × Codex</a> — paper-core single + current-24 subset</li>
     <li><a href="#easy-claude">6.1 78K Easy × 75 core × Claude Code</a> — K / J-v2 / M-bm25 (§9)</li>
     <li><a href="#easy-codex">6.2 78K Easy × 75 core × Codex</a> — K / J-v2 / M-bm25 (§9)</li>
-    <li><a href="#easy-compare">7. 78K Easy — cross-cell comparison &amp; paper baselines</a></li>
-    <li><a href="#easy-traces">8. 78K Easy — per-query execution traces</a> (all 75 queries × 6 cells, inlined)</li>
-    <li><a href="#variants">9. Variant implementations</a> — full SKILL.md for every variant used</li>
+    <li><a href="#easy-compare">7. 78K Easy cross-cell + paper baselines</a></li>
+    <li><a href="#variants">8. Variant implementations</a> — full SKILL.md for every variant</li>
   </ul>
 </div>`;
 }
 
-// ---------- Section 0: Coverage matrix ----------
+// ---------- §0 coverage ----------
 
 function renderCoverage() {
-  // Rows = variants, columns = (host, dataset)
   const rows = [
-    { variant: "A-router", claude150: "✓", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "B-cc", claude150: "✓", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "C-lite", claude150: "✓", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "D-agentic", claude150: "✓", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "E-digest", claude150: "✓", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "G-native", claude150: "✓", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "H-bounded", claude150: "✓", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "I-meta", claude150: "✓", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "J-bounded (v1)", claude150: "✓", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "J-bounded-v2", claude150: "✓", claudeMedium: "—", claudeHard: "✓", claudeEasy: "✓", codex150: "—", codexMedium: "—", codexHard: "✓", codexEasy: "✓" },
-    { variant: "K-bounded", claude150: "—", claudeMedium: "—", claudeHard: "—", claudeEasy: "✓", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "✓" },
-    { variant: "K-lite (high)", claude150: "—", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "K-lite (fixed)", claude150: "—", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "—", codexHard: "—", codexEasy: "—" },
-    { variant: "L-agentic", claude150: "—", claudeMedium: "—", claudeHard: "—", claudeEasy: "—", codex150: "✓", codexMedium: "✓", codexHard: "—", codexEasy: "—" },
-    { variant: "M-bm25", claude150: "—", claudeMedium: "—", claudeHard: "—", claudeEasy: "✓", codex150: "✓", codexMedium: "—", codexHard: "✓✓", codexEasy: "✓" },
+    { v: "A-router", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "B-cc", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "C-lite", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "D-agentic", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "E-digest", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "G-native", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "H-bounded", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "I-meta", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "J-bounded (v1)", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "J-bounded-v2", c150: "✓", c1k: "—", chard: "✓", ceasy: "✓", x150: "—", x1k: "—", xhard: "✓", xeasy: "✓" },
+    { v: "K-bounded", c150: "—", c1k: "—", chard: "—", ceasy: "✓", x150: "✓", x1k: "—", xhard: "—", xeasy: "✓" },
+    { v: "K-lite (high)", c150: "—", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "K-lite (fixed)", c150: "—", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
+    { v: "L-agentic", c150: "—", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "✓", xhard: "—", xeasy: "—" },
+    { v: "M-bm25", c150: "—", c1k: "—", chard: "—", ceasy: "✓", x150: "✓", x1k: "—", xhard: "✓✓", xeasy: "✓" },
   ];
-  const cell = (v) => {
-    const cls = v.startsWith("✓") ? "coverage-yes" : "coverage-no";
-    return `<td class="${cls}">${v}</td>`;
-  };
+  const cell = (v) => `<td class="${v.startsWith("✓") ? "coverage-yes" : "coverage-no"}">${v}</td>`;
   let tbody = "";
   for (const r of rows) {
     tbody += `<tr>
-      <td><b>${escapeHtml(r.variant)}</b></td>
-      ${cell(r.claude150)}${cell(r.claudeMedium)}${cell(r.claudeHard)}${cell(r.claudeEasy)}
-      ${cell(r.codex150)}${cell(r.codexMedium)}${cell(r.codexHard)}${cell(r.codexEasy)}
+      <td><b>${escapeHtml(r.v)}</b></td>
+      ${cell(r.c150)}${cell(r.c1k)}${cell(r.chard)}${cell(r.ceasy)}
+      ${cell(r.x150)}${cell(r.x1k)}${cell(r.xhard)}${cell(r.xeasy)}
     </tr>`;
   }
   return `<h2 id="coverage">0. Experiment coverage matrix</h2>
 <p class="intro">
   Which (variant × host × dataset-size) combinations were actually executed.
-  <b>✓</b> = single run available, <b>✓✓</b> = multiple variations or query sets run.
-  This makes the "Claude has fewer follow-on variants than Codex" asymmetry explicit:
-  K/K-lite/L were only run on Codex at 150-skill; 1K synthetic was Codex-only;
-  Claude got K/J-v2/M only at 78K Easy in §9.
+  <b>✓</b> = single run available, <b>✓✓</b> = multiple variations / query sets.
 </p>
 <table class="coverage-table">
   <thead>
@@ -368,77 +302,157 @@ function renderCoverage() {
   <tbody>${tbody}</tbody>
 </table>
 <div class="note">
-  <b>Asymmetry note:</b> The Codex experiments include 7 follow-on iterations (D-metadata, K, K-lite high+fixed, L, L-1K, M) that were never run on Claude Code at 150-skill scale.
-  Claude Code coverage at large scale comes only from §9 (78K Easy × K/J-v2/M-bm25) and §8 (79K Hard × J-v2).
-  Backfilling these gaps would require ~15 hours of additional Claude runtime per variant and is listed as
-  follow-up work in <code>REPORT-claudemd-optimized.md</code> §12.
+  <b>Claude vs Codex asymmetry:</b> K-bounded / K-lite / L-agentic were only executed on Codex
+  at 150-skill. Claude got K / J-v2 / M-bm25 only at 78K Easy (§9). 1K synthetic was Codex-only.
+  Fully closing these gaps would require ~2-4 hours of additional Claude runtime per missing
+  variant — see <code>REPORT-claudemd-optimized.md</code> §12 follow-ups.
 </div>
 `;
 }
 
-// ---------- Section 1: Claude paired ----------
+// ---------- trace rendering ----------
 
-function renderClaudePaired(data) {
-  if (!data) return "";
-  const rows = data.metrics.rows;
-  const variants = [...new Set(rows.map(r => r.variant))];
-  const byVariant = new Map();
-  for (const r of rows) {
-    if (!byVariant.has(r.variant)) byVariant.set(r.variant, {});
-    byVariant.get(r.variant)[r.condition] = r;
+function renderTraceSteps(steps) {
+  if (!steps || !steps.length) return `<div class="gray" style="font-size:10.5px">(no tool calls recorded)</div>`;
+  return steps.map(s => {
+    if (s.text != null) {
+      return `<div class="step"><div class="txt">${escapeHtml(truncate(s.text, 250))}</div></div>`;
+    }
+    const inHtml = escapeHtml(truncate(s.input || "", 220));
+    const outHtml = s.result ? escapeHtml(truncate(s.result, 220)) : "";
+    return `<div class="step">
+      <div><span class="name">${escapeHtml(s.tool || "?")}</span>: <span class="in">${inHtml}</span></div>
+      ${outHtml ? `<div class="out">${outHtml}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+// Render per-query traces for a single experiment (or set of variants sharing queries)
+function renderPerQueryTraces(experimentBlocks, summaryId) {
+  // experimentBlocks = [{label, host, variants: {variantId: {queryId: {hit, matched, expected, metrics, steps, topK}}}}, ...]
+  // We want one details per query, with cards from all (block, variant) pairs.
+  const allQueries = new Set();
+  for (const blk of experimentBlocks) {
+    for (const vData of Object.values(blk.variants || {})) {
+      for (const qid of Object.keys(vData)) allQueries.add(qid);
+    }
   }
-  let tableRows = "";
+  const queries = [...allQueries].sort();
+  let body = "";
+  for (const qid of queries) {
+    // Collect expected from first block that has data
+    let expected = null;
+    let topK = null;
+    for (const blk of experimentBlocks) {
+      for (const vData of Object.values(blk.variants || {})) {
+        if (vData[qid]?.expected != null) { expected = vData[qid].expected; topK = vData[qid].topK; break; }
+      }
+      if (expected != null) break;
+    }
+    const gtStr = Array.isArray(expected) ? (expected.length === 1 ? expected[0] : `${expected.length} skills`) : (expected || "—");
+
+    // Count hits across all cells
+    let hitCount = 0, totalCount = 0;
+    for (const blk of experimentBlocks) {
+      for (const vData of Object.values(blk.variants || {})) {
+        if (vData[qid]) {
+          totalCount++;
+          if (vData[qid].hit) hitCount++;
+        }
+      }
+    }
+    const hitLbl = hitCount === totalCount && totalCount > 0 ? `✓${totalCount}` : hitCount === 0 ? `✗${totalCount}` : `${hitCount}/${totalCount}`;
+    const hitCls = hitCount === totalCount && totalCount > 0 ? "hit" : hitCount === 0 ? "miss" : "mid";
+
+    let cards = "";
+    for (const blk of experimentBlocks) {
+      for (const [variantId, vData] of Object.entries(blk.variants || {})) {
+        const q = vData[qid];
+        if (!q) continue;
+        const cellKey = `${blk.label} / ${variantId}`;
+        const cls = q.hit ? "hit" : "miss";
+        const sym = q.hit ? "✓" : "✗";
+        const m = q.metrics || {};
+        const metaParts = [];
+        if (m.turns != null) metaParts.push(`turns ${m.turns}`);
+        if (m.durationMs != null) metaParts.push(`${(m.durationMs / 1000).toFixed(1)}s`);
+        if (m.ctxEnd != null) metaParts.push(`ctx ${num(m.ctxEnd / 1000, 1)}k`);
+        if (m.costUsd != null) metaParts.push(`${dollarsSmall(m.costUsd)}`);
+        if (m.outputTokens != null) metaParts.push(`out ${num(m.outputTokens)}`);
+        if (m.reasoningTokens) metaParts.push(`rsn ${num(m.reasoningTokens)}`);
+        const hostPill = blk.host === "claude" ? "pill-claude" : "pill-codex";
+        cards += `<div class="trace-card">
+          <div class="head">
+            <span class="pill ${hostPill}">${escapeHtml(cellKey)}</span>
+            <span class="${cls}">${sym} ${escapeHtml(q.matched || "no-match")}</span>
+          </div>
+          <div class="meta-row">${metaParts.map(p => `<span>${escapeHtml(p)}</span>`).join("")}</div>
+          <div class="tline">${renderTraceSteps(q.steps)}</div>
+        </div>`;
+      }
+    }
+    body += `<details>
+      <summary><code>${escapeHtml(qid)}</code> — <code>${escapeHtml(gtStr)}</code> <span class="${hitCls}" style="margin-left:6px">${hitLbl}</span></summary>
+      <div class="trace-grid">${cards}</div>
+    </details>\n`;
+  }
+  return body;
+}
+
+// ---------- §1 Claude paired ----------
+
+function renderClaudePaired(traces) {
+  const withBlk = traces["claude-150-with-claudemd"];
+  const withoutBlk = traces["claude-150-without-claudemd"];
+  if (!withBlk || !withoutBlk) return "";
+  const variants = Object.keys(withBlk.variants);
+
+  // Aggregate table
+  let aggRows = "";
   for (const v of variants) {
-    const w = byVariant.get(v)["with-claudemd"] || {};
-    const wo = byVariant.get(v)["without-claudemd"] || {};
-    const accW = w.correct / w.total;
-    const accWo = wo.correct / wo.total;
-    const lift = Number.isFinite(accW - accWo) ? (accW - accWo) * 100 : null;
+    const w = aggregateMetrics(withBlk.variants[v]);
+    const wo = aggregateMetrics(withoutBlk.variants[v]);
+    const lift = (w.accuracy - wo.accuracy) * 100;
     const liftCls = lift > 5 ? "hit" : lift < -5 ? "miss" : "gray";
-    tableRows += `<tr>
+    aggRows += `<tr>
       <td><b>${escapeHtml(v)}</b></td>
-      <td class="num">${w.correct}/${w.total} <span class="gray">(${pct(accW)})</span></td>
-      <td class="num">${wo.correct}/${wo.total} <span class="gray">(${pct(accWo)})</span></td>
-      <td class="num ${liftCls}">${lift != null ? (lift > 0 ? "+" : "") + lift.toFixed(1) + "pp" : "—"}</td>
-      <td class="num">${w.triggered}/${w.total}</td>
-      <td class="num">${wo.triggered}/${wo.total}</td>
+      <td class="num">${w.hits}/${w.n} <span class="gray">(${pct(w.accuracy)})</span></td>
+      <td class="num">${wo.hits}/${wo.n} <span class="gray">(${pct(wo.accuracy)})</span></td>
+      <td class="num ${liftCls}">${lift > 0 ? "+" : ""}${lift.toFixed(1)}pp</td>
       <td class="num">${dollars(w.sumCost)}</td>
       <td class="num">${secs(w.sumDur)}</td>
       <td class="num">${w.sumTurns}</td>
-      <td class="num">${num(w.meanCtxEnd / 1000, 1)}k</td>
+      <td class="num">${num(w.avgCtxEnd / 1000, 1)}k</td>
+      <td class="num">${num(w.sumInput / 1000, 1)}k</td>
+      <td class="num">${num(w.sumOutput)}</td>
     </tr>`;
   }
 
-  // Per-query matrix
-  const variantsInOrder = Object.keys(data.perQuery);
-  const queries = data.perQuery[variantsInOrder[0]]?.map(r => r.qid) || [];
-  let matrixHeadW = `<tr><th>Query</th>` + variantsInOrder.map(v => `<th class="num">${escapeHtml(v)}</th>`).join("") + `</tr>`;
-  let matrixBodyW = "";
-  for (let qi = 0; qi < queries.length; qi++) {
-    const qid = queries[qi];
-    let cells = "";
-    for (const v of variantsInOrder) {
-      const row = data.perQuery[v][qi];
-      if (!row || !row.with) { cells += `<td class="num gray">—</td>`; continue; }
-      const cls = row.with.hit ? "hit" : "miss";
-      const sym = row.with.hit ? "✓" : "✗";
-      cells += `<td class="num ${cls}">${sym} ${escapeHtml(row.with.matched)}</td>`;
+  // Per-query matrix (with arm)
+  const queries = Object.keys(withBlk.variants[variants[0]]).sort();
+  const renderMatrix = (blk) => {
+    let head = `<tr><th>Query</th><th>Expected</th>` + variants.map(v => `<th class="num">${escapeHtml(v)}</th>`).join("") + `</tr>`;
+    let body = "";
+    for (const qid of queries) {
+      const exp = blk.variants[variants[0]][qid]?.expected ?? "—";
+      let cells = "";
+      for (const v of variants) {
+        const q = blk.variants[v]?.[qid];
+        if (!q) { cells += `<td class="num gray">—</td>`; continue; }
+        const cls = q.hit ? "hit" : "miss";
+        const sym = q.hit ? "✓" : "✗";
+        const m = q.metrics || {};
+        const metaParts = [];
+        if (m.turns != null) metaParts.push(`t${m.turns}`);
+        if (m.durationMs != null) metaParts.push(`${(m.durationMs/1000).toFixed(0)}s`);
+        if (m.ctxEnd != null) metaParts.push(`${num(m.ctxEnd / 1000, 0)}k`);
+        if (m.costUsd != null) metaParts.push(`${dollarsSmall(m.costUsd)}`);
+        cells += `<td class="num ${cls}">${sym} ${escapeHtml(q.matched || "no-match")}<span class="meta">${metaParts.join(" · ")}</span></td>`;
+      }
+      body += `<tr class="matrix-row"><td><code>${escapeHtml(qid)}</code></td><td><code>${escapeHtml(exp)}</code></td>${cells}</tr>`;
     }
-    matrixBodyW += `<tr class="matrix-row"><td><code>${escapeHtml(qid)}</code></td>${cells}</tr>`;
-  }
-  let matrixBodyWo = "";
-  for (let qi = 0; qi < queries.length; qi++) {
-    const qid = queries[qi];
-    let cells = "";
-    for (const v of variantsInOrder) {
-      const row = data.perQuery[v][qi];
-      if (!row || !row.without) { cells += `<td class="num gray">—</td>`; continue; }
-      const cls = row.without.hit ? "hit" : "miss";
-      const sym = row.without.hit ? "✓" : "✗";
-      cells += `<td class="num ${cls}">${sym} ${escapeHtml(row.without.matched)}</td>`;
-    }
-    matrixBodyWo += `<tr class="matrix-row"><td><code>${escapeHtml(qid)}</code></td>${cells}</tr>`;
-  }
+    return `<table style="font-size:11px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  };
 
   return `<h2 id="small-claude">1. 150-skill × Claude Code <span class="pill pill-claude">claude</span></h2>
 <p class="intro">
@@ -447,9 +461,9 @@ function renderClaudePaired(data) {
   the agent to call <code>skill-router-skills</code> when no enabled skill matches.
 </p>
 <div class="takeaway">
-  <b>Headline:</b> CLAUDE.md injection lifts accuracy +18pp on average across 7 comparable router
-  variants. B-cc / C-lite reach 23/24 (95.8%). J-bounded is the lowest-cost router in the 22/24
-  group ($3.07, 30.7K avg ctx). A-router is the only router below G-native (62.5%).
+  <b>Headline:</b> CLAUDE.md injection lifts accuracy +18pp on average. B-cc / C-lite reach 23/24.
+  J-bounded is the lowest-cost router in the 22/24 group ($3.07, 30.7K avg ctx).
+  A-router is the only router below G-native.
 </div>
 <table>
   <thead>
@@ -458,246 +472,259 @@ function renderClaudePaired(data) {
       <th class="num">Acc (with)</th>
       <th class="num">Acc (without)</th>
       <th class="num">Δ acc</th>
-      <th class="num">Trigger (with)</th>
-      <th class="num">Trigger (without)</th>
       <th class="num">Cost (with)</th>
       <th class="num">Wall (with)</th>
-      <th class="num">Turns (with)</th>
+      <th class="num">Total turns (with)</th>
       <th class="num">Avg ctx<sub>end</sub></th>
+      <th class="num">In tokens</th>
+      <th class="num">Out tokens</th>
     </tr>
   </thead>
-  <tbody>${tableRows}</tbody>
+  <tbody>${aggRows}</tbody>
 </table>
-<div class="footnote">Acc / Trigger denominators are 24. Δ acc = with − without (pp). Wall + cost summed across 24 queries.</div>
+<div class="footnote">Acc denominators are 24. Cost/wall/turns/tokens summed across 24 queries (with-arm). Avg ctx<sub>end</sub> = mean of per-query final context (input + cache_read + cache_create).</div>
 
 <details open>
-  <summary>1.1 Per-query matrix — with CLAUDE.md (24 queries × ${variantsInOrder.length} variants)</summary>
-  <table style="font-size:11.5px">
-    <thead>${matrixHeadW}</thead>
-    <tbody>${matrixBodyW}</tbody>
-  </table>
+  <summary>1.1 Per-query matrix — with CLAUDE.md (24 queries × 9 variants, each cell shows matched + turns/duration/ctx/cost)</summary>
+  ${renderMatrix(withBlk)}
 </details>
 
 <details>
-  <summary>1.2 Per-query matrix — without CLAUDE.md (24 queries × ${variantsInOrder.length} variants)</summary>
-  <table style="font-size:11.5px">
-    <thead>${matrixHeadW}</thead>
-    <tbody>${matrixBodyWo}</tbody>
-  </table>
+  <summary>1.2 Per-query matrix — without CLAUDE.md</summary>
+  ${renderMatrix(withoutBlk)}
 </details>
 
-<div class="note">
-  <b>No per-query tool traces available for §1.</b> The Claude paired experiment only persisted
-  aggregate metrics and matched-skill outcomes; raw JSONL transcripts were not saved per-query.
-  See §8 (Easy 78K) for the only experiment with full tool-call traces.
-</div>
+<details>
+  <summary>1.3 Per-query execution traces — with CLAUDE.md (all 216 traces inlined)</summary>
+  ${renderPerQueryTraces([{ label: "claude/with-CLAUDE.md", host: "claude", variants: withBlk.variants }])}
+</details>
+
+<details>
+  <summary>1.4 Per-query execution traces — without CLAUDE.md (all 216 traces inlined)</summary>
+  ${renderPerQueryTraces([{ label: "claude/without-CLAUDE.md", host: "claude", variants: withoutBlk.variants }])}
+</details>
 `;
 }
 
-// ---------- Section 2: Codex small + extensions ----------
+// ---------- §2 Codex 150 (merged 9 + 7 follow-on) ----------
 
-function renderCodexSmall(d9, ext) {
-  if (!d9) return "";
-  const stats = d9.variantStats || [];
-  let rows1 = "";
-  for (const s of stats) {
-    const acc = s.correct / s.n;
-    const accCls = acc >= 0.95 ? "hit" : acc >= 0.85 ? "mid" : "miss";
-    rows1 += `<tr>
-      <td><b>${escapeHtml(s.variant)}</b></td>
-      <td class="num ${accCls}">${s.correct}/${s.n} <span class="gray">(${pct(acc)})</span></td>
-      <td class="num">${s.routerTriggered != null ? `${s.routerTriggered}/${s.n}` : "n/a"}</td>
-      <td class="num">${secs(s.totalDurMs)}</td>
-      <td class="num">${num((s.totalTokensIn || 0) / 1000, 1)}k</td>
-      <td class="num">${num(s.totalTokensOut || 0)}</td>
-      <td class="num">${num(s.totalReasoning || 0)}</td>
-      <td class="num">${dollars(KNOWN_COSTS_CODEX_9[s.variant])}</td>
-    </tr>`;
-  }
-  let rows2 = "";
-  for (const e of (ext || [])) {
-    const s = e.stats;
-    const acc = s.correct / s.n;
-    const accCls = acc >= 0.95 ? "hit" : acc >= 0.85 ? "mid" : "miss";
-    rows2 += `<tr>
-      <td><b>${escapeHtml(e.id)}</b> <span class="badge">${e.corpus}-skill</span></td>
-      <td class="num ${accCls}">${s.correct}/${s.n} <span class="gray">(${pct(acc)})</span></td>
-      <td class="num">${s.routerTriggered != null ? `${s.routerTriggered}/${s.n}` : "n/a"}</td>
-      <td class="num">${secs(s.totalDurMs)}</td>
-      <td class="num">${num((s.totalTokensIn || 0) / 1000, 1)}k</td>
-      <td class="num">${num(s.totalTokensOut || 0)}</td>
-      <td class="num">${num(s.totalReasoning || 0)}</td>
-      <td class="num">${dollars(e.knownCost)}</td>
-    </tr>`;
-  }
+const CODEX_150_KEYS_IN_ORDER = [
+  // initial 9 first, then follow-ons
+  { exp: "codex-150-initial", variants: ["G-native","A-router","B-cc","C-lite","D-agentic","E-digest","H-bounded","I-meta","J-bounded"] },
+  { exp: "codex-150-d-metadata", variants: ["D-agentic"], displayName: "D-agentic (metadata-only)" },
+  { exp: "codex-150-k-bounded", variants: ["K-bounded"] },
+  { exp: "codex-150-k-lite-high", variants: ["K-lite"], displayName: "K-lite (high)" },
+  { exp: "codex-150-k-lite-fix", variants: ["K-lite"], displayName: "K-lite (fixed)" },
+  { exp: "codex-150-l-agentic", variants: ["L-agentic"] },
+  { exp: "codex-150-m-bm25", variants: ["M-bm25"] },
+];
 
-  // Per-query matrix (initial 9 + ext 150-skill variants share same 24 queries)
-  const runs = d9.runs || [];
-  const variants9 = [...new Set(runs.map(r => r.variant))];
-  const queries9 = [...new Set(runs.map(r => r.queryId))].sort();
-  const byKey = new Map();
-  for (const r of runs) byKey.set(`${r.variant}::${r.queryId}`, r);
-  // Also include ext at 150-skill
-  for (const e of (ext || [])) {
-    if (e.corpus !== 150) continue;
-    for (const r of e.runs) byKey.set(`${e.id}::${r.queryId}`, r);
-  }
-  const extVariants150 = (ext || []).filter(e => e.corpus === 150).map(e => e.id);
-  const allVariants = [...variants9, ...extVariants150];
-
-  let matrixHead = `<tr><th>Query</th><th>Expected</th>` + allVariants.map(v => `<th class="num">${escapeHtml(v)}</th>`).join("") + `</tr>`;
-  let matrixBody = "";
-  for (const q of queries9) {
-    const expected = byKey.get(`${allVariants[0]}::${q}`)?.expected || "—";
-    let cells = "";
-    for (const v of allVariants) {
-      const r = byKey.get(`${v}::${q}`);
-      if (!r) { cells += `<td class="num gray">—</td>`; continue; }
-      const hit = r.matched === r.expected;
-      const cls = hit ? "hit" : "miss";
-      const sym = hit ? "✓" : "✗";
-      cells += `<td class="num ${cls}">${sym} ${escapeHtml(r.matched || "no-match")}</td>`;
+function renderCodex150(traces) {
+  // Aggregate table (merged)
+  let aggRows = "";
+  const cellsForMatrix = []; // [{displayName, queries: {qid: {matched, hit, metrics}}}]
+  for (const entry of CODEX_150_KEYS_IN_ORDER) {
+    const blk = traces[entry.exp];
+    if (!blk) continue;
+    for (const v of entry.variants) {
+      const vdata = blk.variants[v];
+      if (!vdata) continue;
+      const agg = aggregateMetrics(vdata);
+      const dn = entry.displayName || v;
+      const badge = entry.exp !== "codex-150-initial" ? ` <span class="badge">follow-on</span>` : "";
+      aggRows += `<tr>
+        <td><b>${escapeHtml(dn)}</b>${badge}</td>
+        <td class="num ${accCls(agg.accuracy)}">${agg.hits}/${agg.n} <span class="gray">(${pct(agg.accuracy)})</span></td>
+        <td class="num">${dollars(agg.sumCost)}</td>
+        <td class="num">${secs(agg.sumDur)}</td>
+        <td class="num">${agg.sumTurns}</td>
+        <td class="num">${num(agg.avgCtxEnd / 1000, 1)}k</td>
+        <td class="num">${num(agg.sumInput / 1000, 1)}k</td>
+        <td class="num">${num(agg.sumOutput)}</td>
+        <td class="num">${num(agg.sumReasoning)}</td>
+      </tr>`;
+      cellsForMatrix.push({ displayName: dn, queries: vdata });
     }
-    matrixBody += `<tr class="matrix-row"><td><code>${escapeHtml(q)}</code></td><td><code>${escapeHtml(expected)}</code></td>${cells}</tr>`;
+  }
+
+  // Per-query matrix (merged)
+  const queries = [...new Set(cellsForMatrix.flatMap(c => Object.keys(c.queries)))].sort();
+  let matrixHead = `<tr><th>Query</th><th>Expected</th>` + cellsForMatrix.map(c => `<th class="num">${escapeHtml(c.displayName)}</th>`).join("") + `</tr>`;
+  let matrixBody = "";
+  for (const qid of queries) {
+    let exp = "—";
+    for (const c of cellsForMatrix) { if (c.queries[qid]?.expected) { exp = c.queries[qid].expected; break; } }
+    let cells = "";
+    for (const c of cellsForMatrix) {
+      const q = c.queries[qid];
+      if (!q) { cells += `<td class="num gray">—</td>`; continue; }
+      const cls = q.hit ? "hit" : "miss";
+      const sym = q.hit ? "✓" : "✗";
+      const m = q.metrics || {};
+      const metaParts = [];
+      if (m.durationMs != null) metaParts.push(`${(m.durationMs/1000).toFixed(0)}s`);
+      if (m.ctxEnd != null) metaParts.push(`${num(m.ctxEnd / 1000, 0)}k`);
+      if (m.costUsd != null) metaParts.push(`${dollarsSmall(m.costUsd)}`);
+      if (m.reasoningTokens != null && m.reasoningTokens > 0) metaParts.push(`rsn ${num(m.reasoningTokens)}`);
+      cells += `<td class="num ${cls}">${sym} ${escapeHtml(q.matched || "no-match")}<span class="meta">${metaParts.join(" · ")}</span></td>`;
+    }
+    matrixBody += `<tr class="matrix-row"><td><code>${escapeHtml(qid)}</code></td><td><code>${escapeHtml(exp)}</code></td>${cells}</tr>`;
+  }
+
+  // Per-query traces — combine all blocks
+  const traceBlocks = [];
+  for (const entry of CODEX_150_KEYS_IN_ORDER) {
+    const blk = traces[entry.exp];
+    if (!blk) continue;
+    const renamedVariants = {};
+    for (const v of entry.variants) {
+      if (!blk.variants[v]) continue;
+      const dn = entry.displayName || v;
+      renamedVariants[dn] = blk.variants[v];
+    }
+    traceBlocks.push({ label: "codex", host: "codex", variants: renamedVariants });
   }
 
   return `<h2 id="small-codex">2. 150-skill × Codex <span class="pill pill-codex">codex</span></h2>
 <p class="intro">
   Same 24-query / 150-skill corpus as §1, run on <code>codex exec</code> (model gpt-5.5,
   reasoning effort high). Codex native G-native scores 24/24 vs Claude native 15/24 — largest
-  host-driven gap in the report.
+  host-driven gap in the report. Initial 9 variants (A-J) and 7 follow-on iterations
+  (D-agentic metadata-only / K-bounded / K-lite high+fixed / L-agentic / M-bm25) merged into a
+  single ranked table below.
 </p>
 <div class="takeaway">
   <b>Headline:</b> Codex G-native + D-agentic both 24/24. C-lite / E-digest / H-bounded reach 23/24.
   All follow-on iterations (K, K-lite fixed, L, M) also reach 24/24 — the 150 corpus cannot rank
   them further. L-agentic scales to 1K with only 1 miss.
 </div>
-<h3>2.1 Initial 9 variants (A–J) at 150-skill</h3>
 <table>
   <thead>
     <tr>
       <th>Variant</th>
       <th class="num">Accuracy</th>
-      <th class="num">Trigger</th>
+      <th class="num">Cost est.</th>
       <th class="num">Wall</th>
+      <th class="num">Total turns</th>
+      <th class="num">Avg ctx<sub>end</sub></th>
       <th class="num">In tokens</th>
       <th class="num">Out tokens</th>
       <th class="num">Reasoning tokens</th>
-      <th class="num">Cost est.</th>
     </tr>
   </thead>
-  <tbody>${rows1}</tbody>
+  <tbody>${aggRows}</tbody>
 </table>
-<h3>2.2 Follow-on iterations (D-metadata, K, K-lite, L, L-1K, M)</h3>
-<table>
-  <thead>
-    <tr>
-      <th>Variant</th>
-      <th class="num">Accuracy</th>
-      <th class="num">Trigger</th>
-      <th class="num">Wall</th>
-      <th class="num">In tokens</th>
-      <th class="num">Out tokens</th>
-      <th class="num">Reasoning tokens</th>
-      <th class="num">Cost est.</th>
-    </tr>
-  </thead>
-  <tbody>${rows2}</tbody>
-</table>
-<div class="footnote">Cost est. uses gpt-5.5 standard list price (2026-05-24) per §5 of the markdown report.</div>
+<div class="footnote">Cost est. uses gpt-5.5 standard list price (fresh $5, cached $0.5, output $30 per 1M). Wall = sum across 24 queries derived from per-query duration in transcripts (may be lower than wall-clock total when runs were parallel).</div>
 
-<details>
-  <summary>2.3 Per-query matrix (${allVariants.length} variants × 24 queries, all at 150-skill)</summary>
+<details open>
+  <summary>2.1 Per-query matrix (${cellsForMatrix.length} variants × 24 queries, each cell shows matched + duration/ctx/cost/reasoning)</summary>
   <table style="font-size:11px">
     <thead>${matrixHead}</thead>
     <tbody>${matrixBody}</tbody>
   </table>
 </details>
+
+<details>
+  <summary>2.2 Per-query execution traces — all ${cellsForMatrix.length * 24} traces inlined</summary>
+  ${renderPerQueryTraces(traceBlocks)}
+</details>
 `;
 }
 
-// ---------- Section 3: 1K (Codex L) ----------
+// ---------- §3 Codex 1K ----------
 
-function renderMediumCodex(ext) {
-  if (!ext) return "";
-  const onek = ext.find(e => e.id === "L-agentic (1K)");
-  const baseline150 = ext.find(e => e.id === "L-agentic");
-  if (!onek || !baseline150) return "";
+function renderCodex1K(traces) {
+  const base = traces["codex-150-l-agentic"];
+  const onek = traces["codex-1k-l-agentic"];
+  if (!base || !onek) return "";
+  const baseAgg = aggregateMetrics(base.variants["L-agentic"]);
+  const onekAgg = aggregateMetrics(onek.variants["L-agentic"]);
+
   // Per-query
-  const queries = [...new Set([...baseline150.runs, ...onek.runs].map(r => r.queryId))].sort();
+  const queries = [...new Set([...Object.keys(base.variants["L-agentic"]), ...Object.keys(onek.variants["L-agentic"])])].sort();
   let body = "";
   for (const q of queries) {
-    const r150 = baseline150.runs.find(r => r.queryId === q);
-    const r1k = onek.runs.find(r => r.queryId === q);
-    const expected = r150?.expected || r1k?.expected || "—";
-    const fmtCell = r => {
+    const r150 = base.variants["L-agentic"][q];
+    const r1k = onek.variants["L-agentic"][q];
+    const exp = r150?.expected || r1k?.expected || "—";
+    const fmt = r => {
       if (!r) return `<td class="num gray">—</td>`;
-      const hit = r.matched === r.expected;
-      return `<td class="num ${hit ? "hit" : "miss"}">${hit ? "✓" : "✗"} ${escapeHtml(r.matched || "no-match")}</td>`;
+      const cls = r.hit ? "hit" : "miss";
+      const m = r.metrics || {};
+      const meta = `${m.durationMs ? (m.durationMs/1000).toFixed(0) + "s" : "—"} · ${m.ctxEnd ? num(m.ctxEnd / 1000, 0) + "k" : "—"} · ${m.costUsd ? dollarsSmall(m.costUsd) : "—"}`;
+      return `<td class="num ${cls}">${r.hit ? "✓" : "✗"} ${escapeHtml(r.matched || "no-match")}<span class="meta">${meta}</span></td>`;
     };
-    body += `<tr class="matrix-row"><td><code>${escapeHtml(q)}</code></td><td><code>${escapeHtml(expected)}</code></td>${fmtCell(r150)}${fmtCell(r1k)}</tr>`;
+    body += `<tr class="matrix-row"><td><code>${escapeHtml(q)}</code></td><td><code>${escapeHtml(exp)}</code></td>${fmt(r150)}${fmt(r1k)}</tr>`;
   }
+
+  const traceBlocks = [
+    { label: "codex/L-150", host: "codex", variants: { "L-agentic": base.variants["L-agentic"] } },
+    { label: "codex/L-1K", host: "codex", variants: { "L-agentic": onek.variants["L-agentic"] } },
+  ];
+
   return `<h2 id="medium-codex">3. 1K synthetic × Codex <span class="pill pill-codex">codex</span></h2>
 <p class="intro">
-  L-agentic (CLI-driven <code>corpus search/inspect</code> + structured candidates) is the only
-  variant scaled past 150. The 1K corpus = 150-skill comparison set + 850 synthetic noise skills.
-  This validates that L's CLI abstraction handles ~7× the candidate pool without prompt blowup.
+  L-agentic (CLI <code>corpus search/inspect</code> + structured candidates) scaled past 150 to
+  1K = 150-skill comparison set + 850 synthetic noise skills. Validates that the CLI abstraction
+  handles ~7× the candidate pool without prompt blowup.
 </p>
 <div class="note"><b>No Claude Code equivalent.</b> L-agentic was never ported to Claude or run at 1K scale on Claude.</div>
 <table>
-  <thead><tr><th>Corpus</th><th class="num">Accuracy</th><th class="num">Trigger</th><th class="num">Wall</th><th class="num">In tokens</th><th class="num">Out tokens</th><th class="num">Reasoning</th><th class="num">Cost est.</th></tr></thead>
+  <thead><tr><th>Corpus</th><th class="num">Accuracy</th><th class="num">Cost est.</th><th class="num">Wall</th><th class="num">Total turns</th><th class="num">Avg ctx<sub>end</sub></th><th class="num">In tokens</th><th class="num">Out tokens</th><th class="num">Reasoning</th></tr></thead>
   <tbody>
     <tr>
       <td><b>L-agentic × 150-skill</b></td>
-      <td class="num hit">${baseline150.stats.correct}/${baseline150.stats.n} (${pct(baseline150.stats.correct / baseline150.stats.n)})</td>
-      <td class="num">${baseline150.stats.routerTriggered != null ? `${baseline150.stats.routerTriggered}/${baseline150.stats.n}` : "n/a"}</td>
-      <td class="num">${secs(baseline150.stats.totalDurMs)}</td>
-      <td class="num">${num(baseline150.stats.totalTokensIn / 1000, 1)}k</td>
-      <td class="num">${num(baseline150.stats.totalTokensOut)}</td>
-      <td class="num">${num(baseline150.stats.totalReasoning || 0)}</td>
-      <td class="num">${dollars(baseline150.knownCost)}</td>
+      <td class="num hit">${baseAgg.hits}/${baseAgg.n} (${pct(baseAgg.accuracy)})</td>
+      <td class="num">${dollars(baseAgg.sumCost)}</td>
+      <td class="num">${secs(baseAgg.sumDur)}</td>
+      <td class="num">${baseAgg.sumTurns}</td>
+      <td class="num">${num(baseAgg.avgCtxEnd / 1000, 1)}k</td>
+      <td class="num">${num(baseAgg.sumInput / 1000, 1)}k</td>
+      <td class="num">${num(baseAgg.sumOutput)}</td>
+      <td class="num">${num(baseAgg.sumReasoning)}</td>
     </tr>
     <tr>
       <td><b>L-agentic × 1K synthetic</b></td>
-      <td class="num mid">${onek.stats.correct}/${onek.stats.n} (${pct(onek.stats.correct / onek.stats.n)})</td>
-      <td class="num">${onek.stats.routerTriggered != null ? `${onek.stats.routerTriggered}/${onek.stats.n}` : "n/a"}</td>
-      <td class="num">${secs(onek.stats.totalDurMs)}</td>
-      <td class="num">${num(onek.stats.totalTokensIn / 1000, 1)}k</td>
-      <td class="num">${num(onek.stats.totalTokensOut)}</td>
-      <td class="num">${num(onek.stats.totalReasoning || 0)}</td>
-      <td class="num">${dollars(onek.knownCost)}</td>
+      <td class="num mid">${onekAgg.hits}/${onekAgg.n} (${pct(onekAgg.accuracy)})</td>
+      <td class="num">${dollars(onekAgg.sumCost)}</td>
+      <td class="num">${secs(onekAgg.sumDur)}</td>
+      <td class="num">${onekAgg.sumTurns}</td>
+      <td class="num">${num(onekAgg.avgCtxEnd / 1000, 1)}k</td>
+      <td class="num">${num(onekAgg.sumInput / 1000, 1)}k</td>
+      <td class="num">${num(onekAgg.sumOutput)}</td>
+      <td class="num">${num(onekAgg.sumReasoning)}</td>
     </tr>
   </tbody>
 </table>
-<div class="footnote">1K miss: <code>pptx-reference-formatting</code> → <code>skill-103</code>. Avg ctx<sub>end</sub> only grows 17.5K → 17.9K, confirming CLI pagination prevents prompt blowup.</div>
-
-<details>
-  <summary>3.1 Per-query matrix (L-agentic 150 vs 1K, 24 queries)</summary>
+<details open>
+  <summary>3.1 Per-query matrix (L-agentic 150 vs 1K, each cell shows matched + duration/ctx/cost)</summary>
   <table style="font-size:11.5px">
     <thead><tr><th>Query</th><th>Expected</th><th class="num">L-agentic × 150</th><th class="num">L-agentic × 1K</th></tr></thead>
     <tbody>${body}</tbody>
   </table>
 </details>
+<details>
+  <summary>3.2 Per-query execution traces — 48 traces inlined</summary>
+  ${renderPerQueryTraces(traceBlocks)}
+</details>
 `;
 }
 
-// ---------- Section 4: Claude 79K Hard scaling ----------
+// ---------- §4 Claude 79K Hard (cells.json only, no JSONL) ----------
 
 function renderHardClaude(scaling) {
   if (!scaling || !scaling.length) return "";
   let rows = "";
   for (const c of scaling) {
     const agg = c.agg || {};
-    const acc = agg.accuracy;
-    const accCls = acc >= 0.9 ? "hit" : acc >= 0.5 ? "mid" : "miss";
     rows += `<tr>
       <td><b>${escapeHtml(c.label)}</b></td>
-      <td class="num ${accCls}">${Math.round((acc || 0) * agg.n)}/${agg.n} <span class="gray">(${pct(acc)})</span></td>
+      <td class="num ${accCls(agg.accuracy)}">${Math.round((agg.accuracy || 0) * agg.n)}/${agg.n} <span class="gray">(${pct(agg.accuracy)})</span></td>
       <td class="num">${pct(agg.triggerRate)}</td>
-      <td class="num">${secs(agg.sumDuration)}</td>
       <td class="num">${dollars(agg.sumCost)}</td>
-      <td class="num">${num(agg.avgEndCtx / 1000, 1)}k</td>
+      <td class="num">${secs(agg.sumDuration)}</td>
       <td class="num">${agg.sumTurns}</td>
+      <td class="num">${num(agg.avgEndCtx / 1000, 1)}k</td>
       <td class="num">${agg.timeouts}</td>
     </tr>`;
   }
@@ -705,10 +732,10 @@ function renderHardClaude(scaling) {
   // Per-query for each cell
   let detailsHtml = "";
   for (const c of scaling) {
-    const queries = Object.keys(c.cells || {}).sort();
-    if (!queries.length) continue;
+    const qids = Object.keys(c.cells || {}).sort();
+    if (!qids.length) continue;
     let body = "";
-    for (const q of queries) {
+    for (const q of qids) {
       const cell = c.cells[q];
       const cls = cell.correct ? "hit" : "miss";
       const sym = cell.correct ? "✓" : "✗";
@@ -717,13 +744,13 @@ function renderHardClaude(scaling) {
         <td class="num ${cls}">${sym} ${escapeHtml(cell.matched || "no-match")}</td>
         <td class="num">${cell.numTurns ?? "—"}</td>
         <td class="num">${secs(cell.durationMs)}</td>
-        <td class="num">${dollars(cell.cost)}</td>
+        <td class="num">${dollarsSmall(cell.cost)}</td>
         <td class="num">${num((cell.endCtx || 0) / 1000, 1)}k</td>
         <td class="num">${cell.bashCalls ?? "—"}</td>
       </tr>`;
     }
     detailsHtml += `<details>
-      <summary>${escapeHtml(c.label)} — per-query (${queries.length})</summary>
+      <summary>${escapeHtml(c.label)} — per-query metrics (${qids.length})</summary>
       <table style="font-size:11.5px">
         <thead><tr><th>Query</th><th class="num">Matched</th><th class="num">Turns</th><th class="num">Duration</th><th class="num">Cost</th><th class="num">End ctx</th><th class="num">Bash calls</th></tr></thead>
         <tbody>${body}</tbody>
@@ -734,75 +761,60 @@ function renderHardClaude(scaling) {
   return `<h2 id="hard-claude">4. 79K Hard × Claude Code <span class="pill pill-claude">claude</span></h2>
 <p class="intro">
   J-bounded-v2 scaling from 150 to 79,141 Hard pool. v2 fixes v1's shell glob ARG_MAX overflow
-  and removes head-20 truncation. Same 24 SkillsBench queries; bounded payload, cost only +35%,
-  accuracy drops from 22/24 to 12/24.
+  and removes head-20 truncation. Bounded payload, cost only +35%, accuracy drops from 22/24 to 12/24.
 </p>
 <div class="takeaway">
-  <b>Headline:</b> J-bounded-v2 is mechanically stable at 79K (bounded ctx, no timeouts) but
-  accuracy collapses from 91.7% → 50.0%. Metadata-only cannot serve as the sole decision source
-  at this scale — body-on-tie / full-text rerank is required.
+  <b>Headline:</b> Mechanically stable at 79K (bounded ctx, no timeouts) but accuracy collapses
+  91.7% → 50.0%. Metadata-only cannot serve as the sole decision source at this scale.
+</div>
+<div class="note">
+  <b>No tool-call traces for §4.</b> The J-bounded scaling runner only persisted per-query
+  aggregate metrics in <code>cells.json</code>, not raw JSONL transcripts. <code>bashCalls</code>
+  is the closest proxy for tool-call depth.
 </div>
 <table>
-  <thead><tr><th>Cell</th><th class="num">Accuracy</th><th class="num">Trigger</th><th class="num">Wall</th><th class="num">Cost</th><th class="num">Avg ctx<sub>end</sub></th><th class="num">Turns</th><th class="num">Timeouts</th></tr></thead>
+  <thead><tr><th>Cell</th><th class="num">Accuracy</th><th class="num">Trigger</th><th class="num">Cost</th><th class="num">Wall</th><th class="num">Total turns</th><th class="num">Avg ctx<sub>end</sub></th><th class="num">Timeouts</th></tr></thead>
   <tbody>${rows}</tbody>
 </table>
 ${detailsHtml}
 `;
 }
 
-// ---------- Section 5: Codex 79K Hard ----------
+// ---------- §5 Codex 79K Hard ----------
 
-function renderHardCodex(rows) {
-  if (!rows || !rows.length) return "";
-  let tbody = "";
-  for (const r of rows) {
-    const s = r.stats;
-    const acc = s.correct / s.n;
-    const accCls = acc >= 0.65 ? "hit" : acc >= 0.4 ? "mid" : "miss";
-    const note = r.id === "J-bounded-v2" ? ` <span class="gray">(strict; alias-norm 14/24)</span>` : "";
-    tbody += `<tr>
-      <td><b>${escapeHtml(r.id)}</b> <span class="badge">${escapeHtml(r.queryset)}</span></td>
-      <td class="num ${accCls}">${s.correct}/${s.n} <span class="gray">(${pct(acc)})</span>${note}</td>
-      <td class="num">${s.routerTriggered != null ? `${s.routerTriggered}/${s.n}` : "n/a"}</td>
-      <td class="num">${secs(s.totalDurMs)}</td>
-      <td class="num">${num(s.totalTokensIn / 1000, 1)}k</td>
-      <td class="num">${num(s.totalTokensOut)}</td>
-      <td class="num">${num(s.totalReasoning || 0)}</td>
-      <td class="num">${dollars(r.knownCost)}</td>
+function renderHardCodex(traces) {
+  const entries = [
+    { exp: "codex-hard-m-bm25-current24", variant: "M-bm25", queryset: "current 24 subset" },
+    { exp: "codex-hard-m-bm25-paper", variant: "M-bm25", queryset: "paper-core single" },
+    { exp: "codex-hard-jv2-paper", variant: "J-bounded-v2", queryset: "paper-core single" },
+  ];
+  let rows = "";
+  const traceBlocks = [];
+  for (const e of entries) {
+    const blk = traces[e.exp];
+    if (!blk) continue;
+    const vdata = blk.variants[e.variant];
+    if (!vdata) continue;
+    const agg = aggregateMetrics(vdata);
+    const note = e.variant === "J-bounded-v2" ? ` <span class="gray">(strict; alias-norm 14/24)</span>` : "";
+    rows += `<tr>
+      <td><b>${escapeHtml(e.variant)}</b> <span class="badge">${escapeHtml(e.queryset)}</span></td>
+      <td class="num ${accCls(agg.accuracy * 1.5)}">${agg.hits}/${agg.n} <span class="gray">(${pct(agg.accuracy)})</span>${note}</td>
+      <td class="num">${dollars(agg.sumCost)}</td>
+      <td class="num">${secs(agg.sumDur)}</td>
+      <td class="num">${agg.sumTurns}</td>
+      <td class="num">${num(agg.avgCtxEnd / 1000, 1)}k</td>
+      <td class="num">${num(agg.sumInput / 1000, 1)}k</td>
+      <td class="num">${num(agg.sumOutput)}</td>
+      <td class="num">${num(agg.sumReasoning)}</td>
     </tr>`;
-  }
-  // Per-query for each cell
-  let detailsHtml = "";
-  for (const r of rows) {
-    const runs = r.runs || [];
-    if (!runs.length) continue;
-    let body = "";
-    for (const run of runs) {
-      const hit = run.matched === run.expected;
-      const cls = hit ? "hit" : "miss";
-      body += `<tr class="matrix-row">
-        <td><code>${escapeHtml(run.queryId)}</code></td>
-        <td><code>${escapeHtml(run.expected || "—")}</code></td>
-        <td class="num ${cls}">${hit ? "✓" : "✗"} ${escapeHtml(run.matched || "no-match")}</td>
-        <td class="num">${secs(run.durationMs)}</td>
-        <td class="num">${num((run.usage?.input_tokens || 0) / 1000, 1)}k</td>
-        <td class="num">${run.usage?.output_tokens ?? "—"}</td>
-      </tr>`;
-    }
-    detailsHtml += `<details>
-      <summary>${escapeHtml(r.id)} × ${escapeHtml(r.queryset)} — per-query (${runs.length})</summary>
-      <table style="font-size:11.5px">
-        <thead><tr><th>Query</th><th>Expected</th><th class="num">Matched</th><th class="num">Duration</th><th class="num">In tokens</th><th class="num">Out tokens</th></tr></thead>
-        <tbody>${body}</tbody>
-      </table>
-    </details>`;
+    traceBlocks.push({ label: `codex/${e.queryset}`, host: "codex", variants: { [e.variant]: vdata } });
   }
   return `<h2 id="hard-codex">5. 79K Hard × Codex <span class="pill pill-codex">codex</span></h2>
 <p class="intro">
-  Codex M-bm25 and J-bounded-v2 against the full 79,141-skill Hard pool on two query sets:
-  paper-core single (24 single-skill queries from SkillRouter <code>relevance.json</code>) and
-  the original current-24 subset. J-v2 has 3 outputs in raw <code>name:</code> form rather than
-  opaque <code>sr-*</code> ids; strict counts as misses, alias-normalized → 14/24.
+  Codex M-bm25 and J-bounded-v2 against the full 79,141-skill Hard pool on two query sets.
+  J-v2 has 3 outputs in raw <code>name:</code> form rather than opaque <code>sr-*</code> ids;
+  strict counts as misses (11/24), alias-normalized → 14/24.
 </p>
 <div class="takeaway">
   <b>Headline:</b> M-bm25 reaches 58.3% on paper-core single Hard, beating BM25-nd (0%) and
@@ -810,29 +822,30 @@ function renderHardCodex(rows) {
   16-50 min — much more expensive than 150-skill runs.
 </div>
 <table>
-  <thead><tr><th>Variant / Query set</th><th class="num">Accuracy</th><th class="num">Trigger</th><th class="num">Wall</th><th class="num">In tokens</th><th class="num">Out tokens</th><th class="num">Reasoning</th><th class="num">Cost est.</th></tr></thead>
-  <tbody>${tbody}</tbody>
+  <thead><tr><th>Variant / Query set</th><th class="num">Accuracy</th><th class="num">Cost est.</th><th class="num">Wall</th><th class="num">Total turns</th><th class="num">Avg ctx<sub>end</sub></th><th class="num">In tokens</th><th class="num">Out tokens</th><th class="num">Reasoning</th></tr></thead>
+  <tbody>${rows}</tbody>
 </table>
-${detailsHtml}
+<details>
+  <summary>5.1 Per-query execution traces — 72 traces inlined</summary>
+  ${renderPerQueryTraces(traceBlocks)}
+</details>
 `;
 }
 
-// ---------- Section 6: Easy 78K per host ----------
+// ---------- §6 Easy 78K per host ----------
 
-function renderEasyHost(host, easyRows) {
-  const rows = easyRows.filter(r => r.host === host);
+function renderEasyHost(host, summaries) {
+  const matching = Object.entries(summaries).filter(([k]) => k.startsWith(host + "-"));
   let tbody = "";
-  for (const r of rows) {
-    const s = r.summary;
+  for (const [name, s] of matching) {
+    const variant = name.split("-").slice(1).join("-");
     const acc = s.hit1_rate;
-    const accCls = acc >= 0.37 ? "hit" : acc >= 0.28 ? "mid" : "miss";
-    const singlePct = pct(s.hit1_single / Math.max(s.n_single, 1));
-    const multiPct = pct(s.hit1_multi / Math.max(s.n_multi, 1));
+    const cls = accCls(acc * 2);
     tbody += `<tr>
-      <td><b>${escapeHtml(r.variant)}</b></td>
-      <td class="num ${accCls}"><b>${pct(acc)}</b> <span class="gray">(${s.hit1}/${s.queries})</span></td>
-      <td class="num">${s.hit1_single}/${s.n_single} <span class="gray">(${singlePct})</span></td>
-      <td class="num">${s.hit1_multi}/${s.n_multi} <span class="gray">(${multiPct})</span></td>
+      <td><b>${escapeHtml(variant)}</b></td>
+      <td class="num ${cls}"><b>${pct(acc)}</b> <span class="gray">(${s.hit1}/${s.queries})</span></td>
+      <td class="num">${s.hit1_single}/${s.n_single} <span class="gray">(${pct(s.hit1_single / Math.max(s.n_single, 1))})</span></td>
+      <td class="num">${s.hit1_multi}/${s.n_multi} <span class="gray">(${pct(s.hit1_multi / Math.max(s.n_multi, 1))})</span></td>
       <td class="num">${s.answered}/${s.queries}</td>
       <td class="num">${s.timeouts}</td>
       <td class="num">${s.errors}</td>
@@ -841,8 +854,8 @@ function renderEasyHost(host, easyRows) {
   }
   const idSuffix = host === "claude" ? "easy-claude" : "easy-codex";
   const pillClass = host === "claude" ? "pill-claude" : "pill-codex";
-  const hostLabel = host === "claude" ? "Claude Code" : "Codex";
   const sectionNum = host === "claude" ? "6.1" : "6.2";
+  const hostLabel = host === "claude" ? "Claude Code" : "Codex";
   return `<h2 id="${idSuffix}">${sectionNum}. 78K Easy × 75 core × ${hostLabel} <span class="pill ${pillClass}">${host}</span></h2>
 <table>
   <thead>
@@ -862,25 +875,29 @@ function renderEasyHost(host, easyRows) {
 `;
 }
 
-// ---------- Section 7: Easy cross-cell + paper ----------
+// ---------- §7 Easy cross-cell + paper + traces ----------
 
-function renderEasyCompare(easyRows) {
-  const all = easyRows.map(r => ({ key: `${r.host}/${r.variant}`, host: r.host, rate: r.summary.hit1_rate, hit: r.summary.hit1, n: r.summary.queries }));
-  all.sort((a, b) => b.rate - a.rate);
-  const maxRate = Math.max(...all.map(a => a.rate), ...Object.values(PAPER_BASELINES_EASY));
+function renderEasyCompare(summaries, traces) {
+  // Build cell list
+  const cellRows = Object.entries(summaries).map(([name, s]) => {
+    const [host, ...rest] = name.split("-");
+    return { name, host, variant: rest.join("-"), rate: s.hit1_rate, hit: s.hit1, n: s.queries, summary: s };
+  });
+  cellRows.sort((a, b) => b.rate - a.rate);
+  const maxRate = Math.max(...cellRows.map(c => c.rate), ...Object.values(PAPER_EASY));
 
   let ourRows = "";
-  for (const a of all) {
-    const w = ((a.rate / maxRate) * 100).toFixed(1);
-    const cls = a.host === "claude" ? "" : "codex";
+  for (const c of cellRows) {
+    const w = ((c.rate / maxRate) * 100).toFixed(1);
+    const cls = c.host === "claude" ? "" : "codex";
     ourRows += `<tr>
-      <td><span class="pill pill-${a.host}">${escapeHtml(a.key)}</span></td>
-      <td class="num"><b>${pct(a.rate)}</b> <span class="gray">(${a.hit}/${a.n})</span></td>
+      <td><span class="pill pill-${c.host}">${escapeHtml(c.host + "/" + c.variant)}</span></td>
+      <td class="num"><b>${pct(c.rate)}</b> <span class="gray">(${c.hit}/${c.n})</span></td>
       <td><div class="bar-wrap"><div class="bar-fill ${cls}" style="width:${w}%"></div></div></td>
     </tr>`;
   }
   let paperRows = "";
-  for (const [name, rate] of Object.entries(PAPER_BASELINES_EASY)) {
+  for (const [name, rate] of Object.entries(PAPER_EASY)) {
     const w = ((rate / maxRate) * 100).toFixed(1);
     paperRows += `<tr>
       <td><span class="pill pill-paper">paper</span> ${escapeHtml(name)}</td>
@@ -890,12 +907,11 @@ function renderEasyCompare(easyRows) {
   }
 
   const byVariant = new Map(), byHost = new Map();
-  for (const r of easyRows) {
-    const v = r.variant, h = r.host;
-    if (!byVariant.has(v)) byVariant.set(v, []);
-    byVariant.get(v).push(r.summary.hit1_rate);
-    if (!byHost.has(h)) byHost.set(h, []);
-    byHost.get(h).push(r.summary.hit1_rate);
+  for (const c of cellRows) {
+    if (!byVariant.has(c.variant)) byVariant.set(c.variant, []);
+    byVariant.get(c.variant).push(c.rate);
+    if (!byHost.has(c.host)) byHost.set(c.host, []);
+    byHost.get(c.host).push(c.rate);
   }
   const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
   let vRows = [...byVariant.entries()].sort((a, b) => avg(b[1]) - avg(a[1]))
@@ -904,15 +920,15 @@ function renderEasyCompare(easyRows) {
     .map(([h, rs]) => `<tr><td><span class="pill pill-${h}">${h}</span></td><td class="num">${pct(avg(rs))} <span class="gray">(${rs.length} cells)</span></td></tr>`).join("");
 
   // Per-query matrix
-  const cellKeys = easyRows.map(r => `${r.host}/${r.variant}`);
+  const cellKeys = cellRows.map(c => `${c.host}/${c.variant}`);
   const allQids = new Set();
   const byQ = new Map();
-  for (const r of easyRows) {
-    const key = `${r.host}/${r.variant}`;
-    for (const res of r.summary.results || []) {
+  for (const c of cellRows) {
+    const k = `${c.host}/${c.variant}`;
+    for (const res of c.summary.results || []) {
       allQids.add(res.query_id);
       if (!byQ.has(res.query_id)) byQ.set(res.query_id, { tier: res.tier, gt: res.expected_anon, cells: {} });
-      byQ.get(res.query_id).cells[key] = res;
+      byQ.get(res.query_id).cells[k] = res;
     }
   }
   const qids = [...allQids].sort();
@@ -932,18 +948,37 @@ function renderEasyCompare(easyRows) {
       if (!r) { cells += `<td class="num gray">—</td>`; continue; }
       const cls = r.hit1 ? "hit" : "miss";
       const sym = r.hit1 ? "✓" : "✗";
-      cells += `<td class="num ${cls}">${sym} ${escapeHtml(r.top1 || "?")}</td>`;
+      // Pull per-query metrics from trace data
+      const cellName = k.replace("/", "-");
+      const traceBlk = traces[`easy78k-${cellName}`];
+      const variant = k.split("/").slice(1).join("/");
+      const traceQ = traceBlk?.variants?.[variant]?.[qid];
+      const m = traceQ?.metrics || {};
+      const metaParts = [];
+      if (m.turns != null) metaParts.push(`t${m.turns}`);
+      if (m.durationMs != null) metaParts.push(`${(m.durationMs/1000).toFixed(0)}s`);
+      if (m.ctxEnd != null) metaParts.push(`${num(m.ctxEnd / 1000, 0)}k`);
+      cells += `<td class="num ${cls}">${sym} ${escapeHtml(r.top1 || "?")}<span class="meta">${metaParts.join(" · ")}</span></td>`;
     }
     const gtStr = e.gt.length === 1 ? e.gt[0] : `${e.gt.length} skills`;
     matrixBody += `<tr class="matrix-row"><td><code>${escapeHtml(qid)}</code> <span class="${hitCls}" style="font-weight:600">${hitLbl}</span></td><td>${e.tier}</td><td class="gt"><code>${escapeHtml(gtStr)}</code></td>${cells}</tr>`;
   }
 
-  return `<h2 id="easy-compare">7. 78K Easy — cross-cell comparison &amp; paper baselines</h2>
+  // Per-query traces for §9 — build trace blocks per cell
+  const traceBlocks = [];
+  for (const k of cellKeys) {
+    const cellName = k.replace("/", "-");
+    const traceBlk = traces[`easy78k-${cellName}`];
+    if (!traceBlk) continue;
+    const [host] = k.split("/");
+    traceBlocks.push({ label: k, host, variants: traceBlk.variants });
+  }
+
+  return `<h2 id="easy-compare">7. 78K Easy — cross-cell &amp; paper baselines + per-query traces</h2>
 <div class="takeaway">
   <b>Headline:</b> Best cell <b>codex/J-bounded-v2 at 40.0%</b> exceeds the strongest paper nd
   baseline (Qwen3-Emb-8B 30.7%) by +9.3pp, and beats BM25 with full body (34.7%). 6/6 cells beat
-  BM25 nd, 4/6 beat Qwen3-Emb-0.6B nd, 3/6 beat Qwen3-Emb-8B nd. Remaining 25-36pp gap to
-  full-body SR-pipeline (74-76%) is structural (no body access).
+  BM25 nd, 4/6 beat Qwen3-Emb-0.6B nd, 3/6 beat Qwen3-Emb-8B nd.
 </div>
 <div class="grid-2">
   <div class="panel">
@@ -962,108 +997,27 @@ function renderEasyCompare(easyRows) {
 </table>
 
 <details open>
-  <summary>7.1 Per-query matrix (75 queries × 6 cells)</summary>
+  <summary>7.1 Per-query matrix (75 queries × 6 cells, each cell shows top1 + turns/duration/ctx)</summary>
   <p class="footnote">Leading badge: <span class="hit">✓6</span> = all 6 cells hit, <span class="miss">✗0</span> = all miss, <span class="mid">N/6</span> = partial.</p>
   <table style="font-size:11px">
     <thead>${matrixHead}</thead>
     <tbody>${matrixBody}</tbody>
   </table>
 </details>
+
+<details>
+  <summary>7.2 Per-query execution traces — 450 traces inlined</summary>
+  ${renderPerQueryTraces(traceBlocks)}
+</details>
 `;
 }
 
-// ---------- Section 8: Easy 78K traces (inlined) ----------
-
-function renderTraceSteps(steps) {
-  if (!steps || !steps.length) return `<div class="gray" style="font-size:10.5px">(no tool calls recorded)</div>`;
-  return steps.map(s => {
-    if (s.output_text != null) {
-      return `<div class="step"><div class="txt">${escapeHtml(truncate(s.output_text, 280))}</div></div>`;
-    }
-    const inHtml = escapeHtml(truncate(s.input || "", 220));
-    const outHtml = s.result ? escapeHtml(truncate(s.result, 220)) : "";
-    return `<div class="step">
-      <div><span class="name">${escapeHtml(s.tool || "?")}</span>: <span class="in">${inHtml}</span></div>
-      ${outHtml ? `<div class="out">${outHtml}</div>` : ""}
-    </div>`;
-  }).join("");
-}
-
-function renderEasyTraces(easyRows, traces) {
-  if (!traces) return `<h2 id="easy-traces">8. 78K Easy — per-query execution traces</h2>
-<div class="note">traces-compact.json not found. Run <code>node experiments/skillrouter-easy/extract-traces.mjs</code> first.</div>`;
-
-  // Per-query: 6 cards (one per cell)
-  const cellKeys = easyRows.map(r => `${r.host}/${r.variant}`);
-  const allQids = new Set();
-  const queryMeta = {};
-  for (const r of easyRows) {
-    for (const res of r.summary.results || []) {
-      allQids.add(res.query_id);
-      if (!queryMeta[res.query_id]) queryMeta[res.query_id] = { tier: res.tier, gt: res.expected_anon };
-    }
-  }
-  const qids = [...allQids].sort();
-
-  let body = "";
-  for (const qid of qids) {
-    const meta = queryMeta[qid];
-    const gtStr = meta.gt.length === 1 ? meta.gt[0] : `${meta.gt.length} skills`;
-    const hitCount = cellKeys.filter(k => {
-      const cellName = k.replace("/", "-");
-      return traces[cellName]?.[qid]?.hit1;
-    }).length;
-    const hitLbl = hitCount === 6 ? "✓6" : hitCount === 0 ? "✗0" : `${hitCount}/6`;
-    const hitCls = hitCount === 6 ? "hit" : hitCount === 0 ? "miss" : "mid";
-
-    let cards = "";
-    for (const k of cellKeys) {
-      const [host] = k.split("/");
-      const cellName = k.replace("/", "-");
-      const trace = traces[cellName]?.[qid];
-      if (!trace) {
-        cards += `<div class="trace-card"><div class="head"><span class="pill pill-${host}">${escapeHtml(k)}</span> <span class="gray">no trace</span></div></div>`;
-        continue;
-      }
-      const stepCount = (trace.steps || []).filter(s => s.tool).length;
-      const cls = trace.hit1 ? "hit" : "miss";
-      const sym = trace.hit1 ? "✓" : "✗";
-      cards += `<div class="trace-card">
-        <div class="head">
-          <span class="pill pill-${host}">${escapeHtml(k)}</span>
-          <span class="${cls}">${sym} ${escapeHtml(trace.top1 || "?")}</span>
-        </div>
-        <div style="font-size:11px;color:#6b7280;margin-bottom:4px">tool calls: ${stepCount}</div>
-        <div class="tline">${renderTraceSteps(trace.steps)}</div>
-      </div>`;
-    }
-    body += `<details>
-      <summary><code>${escapeHtml(qid)}</code> — <code>${escapeHtml(gtStr)}</code> [${meta.tier}] <span class="${hitCls}" style="margin-left:6px">${hitLbl}</span></summary>
-      <div class="trace-grid">${cards}</div>
-    </details>\n`;
-  }
-
-  return `<h2 id="easy-traces">8. 78K Easy — per-query execution traces</h2>
-<p class="intro">
-  Full tool-call chain for all 75 queries × 6 cells (450 cards). Each card shows the agent's
-  tool sequence (Bash / Skill) with truncated input/output snippets. Click a query to expand.
-</p>
-<div class="note">
-  Only §9 (Easy 78K) has per-query execution traces — the earlier 150-skill / 79K Hard
-  experiments persisted only aggregate metrics, not raw transcripts. Traces below are extracted
-  from <code>runs/&lt;host&gt;-&lt;variant&gt;/&lt;query&gt;.jsonl</code> stream-json transcripts.
-</div>
-${body}`;
-}
-
-// ---------- Section 9: Variant implementations ----------
+// ---------- §8 Variant implementations ----------
 
 function renderVariants(variants) {
   if (!variants) return "";
   let body = "";
-
-  // dci-compare 150-skill variants (12 each for Claude / Codex)
-  body += `<h3>9.1 dci-compare variants (used in §1, §2, §3)</h3>`;
+  body += `<h3>8.1 dci-compare variants (used in §1, §2, §3)</h3>`;
   const dciIds = [...new Set([
     ...Object.keys(variants.dciCompare.claude || {}),
     ...Object.keys(variants.dciCompare.codex || {}),
@@ -1077,9 +1031,7 @@ function renderVariants(variants) {
       ${codexText ? `<h4>variants/routing-only-codex/${escapeHtml(id)}.SKILL.md <span class="pill pill-codex">codex</span></h4><pre class="code"><code>${escapeHtml(codexText)}</code></pre>` : ''}
     </details>`;
   }
-
-  // skillrouter-easy variants (3 each for Claude / Codex)
-  body += `<h3>9.2 skillrouter-easy variants (used in §6-§8)</h3>`;
+  body += `<h3>8.2 skillrouter-easy variants (used in §6, §7)</h3>`;
   const easyIds = [...new Set([
     ...Object.keys(variants.skillrouterEasy.claude || {}),
     ...Object.keys(variants.skillrouterEasy.codex || {}),
@@ -1093,12 +1045,9 @@ function renderVariants(variants) {
       ${codexText ? `<h4>variants/codex/${escapeHtml(id)}.SKILL.md</h4><pre class="code"><code>${escapeHtml(codexText)}</code></pre>` : ''}
     </details>`;
   }
-
-  return `<h2 id="variants">9. Variant implementations</h2>
+  return `<h2 id="variants">8. Variant implementations</h2>
 <p class="intro">
-  Full <code>SKILL.md</code> for every variant used across the experiments.
-  Variants are patched into the installed <code>agentic-skill-router-skills</code> slot per cell.
-  Frontmatter is shared across variants; the body workflow is what differs.
+  Full <code>SKILL.md</code> for every variant. Frontmatter is shared; only the body workflow differs.
 </p>
 ${body}`;
 }
@@ -1108,44 +1057,41 @@ ${body}`;
 async function main() {
   const args = process.argv.slice(2);
   let outPath = join(__dirname, "runs/report-all-experiments.html");
-  for (const a of args) {
-    if (a.startsWith("--out=")) outPath = a.slice(6);
-  }
+  for (const a of args) if (a.startsWith("--out=")) outPath = a.slice(6);
 
-  console.error("Loading data...");
-  const [claudePaired, codexSmall, codexExt, scalingHard, codexHard, easy, easyTraces, variants] = await Promise.all([
-    loadClaudePaired(),
-    loadCodexSmall(),
-    loadCodexExtensions(),
+  console.error("Loading all-traces.json...");
+  const tracesPath = join(__dirname, "runs/all-traces.json");
+  if (!existsSync(tracesPath)) {
+    console.error(`MISSING: ${tracesPath}. Run extract-all-traces.mjs first.`);
+    process.exit(1);
+  }
+  const traces = JSON.parse(await readFile(tracesPath, "utf8"));
+  const [scalingHard, easySummaries, variants] = await Promise.all([
     loadScalingHard(),
-    loadCodexHard(),
-    loadEasy78K(),
-    loadEasy78KTraces(),
+    loadEasy78KSummaries(),
     loadAllVariants(),
   ]);
-
-  console.error(`Loaded: claudePaired=${claudePaired ? "ok" : "MISSING"}, codexSmall=${codexSmall ? "ok" : "MISSING"}, codexExt=${codexExt?.length || 0}, scalingHard=${scalingHard?.length || 0}, codexHard=${codexHard?.length || 0}, easy=${easy?.length || 0}, easyTraces=${easyTraces ? Object.keys(easyTraces).length : 0} cells, variants={dci:${Object.keys(variants?.dciCompare?.claude || {}).length + Object.keys(variants?.dciCompare?.codex || {}).length}, easy:${Object.keys(variants?.skillrouterEasy?.claude || {}).length + Object.keys(variants?.skillrouterEasy?.codex || {}).length}}`);
+  console.error(`Loaded: traces=${Object.keys(traces).length} experiments, scalingHard=${scalingHard.length}, easySummaries=${Object.keys(easySummaries).length} cells, variants=${Object.keys(variants.dciCompare.claude).length + Object.keys(variants.dciCompare.codex).length + Object.keys(variants.skillrouterEasy.claude).length + Object.keys(variants.skillrouterEasy.codex).length}`);
 
   const html = [
     renderHeader(),
     renderToc(),
     renderCoverage(),
-    renderClaudePaired(claudePaired),
-    renderCodexSmall(codexSmall, codexExt),
-    renderMediumCodex(codexExt),
+    renderClaudePaired(traces),
+    renderCodex150(traces),
+    renderCodex1K(traces),
     renderHardClaude(scalingHard),
-    renderHardCodex(codexHard),
-    renderEasyHost("claude", easy),
-    renderEasyHost("codex", easy),
-    renderEasyCompare(easy),
-    renderEasyTraces(easy, easyTraces),
+    renderHardCodex(traces),
+    renderEasyHost("claude", easySummaries),
+    renderEasyHost("codex", easySummaries),
+    renderEasyCompare(easySummaries, traces),
     renderVariants(variants),
     "</body></html>",
   ].join("\n");
 
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, html);
-  console.error(`Wrote ${outPath} (${(html.length / 1024).toFixed(0)} KB)`);
+  console.error(`Wrote ${outPath} (${(html.length / 1024).toFixed(0)} KB, ${(html.length / 1024 / 1024).toFixed(2)} MB)`);
 }
 
 main().catch(e => { console.error(e.stack ?? e.message); process.exit(1); });
