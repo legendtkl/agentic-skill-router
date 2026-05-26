@@ -423,6 +423,12 @@ test("skills disable on out-of-root symlink with --allow-symlink-target-mutation
       fake.env,
     );
     assert.match(disabled.stderr, /warning: user:codex:linked-skill is a symlink/);
+    const linkedSkillPath = join(fake.codexHome, "skills", "linked-skill", "SKILL.md");
+    const realSkillPath = join(externalSkillDir, "SKILL.md");
+    assert.ok(
+      disabled.stderr.includes(`${linkedSkillPath} -> ${realSkillPath}`),
+      `disable warning should identify linked target path; got: ${disabled.stderr}`,
+    );
     await stat(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
 
     // enable also requires the flag.
@@ -443,6 +449,12 @@ test("skills disable on out-of-root symlink with --allow-symlink-target-mutation
       fake.env,
     );
     assert.match(enabled.stderr, /warning: user:codex:linked-skill is a symlink/);
+    const linkedDisabledPath = join(fake.codexHome, "skills", "linked-skill", "SKILL.md.agentic-skill-router-disabled");
+    const realDisabledPath = join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled");
+    assert.ok(
+      enabled.stderr.includes(`${linkedDisabledPath} -> ${realDisabledPath}`),
+      `enable warning should identify linked target path; got: ${enabled.stderr}`,
+    );
     await stat(join(externalSkillDir, "SKILL.md"));
   } finally {
     await fake.cleanup();
