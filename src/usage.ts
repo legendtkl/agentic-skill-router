@@ -1,8 +1,9 @@
 import { createReadStream } from "node:fs";
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
+import { atomicWriteJson } from "./atomic-write.ts";
 import type { HostName, Skill, UsageStat } from "./types.ts";
 
 /**
@@ -477,9 +478,10 @@ function validateCachedEntry(value: unknown): CachedFileEntry | null {
 async function writeCache(path: string, cache: UsageCache): Promise<void> {
   try {
     await mkdir(dirname(path), { recursive: true });
-    const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
-    await writeFile(tmp, JSON.stringify(cache) + "\n", { mode: 0o600 });
-    await rename(tmp, path);
+    // Durable atomic write: fsync the data, then fsync the parent dir after
+    // rename. randomUUID() in the temp name avoids same-millisecond collisions
+    // between concurrent writers.
+    await atomicWriteJson(path, cache, { mode: 0o600, durable: true, pretty: false });
   } catch {
     // Cache write failures must never break the user-visible scan. We
     // intentionally swallow errors here; the next scan will simply re-scan

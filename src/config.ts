@@ -1,6 +1,7 @@
-import { link, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { atomicWriteJson } from "./atomic-write.ts";
 import type { Config, RouteMode } from "./types.ts";
 
 export const DEFAULT_CONFIG_PATH = join(homedir(), ".agentic-skill-router", "config.json");
@@ -140,17 +141,17 @@ export async function loadRawConfigObject(path: string = configPath()): Promise<
 
 /**
  * Atomically write the given config object to disk: write a temp file in the
- * same directory then `rename` it into place so a crash during the write
- * cannot leave a partial file at the canonical path.
+ * same directory, fsync it, then `rename` it into place and fsync the parent
+ * directory so the write survives an abrupt power loss. The temp filename
+ * includes randomUUID() so two writers in the same millisecond cannot collide
+ * on the temp path.
  */
 export async function saveRawConfigObject(
   config: Record<string, unknown>,
   path: string = configPath(),
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
-  await writeFile(tmp, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
-  await rename(tmp, path);
+  await atomicWriteJson(path, config, { mode: 0o600, durable: true });
 }
 
 /**
