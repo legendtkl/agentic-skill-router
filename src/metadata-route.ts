@@ -1,6 +1,7 @@
 import {
   boundaryTermsFor,
   compact,
+  GENERIC_TERM_WEIGHT,
   isCjk,
   isGenericTerm,
   isShortLatinTerm,
@@ -234,7 +235,7 @@ function scoreIndexedSkill(candidate: IndexedSkill, query: QueryPlan, idf: Map<s
       const quality = matchQuality(term, item);
       if (quality <= 0) continue;
       const generic = isGenericTerm(term);
-      const genericFactor = generic ? 0.15 : 1;
+      const genericFactor = generic ? GENERIC_TERM_WEIGHT : 1;
       const contribution = item.weight * (idf.get(term) ?? 1) * quality * genericFactor;
       rawScore += contribution;
       if (generic) matchedGenericTerms.add(term);
