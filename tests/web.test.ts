@@ -1495,3 +1495,57 @@ test("computeVirtualWindow clamps stale scrollTop so a shrunken filter still ren
   assert.equal(fullyVisible.topHeight, 0);
   assert.equal(fullyVisible.bottomHeight, 0);
 });
+
+test("computeVirtualWindow degenerate: viewportHeight=0 with overscan=0 yields empty window; default overscan prevents blank render", async () => {
+  const { server, url } = await startWebServer({ hostName: "claude-code", port: 0 });
+  let computeVirtualWindow: (opts: {
+    total: number;
+    rowHeight: number;
+    viewportHeight: number;
+    scrollTop: number;
+    overscan: number;
+  }) => { first: number; last: number; topHeight: number; bottomHeight: number };
+  try {
+    const pageRes = await fetch(url);
+    assert.equal(pageRes.status, 200);
+    const page = await pageRes.text();
+    const match = page.match(/function computeVirtualWindow\(opts\) \{([\s\S]*?)\n {4}\}\n/);
+    assert.ok(match, "expected computeVirtualWindow source in the rendered page");
+    const body = match![1]!;
+    const factory = new Function(
+      "DEFAULT_ROW_HEIGHT",
+      "VIRTUAL_OVERSCAN",
+      `return function computeVirtualWindow(opts) {${body}\n}`,
+    );
+    computeVirtualWindow = factory(64, 6);
+  } finally {
+    await closeServer(server);
+  }
+
+  // Edge case: viewportHeight=0 and overscan=0 → visibleCount=0 so the
+  // window collapses (first===last). This can only happen if a caller
+  // explicitly passes overscan:0; the real render path uses the page constant
+  // VIRTUAL_OVERSCAN=6, which produces visibleCount=12 even with a zero
+  // viewport and therefore always renders rows when total>0.
+  const degenerate = computeVirtualWindow({
+    total: 5,
+    rowHeight: 40,
+    viewportHeight: 0,
+    scrollTop: 0,
+    overscan: 0,
+  });
+  assert.equal(degenerate.first, degenerate.last, "window is empty when viewportHeight=0 and overscan=0");
+
+  // With the real default overscan (6) the window is non-empty even when
+  // clientHeight hasn't been measured yet (returns 0 before first layout).
+  const withOverscan = computeVirtualWindow({
+    total: 5,
+    rowHeight: 40,
+    viewportHeight: 0,
+    scrollTop: 0,
+    overscan: 6,
+  });
+  assert.ok(withOverscan.last > withOverscan.first, "default overscan keeps the window non-empty when viewportHeight=0");
+  assert.equal(withOverscan.first, 0);
+  assert.equal(withOverscan.last, 5);
+});

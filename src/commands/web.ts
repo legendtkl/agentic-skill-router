@@ -1822,11 +1822,20 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       const header = renderListHeader();
       const scroll = document.createElement("div");
       scroll.className = "list-scroll";
+      // Make the scroll container keyboard-focusable so users can reach it
+      // with Tab and then use ↑/↓/PageUp/PageDown/Home/End to scroll.
+      // Without this, keyboard users can only Tab through the currently
+      // rendered buttons; once focus leaves the last visible row the rest of
+      // the virtual list is unreachable — a regression vs. the pre-virtual UI
+      // where every button was in the DOM.
+      scroll.tabIndex = 0;
+      scroll.setAttribute("aria-label", "Skill list");
       const top = document.createElement("div");
       top.className = "virtual-spacer virtual-spacer-top";
       top.style.height = "0px";
       const rowsHost = document.createElement("div");
       rowsHost.className = "virtual-rows";
+      rowsHost.setAttribute("role", "list");
       const bottom = document.createElement("div");
       bottom.className = "virtual-spacer virtual-spacer-bottom";
       bottom.style.height = "0px";
@@ -1954,6 +1963,7 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
     function renderRow(skill) {
       const row = document.createElement("article");
       row.className = "row";
+      row.setAttribute("role", "listitem");
 
       const title = document.createElement("div");
       title.className = "name";
