@@ -1,9 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { networkInterfaces } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep as pathSep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStrict } from "../args.ts";
 import { disableSkill, enableSkill } from "../apply.ts";
@@ -41,11 +41,18 @@ interface WebServerOptions {
   port?: number;
   bind?: string;
   dangerouslyBindPublic?: boolean;
+  /**
+   * Allowlist of directories that may be used as `projectPath` for
+   * project-scope `/api/skills` requests. Each entry is canonicalized
+   * (`resolve()` + `realpath()`) at server start. When omitted, defaults
+   * to `[process.cwd()]`.
+   */
+  projectRoots?: string[];
 }
 
 export async function cmdWeb(argv: string[], hostName: HostName): Promise<number> {
   if (argv.includes("-h") || argv.includes("--help")) {
-    console.log(`agentic-skill-router skills web [--port=N] [--bind=ADDR] [--dangerously-bind-public]
+    console.log(`agentic-skill-router skills web [--port=N] [--bind=ADDR] [--dangerously-bind-public] [--project-root=DIR ...]
 
 Starts a localhost web UI for viewing, disabling, and enabling skills.
 
@@ -55,6 +62,12 @@ UI on a public or LAN interface. Doing so allows anyone on the network to read
 and mutate local skill files; --dangerously-bind-public also requires the
 mutation token for read endpoints and enforces Origin/Referer/Host checks on
 mutations.
+
+Project-scope API requests (\`/api/skills?scope=project&projectPath=...\`) are
+restricted to an allowlist of directories. The allowlist defaults to the
+current working directory; pass --project-root=<dir> one or more times to
+override it. Each accepted path must equal or be a subdirectory of one of
+the allowed roots (after symlink resolution).
 `);
     return 0;
   }
@@ -67,6 +80,7 @@ mutations.
         port: { type: "string", short: "p" },
         bind: { type: "string" },
         "dangerously-bind-public": { type: "boolean" },
+        "project-root": { type: "string", multiple: true },
       },
     },
   });
@@ -75,14 +89,19 @@ mutations.
   if (port === null) return 2;
   const bind = (values.bind as string | undefined) ?? "127.0.0.1";
   const dangerouslyBindPublic = values["dangerously-bind-public"] === true;
+  const projectRootValues = values["project-root"] as string[] | undefined;
 
   try {
-    const { server, url } = await startWebServer({
+    const serverOpts: WebServerOptions = {
       hostName,
       port: port ?? 8787,
       bind,
       dangerouslyBindPublic,
-    });
+    };
+    if (projectRootValues && projectRootValues.length > 0) {
+      serverOpts.projectRoots = projectRootValues;
+    }
+    const { server, url } = await startWebServer(serverOpts);
     console.log(`agentic-skill-router web UI listening on ${url}`);
     console.log("Press Ctrl+C to stop.");
 
@@ -113,6 +132,9 @@ export async function startWebServer(opts: WebServerOptions): Promise<StartWebSe
         `Re-run with --dangerously-bind-public if you really want to expose the local skill manager to the network.`,
     );
   }
+  const projectRootAllowlist = await canonicalizeProjectRoots(
+    opts.projectRoots && opts.projectRoots.length > 0 ? opts.projectRoots : [process.cwd()],
+  );
   const basicAuth: BasicAuthCredential | null = !loopback
     ? { username: "agentic-skill-router", password: randomBytes(24).toString("base64url") }
     : null;
@@ -141,6 +163,7 @@ export async function startWebServer(opts: WebServerOptions): Promise<StartWebSe
     enforceOriginChecks,
     expectedHosts: enforceOriginChecks ? computeExpectedHosts(bind, opts.port ?? 8787) : null,
     basicAuth,
+    projectRootAllowlist,
   };
   const server = createServer((req, res) => {
     void handleRequest(req, res, opts.hostName, mutationToken, security);
@@ -175,6 +198,13 @@ interface SecurityOptions {
   enforceOriginChecks: boolean;
   expectedHosts: Set<string> | null;
   basicAuth: BasicAuthCredential | null;
+  /**
+   * Canonicalized list of directories accepted as `projectPath` for
+   * project-scope requests. Any request whose `projectPath` does not
+   * resolve to a path equal to or beneath one of these entries is
+   * rejected with HTTP 403.
+   */
+  projectRootAllowlist: string[];
 }
 
 interface BasicAuthCredential {
@@ -266,21 +296,21 @@ async function handleRequest(
       const requestedHost = parseWebHost(url.searchParams.get("agent") ?? url.searchParams.get("host"), hostName);
       const scope = parseScope(url.searchParams.get("scope"));
       const projectPath = url.searchParams.get("projectPath") ?? "";
-      const result = await listWebSkills(requestedHost, scope, projectPath);
+      const result = await listWebSkills(requestedHost, scope, projectPath, security.projectRootAllowlist);
       sendJson(res, 200, result);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/skills/disable") {
       assertMutationRequest(req, mutationToken, security);
       const body = await readJsonBody(req);
-      const result = await mutateWebSkill(hostName, body, "disable");
+      const result = await mutateWebSkill(hostName, body, "disable", security.projectRootAllowlist);
       sendJson(res, 200, result);
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/skills/enable") {
       assertMutationRequest(req, mutationToken, security);
       const body = await readJsonBody(req);
-      const result = await mutateWebSkill(hostName, body, "enable");
+      const result = await mutateWebSkill(hostName, body, "enable", security.projectRootAllowlist);
       sendJson(res, 200, result);
       return;
     }
@@ -291,13 +321,18 @@ async function handleRequest(
   }
 }
 
-async function listWebSkills(hostName: HostName, scope: WebScope, projectPath: string): Promise<{
+async function listWebSkills(
+  hostName: HostName,
+  scope: WebScope,
+  projectPath: string,
+  projectRootAllowlist: string[],
+): Promise<{
   host: HostName;
   scope: WebScope;
   projectPath: string | null;
   skills: WebSkill[];
 }> {
-  const host = createScopedHost(hostName, scope, projectPath);
+  const host = await createScopedHost(hostName, scope, projectPath, projectRootAllowlist);
   const skills = filterScope(await host.listSkills(), scope);
   const usage = await host.usageStats();
   const projected = skills.map((skill) => ({
@@ -322,6 +357,7 @@ async function mutateWebSkill(
   defaultHostName: HostName,
   body: unknown,
   operation: "disable" | "enable",
+  projectRootAllowlist: string[],
 ): Promise<{ ok: true; skill: WebSkill; skills: WebSkill[] }> {
   if (!isRecord(body)) throw new WebHttpError(400, "request body must be a JSON object");
   const hostName = parseWebHost(readString(body, "agent") ?? readString(body, "host"), defaultHostName);
@@ -330,7 +366,7 @@ async function mutateWebSkill(
   const instanceKey = readString(body, "instanceKey");
   if (!instanceKey) throw new WebHttpError(400, "instanceKey is required");
 
-  const host = createScopedHost(hostName, scope, projectPath);
+  const host = await createScopedHost(hostName, scope, projectPath, projectRootAllowlist);
   const skills = filterScope(await host.listSkills(), scope);
   const target = skills.find((skill) => skillInstanceKey(skill.id, skill.skillMdPath) === instanceKey);
   if (!target) throw new WebHttpError(404, "skill not found");
@@ -344,7 +380,7 @@ async function mutateWebSkill(
     await enableSkill(target, { statePath, host: host.name, allowOutOfRoot });
   }
 
-  const refreshed = await listWebSkills(hostName, scope, projectPath);
+  const refreshed = await listWebSkills(hostName, scope, projectPath, projectRootAllowlist);
   const changed = refreshed.skills.find((skill) => skill.instanceKey === instanceKey);
   if (!changed) throw new WebHttpError(500, "skill changed but could not be reloaded");
   return { ok: true, skill: changed, skills: refreshed.skills };
@@ -461,11 +497,66 @@ function statusForDomainError(err: unknown): number {
   return 500;
 }
 
-function createScopedHost(hostName: HostName, scope: WebScope, projectPath: string): Host {
+async function createScopedHost(
+  hostName: HostName,
+  scope: WebScope,
+  projectPath: string,
+  projectRootAllowlist: string[],
+): Promise<Host> {
   if (scope === "global") return createHost(hostName);
   const trimmed = projectPath.trim();
   if (trimmed === "") throw new WebHttpError(400, "projectPath is required for project scope");
-  return createHost(hostName, { cwd: resolve(trimmed) });
+  const resolved = resolve(trimmed);
+  const canonical = await canonicalizePath(resolved);
+  assertProjectPathAllowed(canonical, projectRootAllowlist, resolved);
+  return createHost(hostName, { cwd: resolved });
+}
+
+async function canonicalizePath(input: string): Promise<string> {
+  try {
+    return await realpath(input);
+  } catch {
+    return input;
+  }
+}
+
+async function canonicalizeProjectRoots(roots: string[]): Promise<string[]> {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of roots) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (trimmed === "") continue;
+    const resolved = resolve(trimmed);
+    const canonical = await canonicalizePath(resolved);
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    out.push(canonical);
+  }
+  return out;
+}
+
+function assertProjectPathAllowed(
+  canonical: string,
+  projectRootAllowlist: string[],
+  originalResolved: string,
+): void {
+  if (projectRootAllowlist.length === 0) {
+    throw new WebHttpError(
+      403,
+      `projectPath \`${originalResolved}\` is outside the allowed project roots. ` +
+        `No project roots are configured; restart the web server with --project-root=<dir> to allow project-scope scans.`,
+    );
+  }
+  for (const root of projectRootAllowlist) {
+    if (canonical === root) return;
+    if (canonical.startsWith(root + pathSep)) return;
+  }
+  throw new WebHttpError(
+    403,
+    `projectPath \`${originalResolved}\` is outside the allowed project roots. ` +
+      `Allowed roots: ${projectRootAllowlist.join(", ")}`,
+  );
 }
 
 function filterScope(skills: Skill[], scope: WebScope): Skill[] {
