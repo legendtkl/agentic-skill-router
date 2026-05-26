@@ -970,7 +970,6 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       --field: rgba(255, 255, 255, 0.72);
       --field-disabled: rgba(255, 255, 255, 0.42);
       --button-muted: #eee;
-      --tooltip: #fffdf7;
       --segmented: #f2f3ee;
       --shadow: 0 18px 50px rgba(20, 30, 25, 0.08);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -1000,7 +999,6 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       --field: rgba(255, 255, 255, 0.08);
       --field-disabled: rgba(255, 255, 255, 0.05);
       --button-muted: rgba(255, 255, 255, 0.08);
-      --tooltip: #22251f;
       --segmented: rgba(255, 255, 255, 0.06);
       --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
       background:
@@ -1325,9 +1323,25 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
     .list {
       border: 1px solid var(--line);
       border-radius: 8px;
-      overflow: visible;
+      overflow: hidden;
       background: var(--panel);
       margin-top: 16px;
+    }
+    .list-scroll {
+      max-height: 540px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .list-scroll.empty-state { overflow: visible; }
+    .virtual-spacer {
+      width: 100%;
+      flex-shrink: 0;
+    }
+    .search-status {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.3;
     }
     .list-head,
     .row {
@@ -1345,6 +1359,7 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       font-weight: 750;
       letter-spacing: 0.08em;
       text-transform: uppercase;
+      background: var(--panel);
     }
     .list-head span:last-child {
       text-align: right;
@@ -1373,40 +1388,13 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       font-size: 11px;
       overflow-wrap: anywhere;
     }
-    .desc-wrap {
-      position: relative;
-      min-width: 0;
-    }
     .desc {
+      min-width: 0;
       color: var(--ink-soft);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       cursor: default;
-    }
-    .desc-wrap:hover .tooltip,
-    .desc-wrap:focus-within .tooltip {
-      opacity: 1;
-      transform: translateY(0);
-      pointer-events: auto;
-    }
-    .tooltip {
-      position: absolute;
-      left: 0;
-      top: calc(100% + 8px);
-      z-index: 10;
-      width: min(520px, 80vw);
-      padding: 12px;
-      border: 1px solid rgba(22, 22, 22, 0.14);
-      border-radius: 8px;
-      color: var(--ink);
-      background: var(--tooltip);
-      box-shadow: 0 16px 36px rgba(20, 30, 25, 0.14);
-      white-space: normal;
-      opacity: 0;
-      transform: translateY(-4px);
-      transition: opacity 140ms ease, transform 140ms ease;
-      pointer-events: none;
     }
     .badge {
       width: fit-content;
@@ -1494,7 +1482,7 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
         grid-template-columns: 1fr auto;
         gap: 10px 12px;
       }
-      .desc-wrap { grid-column: 1 / -1; }
+      .desc { grid-column: 1 / -1; }
       .badge { grid-column: 1; }
       .action { grid-column: 2; grid-row: 1; }
     }
@@ -1564,6 +1552,7 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
           <div class="control-group">
             <label class="control-label" for="searchInput">Search</label>
             <input id="searchInput" class="search-input" type="search" placeholder="Name, id, or description">
+            <div id="searchStatus" class="search-status" aria-live="polite">0 / 0 skills</div>
           </div>
           <div class="control-group">
             <label class="control-label" for="agentSelect">Agent</label>
@@ -1616,6 +1605,7 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       introTab: document.getElementById("introTab"),
       skillsTab: document.getElementById("skillsTab"),
       searchInput: document.getElementById("searchInput"),
+      searchStatus: document.getElementById("searchStatus"),
       agentSelect: document.getElementById("agentSelect"),
       globalBtn: document.getElementById("globalBtn"),
       projectBtn: document.getElementById("projectBtn"),
@@ -1627,6 +1617,24 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       list: document.getElementById("list"),
     };
 
+    // Virtualization state. Skills rows render at a uniform height in the
+    // current UI (same .row grid template, no expanding content), so we
+    // measure once and treat every row as that height.
+    const SEARCH_DEBOUNCE_MS = 150;
+    const VIRTUAL_OVERSCAN = 6;
+    const DEFAULT_ROW_HEIGHT = 64;
+    const virt = {
+      rowHeight: 0,
+      scrollEl: null,
+      topSpacer: null,
+      bottomSpacer: null,
+      rowsHost: null,
+      rafToken: 0,
+      lastSkills: null,
+      lastTotal: -1,
+    };
+    let searchDebounceTimer = 0;
+
     els.themeBtn.addEventListener("click", toggleTheme);
     els.introTab.addEventListener("click", () => setView("intro"));
     els.skillsTab.addEventListener("click", () => setView("skills"));
@@ -1635,8 +1643,12 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
     els.projectBtn.addEventListener("click", () => setScope("project"));
     els.refreshBtn.addEventListener("click", () => loadSkills());
     els.searchInput.addEventListener("input", () => {
-      state.query = els.searchInput.value;
-      render();
+      if (searchDebounceTimer) window.clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = window.setTimeout(() => {
+        searchDebounceTimer = 0;
+        state.query = els.searchInput.value;
+        render();
+      }, SEARCH_DEBOUNCE_MS);
     });
     els.projectPath.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
@@ -1759,16 +1771,159 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
     function render() {
       const visibleSkills = filteredSkills();
       els.count.textContent = countLabel(visibleSkills.length, state.skills.length);
+      updateSearchStatus(visibleSkills.length, state.skills.length);
+      virt.lastSkills = visibleSkills;
       if (state.scope === "project" && !state.projectPath.trim()) {
+        teardownVirtualList();
         els.list.innerHTML = '<div class="empty">Enter a project path to inspect project skills.</div>';
         return;
       }
       if (visibleSkills.length === 0) {
+        teardownVirtualList();
         els.list.innerHTML = '<div class="empty">' + (state.skills.length === 0 ? "No skills found." : "No skills match this search.") + '</div>';
         return;
       }
-      els.list.replaceChildren(renderListHeader(), ...visibleSkills.map(renderRow));
+      ensureVirtualList();
+      // Filtering or reloading changes the total. Jump back to the top of
+      // the new result set so the user sees matches immediately instead of
+      // landing in whatever scroll position the previous list had — and so
+      // a stale scrollTop never leaves the viewport past the end of a
+      // shrunken result set.
+      if (virt.lastTotal !== visibleSkills.length && virt.scrollEl) {
+        virt.scrollEl.scrollTop = 0;
+      }
+      virt.lastTotal = visibleSkills.length;
+      renderVirtualSlice();
     }
+
+    function updateSearchStatus(visible, total) {
+      if (!els.searchStatus) return;
+      els.searchStatus.textContent = visible + " / " + total + " skills";
+    }
+
+    function teardownVirtualList() {
+      virt.scrollEl = null;
+      virt.topSpacer = null;
+      virt.bottomSpacer = null;
+      virt.rowsHost = null;
+      // Force the next ensureVirtualList() + renderVirtualSlice() to treat
+      // the rebuilt scroll container as a total-changed transition so we
+      // restart at the top of the new list.
+      virt.lastTotal = -1;
+      if (virt.rafToken) {
+        cancelAnimationFrame(virt.rafToken);
+        virt.rafToken = 0;
+      }
+    }
+
+    function ensureVirtualList() {
+      if (virt.scrollEl && virt.scrollEl.isConnected) return;
+      teardownVirtualList();
+      const header = renderListHeader();
+      const scroll = document.createElement("div");
+      scroll.className = "list-scroll";
+      // Make the scroll container keyboard-focusable so users can reach it
+      // with Tab and then use ↑/↓/PageUp/PageDown/Home/End to scroll.
+      // Without this, keyboard users can only Tab through the currently
+      // rendered buttons; once focus leaves the last visible row the rest of
+      // the virtual list is unreachable — a regression vs. the pre-virtual UI
+      // where every button was in the DOM.
+      scroll.tabIndex = 0;
+      scroll.setAttribute("aria-label", "Skill list");
+      const top = document.createElement("div");
+      top.className = "virtual-spacer virtual-spacer-top";
+      top.style.height = "0px";
+      const rowsHost = document.createElement("div");
+      rowsHost.className = "virtual-rows";
+      rowsHost.setAttribute("role", "list");
+      const bottom = document.createElement("div");
+      bottom.className = "virtual-spacer virtual-spacer-bottom";
+      bottom.style.height = "0px";
+      scroll.append(top, rowsHost, bottom);
+      els.list.replaceChildren(header, scroll);
+      virt.scrollEl = scroll;
+      virt.topSpacer = top;
+      virt.bottomSpacer = bottom;
+      virt.rowsHost = rowsHost;
+      scroll.addEventListener("scroll", scheduleVirtualRender, { passive: true });
+    }
+
+    function scheduleVirtualRender() {
+      if (virt.rafToken) return;
+      virt.rafToken = requestAnimationFrame(() => {
+        virt.rafToken = 0;
+        renderVirtualSlice();
+      });
+    }
+
+    // Pure virtual-window math. Exported on globalThis for test harnesses to
+     // exercise without spinning up a DOM. Returns the [first, last) range and
+     // the spacer heights for a given scroll position.
+    function computeVirtualWindow(opts) {
+      const total = opts.total;
+      const rowHeight = opts.rowHeight > 0 ? opts.rowHeight : DEFAULT_ROW_HEIGHT;
+      const viewportHeight = Math.max(0, opts.viewportHeight);
+      const scrollTop = Math.max(0, opts.scrollTop);
+      const overscan = opts.overscan >= 0 ? opts.overscan : VIRTUAL_OVERSCAN;
+      if (total <= 0) {
+        return { first: 0, last: 0, topHeight: 0, bottomHeight: 0 };
+      }
+      const visibleCount = Math.ceil(viewportHeight / rowHeight) + overscan * 2;
+      const rawFirst = Math.floor(scrollTop / rowHeight) - overscan;
+      // Clamp first so it can never exceed total - visibleCount. Without
+      // this, a stale scrollTop (e.g. user filters the list down while
+      // scrolled near the bottom) would produce first === last === total and
+      // render an empty slice even though total > 0. The render path also
+      // resets scrollTop on total change for the UX win of jumping to the
+      // top of new results, but the clamp keeps the math correct in
+      // isolation regardless of caller behavior.
+      const maxFirst = Math.max(0, total - visibleCount);
+      const first = Math.max(0, Math.min(maxFirst, rawFirst));
+      const last = Math.min(total, first + visibleCount);
+      return {
+        first,
+        last,
+        topHeight: first * rowHeight,
+        bottomHeight: (total - last) * rowHeight,
+      };
+    }
+
+    function renderVirtualSlice() {
+      if (!virt.rowsHost || !virt.scrollEl) return;
+      const skills = virt.lastSkills || [];
+      if (skills.length === 0) {
+        virt.rowsHost.replaceChildren();
+        virt.topSpacer.style.height = "0px";
+        virt.bottomSpacer.style.height = "0px";
+        return;
+      }
+      const needsMeasurement = virt.rowHeight <= 0;
+      const win = computeVirtualWindow({
+        total: skills.length,
+        rowHeight: virt.rowHeight,
+        viewportHeight: virt.scrollEl.clientHeight || 0,
+        scrollTop: virt.scrollEl.scrollTop,
+        overscan: VIRTUAL_OVERSCAN,
+      });
+      const slice = skills.slice(win.first, win.last);
+      virt.topSpacer.style.height = win.topHeight + "px";
+      virt.bottomSpacer.style.height = win.bottomHeight + "px";
+      virt.rowsHost.replaceChildren(...slice.map(renderRow));
+      if (needsMeasurement && virt.rowsHost.firstElementChild) {
+        // Measure the first real rendered row and, if it differs from the
+        // default, recompute spacer heights once. Rows are uniform, so we only
+        // need to do this on the first paint.
+        const measured = virt.rowsHost.firstElementChild.getBoundingClientRect().height;
+        if (measured > 0 && Math.abs(measured - DEFAULT_ROW_HEIGHT) > 0.5) {
+          virt.rowHeight = measured;
+          renderVirtualSlice();
+        } else {
+          virt.rowHeight = measured > 0 ? measured : DEFAULT_ROW_HEIGHT;
+        }
+      }
+    }
+
+    globalThis.__agenticSkillRouterVirtual = { computeVirtualWindow };
 
     function filteredSkills() {
       const query = state.query.trim().toLowerCase();
@@ -1808,6 +1963,7 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
     function renderRow(skill) {
       const row = document.createElement("article");
       row.className = "row";
+      row.setAttribute("role", "listitem");
 
       const title = document.createElement("div");
       title.className = "name";
@@ -1817,16 +1973,14 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       id.textContent = skill.id;
       title.appendChild(id);
 
-      const descWrap = document.createElement("div");
-      descWrap.className = "desc-wrap";
-      descWrap.tabIndex = 0;
       const desc = document.createElement("div");
       desc.className = "desc";
-      desc.textContent = skill.description || "No description";
-      const tooltip = document.createElement("div");
-      tooltip.className = "tooltip";
-      tooltip.textContent = skill.description || "No description";
-      descWrap.append(desc, tooltip);
+      const descText = skill.description || "No description";
+      desc.textContent = descText;
+      // Use the native title attribute instead of a custom tooltip element so
+      // long descriptions are not clipped by the virtualized scroll container
+      // (.list-scroll uses overflow:auto/hidden).
+      desc.title = descText;
 
       const badge = document.createElement("div");
       badge.className = "badge" + (skill.isDisabled ? " disabled" : "");
@@ -1841,7 +1995,7 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       action.title = actionTitle(skill, action.textContent);
       action.addEventListener("click", () => mutate(skill));
 
-      row.append(title, descWrap, badge, action);
+      row.append(title, desc, badge, action);
       return row;
     }
 
