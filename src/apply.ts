@@ -272,8 +272,45 @@ export async function enableSkillFromState(
       // re-validate; let the downstream state-cleanup branch handle it.
       if (realTarget !== null) {
         const rootsResolved = await resolveExistingPaths(deps.allowedSkillRoots);
-        if (!isPathUnderAnyRoot(realTarget, rootsResolved) && !deps.allowOutOfRoot) {
-          throw new Error(symlinkMutationRefusalMessage(rec.id, probePath, realTarget));
+        if (!isPathUnderAnyRoot(realTarget, rootsResolved)) {
+          // Out-of-root. `--allow-symlink-target-mutation` is NOT a blanket
+          // bypass — it must only allow records this CLI itself wrote for a
+          // genuine symlink-targeted disable. The state file is plain JSON,
+          // so a tampered record could otherwise point `skillMdPath` at any
+          // file the attacker wants and ride the flag straight to a rename
+          // (#100). Restrict the bypass to:
+          //   (a) post-#97 records that captured `discoveredViaSymlink: true`
+          //       AND a `canonicalSkillMdPath` at disable time (proof the
+          //       disable CLI wrote them through `disableSkill`'s canonical
+          //       capture path), AND
+          //   (b) the canonical realpath today still matches the recorded
+          //       one (no symlink retarget between disable and now — mirror
+          //       the #97 `SkillSymlinkTargetMismatchError` guard that
+          //       `enableSkillPaths` enforces for the inventory path).
+          // Anything else (no flag, legacy record without canonical fields,
+          // canonical drift) refuses with a precise message naming why.
+          if (!deps.allowOutOfRoot) {
+            throw new Error(symlinkMutationRefusalMessage(rec.id, probePath, realTarget));
+          }
+          if (!rec.discoveredViaSymlink || !rec.canonicalSkillMdPath) {
+            throw new Error(unauthenticatedOutOfRootMessage(rec.id, probePath, realTarget));
+          }
+          // Compare canonical realpath today (suffix-stripped to SKILL.md
+          // form) against the recorded canonical, exactly like the existing
+          // #97 guard in `enableSkillPaths`. A mismatch means the symlink
+          // target was retargeted between disable and now and the user
+          // only ever approved a mutation on the originally-disabled file.
+          const currentCanonical = realTarget.endsWith(DISABLED_SUFFIX)
+            ? realTarget.slice(0, -DISABLED_SUFFIX.length)
+            : realTarget;
+          if (currentCanonical !== rec.canonicalSkillMdPath) {
+            throw new SkillSymlinkTargetMismatchError(
+              rec.id,
+              probePath,
+              rec.canonicalSkillMdPath,
+              currentCanonical,
+            );
+          }
         }
       }
     }
@@ -303,6 +340,27 @@ function symlinkMutationRefusalMessage(skillId: string, livePath: string, realTa
     `refusing to enable ${skillId}: skill resolves to a symlink target outside this host's skills root ` +
     `(linked target: ${linkedPart}). ` +
     `Re-run with --allow-symlink-target-mutation to modify the linked target.`
+  );
+}
+
+/**
+ * Refusal raised when `--allow-symlink-target-mutation` is set but the state
+ * record cannot be authenticated as one this CLI wrote for a genuine symlink
+ * disable (#100 follow-up). Either `discoveredViaSymlink` is unset/false or
+ * `canonicalSkillMdPath` is missing — both are populated by `disableSkill`
+ * for legitimate symlink-targeted disables since #97/PR #132, so their
+ * absence on an out-of-root record means either a tampered/hand-edited
+ * record or a pre-#97 legacy record we can't safely authenticate. Manual
+ * intervention is required rather than honouring the flag blindly.
+ */
+function unauthenticatedOutOfRootMessage(skillId: string, livePath: string, realTarget: string): string {
+  const linkedPart = realTarget !== livePath ? `${livePath} -> ${realTarget}` : livePath;
+  return (
+    `refusing to enable ${skillId}: state record path is out-of-root but cannot prove it ` +
+    `originated from a symlink mutation written by this CLI (canonical fields missing or mismatched). ` +
+    `Linked target: ${linkedPart}. ` +
+    `Manual repair required — re-disable the skill through the CLI so the canonical realpath is recorded, ` +
+    `or remove the stale disable record from state.`
   );
 }
 

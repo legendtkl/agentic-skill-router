@@ -1319,6 +1319,11 @@ test("skills enable refuses state-only out-of-root record without --allow-symlin
     const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
 
     const statePath = join(fake.stateDir, "state-codex.json");
+    // Populate `discoveredViaSymlink` + `canonicalSkillMdPath` so the record
+    // represents a legitimate symlink-targeted disable that THIS CLI wrote
+    // (post-#97 / PR #132 shape). The flag's bypass is now restricted to
+    // authenticated symlink records (#100 follow-up): records missing those
+    // fields refuse even with the flag.
     const state = {
       schema: 1,
       host: "codex",
@@ -1331,6 +1336,11 @@ test("skills enable refuses state-only out-of-root record without --allow-symlin
           pluginKey: null,
           disabledAt: new Date().toISOString(),
           reason: "manual",
+          discoveredViaSymlink: true,
+          // canonicalSkillMdPath is the SKILL.md-form realpath captured at
+          // disable time. `externalLive` is the canonical live path; the
+          // marker-suffix form lives at `externalDisabled` on disk today.
+          canonicalSkillMdPath: externalLive,
         },
       ],
     };
@@ -1360,7 +1370,9 @@ test("skills enable refuses state-only out-of-root record without --allow-symlin
     await stat(externalDisabled);
     await assertFileAbsent(externalLive);
 
-    // Step 2: re-run with the flag — same state-only path now succeeds.
+    // Step 2: re-run with the flag — same state-only path now succeeds
+    // because the record is authenticated (discoveredViaSymlink + canonical
+    // present, canonical matches realpath today).
     const enabled = await runCli(
       ["skills", "enable", "user:codex:drifted-skill", "--allow-symlink-target-mutation"],
       fake.env,
@@ -1694,6 +1706,217 @@ test("skills enable still orphan-cleans a broken-symlink record when canonical f
       !stateAfter.disabledSkills.some((r) => r.id === "user:codex:fully-gone-skill"),
       "orphan enable should clear the disable record",
     );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable refuses out-of-root record with flag when canonical fields are missing (#100 follow-up)", async () => {
+  // #100 follow-up: `--allow-symlink-target-mutation` MUST NOT be a blanket
+  // bypass. A tampered or hand-edited state record whose `skillMdPath`
+  // resolves out-of-root but lacks `discoveredViaSymlink` + `canonicalSkillMdPath`
+  // could otherwise ride the flag into an arbitrary-path rename. Restrict
+  // the bypass to records this CLI itself wrote for a genuine symlink
+  // disable; everything else must refuse even with the flag.
+  const fake = await makeFakeCodexUser();
+  try {
+    // Plant an out-of-root SKILL.md.agentic-skill-router-disabled, then
+    // hand-write a state record pointing at it through an in-root symlink
+    // WITHOUT the canonical fields a real CLI-driven disable would set.
+    const externalSkillDir = join(fake.root, "external-skills", "tampered-no-canonical");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalDisabled,
+      "---\nname: tampered-no-canonical\ndescription: planted out-of-root\n---\n",
+    );
+    const codexInRootDir = join(fake.codexHome, "skills", "tampered-stub");
+    await symlink(externalSkillDir, codexInRootDir);
+    const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
+
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const state = {
+      schema: 1,
+      host: "codex",
+      disabledSkills: [
+        {
+          id: "user:codex:tampered-no-canonical",
+          skillMdPath: recordedDisabledPath,
+          skillName: "tampered-no-canonical",
+          source: "user",
+          pluginKey: null,
+          disabledAt: new Date().toISOString(),
+          reason: "manual",
+          // Deliberately NO discoveredViaSymlink + NO canonicalSkillMdPath:
+          // this is the tampered-record shape #100 warned about.
+        },
+      ],
+    };
+    await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
+
+    let refused: unknown;
+    try {
+      await runCli(
+        ["skills", "enable", "user:codex:tampered-no-canonical", "--allow-symlink-target-mutation"],
+        fake.env,
+      );
+    } catch (err) {
+      refused = err;
+    }
+    assert.ok(refused, "enable with flag must still refuse a tampered record");
+    assert.equal((refused as { code?: number }).code, 1);
+    const refusedStderr = (refused as { stderr?: string }).stderr ?? "";
+    assert.match(refusedStderr, /refusing to enable user:codex:tampered-no-canonical/);
+    assert.match(refusedStderr, /cannot prove it originated from a symlink mutation written by this CLI/);
+    assert.match(refusedStderr, /canonical fields missing or mismatched/);
+    // Load-bearing safety: the out-of-root planted file was NOT renamed.
+    await stat(externalDisabled);
+    await assertFileAbsent(externalLive);
+    // State record still present — refusal must not silently drop it.
+    const stateAfter = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{ id: string }>;
+    };
+    assert.ok(
+      stateAfter.disabledSkills.some((r) => r.id === "user:codex:tampered-no-canonical"),
+      "refused enable must not drop the disable record",
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable succeeds with flag when discoveredViaSymlink + canonical matches realpath (#100 follow-up)", async () => {
+  // Companion to the refusal above: the authenticated symlink record shape
+  // (discoveredViaSymlink: true + canonicalSkillMdPath matching the
+  // realpath today) MUST proceed with the flag. This is the legitimate
+  // path-shifting scenario where a user disabled via the CLI through a
+  // symlink and now wants to re-enable.
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "authenticated-skill");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalDisabled,
+      "---\nname: authenticated-skill\ndescription: legitimate symlink-disabled record\n---\n",
+    );
+    const codexInRootDir = join(fake.codexHome, "skills", "authenticated-stub");
+    await symlink(externalSkillDir, codexInRootDir);
+    const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
+
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const state = {
+      schema: 1,
+      host: "codex",
+      disabledSkills: [
+        {
+          id: "user:codex:authenticated-skill",
+          skillMdPath: recordedDisabledPath,
+          skillName: "authenticated-skill",
+          source: "user",
+          pluginKey: null,
+          disabledAt: new Date().toISOString(),
+          reason: "manual",
+          discoveredViaSymlink: true,
+          canonicalSkillMdPath: externalLive,
+        },
+      ],
+    };
+    await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
+
+    const enabled = await runCli(
+      ["skills", "enable", "user:codex:authenticated-skill", "--allow-symlink-target-mutation"],
+      fake.env,
+    );
+    assert.equal(
+      enabled.stderr.includes("refusing to enable"),
+      false,
+      `authenticated enable with flag must not refuse; got: ${enabled.stderr}`,
+    );
+    await stat(externalLive);
+    await assertFileAbsent(externalDisabled);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable refuses with flag when canonical drifted from recorded realpath (#100 follow-up)", async () => {
+  // Symlink retarget scenario: record carries discoveredViaSymlink + a
+  // canonical, but the symlink target was retargeted between disable and
+  // now, so the realpath today differs from the recorded canonical. Even
+  // with the flag we must refuse — the user only ever approved a mutation
+  // on the originally-disabled file. Mirror the existing #97 mismatch
+  // guard from enableSkillPaths.
+  const fake = await makeFakeCodexUser();
+  try {
+    // The CURRENT symlink target (what realpath returns today).
+    const currentTargetDir = join(fake.root, "external-skills", "current-target");
+    await mkdir(currentTargetDir, { recursive: true });
+    const currentDisabled = join(currentTargetDir, "SKILL.md.agentic-skill-router-disabled");
+    await writeFile(
+      currentDisabled,
+      "---\nname: drifted\ndescription: current target after retarget\n---\n",
+    );
+    const codexInRootDir = join(fake.codexHome, "skills", "drift-stub");
+    await symlink(currentTargetDir, codexInRootDir);
+    const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
+
+    // The ORIGINAL canonical at disable time (different path — this is what
+    // the state record claims was disabled). Doesn't need to exist on disk
+    // anymore; we only compare strings against current realpath.
+    const originalCanonicalLive = join(
+      fake.root,
+      "external-skills",
+      "original-target",
+      "SKILL.md",
+    );
+
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const state = {
+      schema: 1,
+      host: "codex",
+      disabledSkills: [
+        {
+          id: "user:codex:drifted",
+          skillMdPath: recordedDisabledPath,
+          skillName: "drifted",
+          source: "user",
+          pluginKey: null,
+          disabledAt: new Date().toISOString(),
+          reason: "manual",
+          discoveredViaSymlink: true,
+          canonicalSkillMdPath: originalCanonicalLive,
+        },
+      ],
+    };
+    await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
+
+    let refused: unknown;
+    try {
+      await runCli(
+        ["skills", "enable", "user:codex:drifted", "--allow-symlink-target-mutation"],
+        fake.env,
+      );
+    } catch (err) {
+      refused = err;
+    }
+    assert.ok(refused, "drifted canonical with flag must refuse");
+    assert.equal((refused as { code?: number }).code, 1);
+    const refusedStderr = (refused as { stderr?: string }).stderr ?? "";
+    // Match the SkillSymlinkTargetMismatchError shape from src/types.ts.
+    assert.match(refusedStderr, /Refusing to modify skill "user:codex:drifted"/);
+    assert.match(refusedStderr, /now resolves to/);
+    assert.match(refusedStderr, /disable record was captured for/);
+    assert.ok(
+      refusedStderr.includes(originalCanonicalLive),
+      `mismatch error must surface the recorded canonical; got: ${refusedStderr}`,
+    );
+    // The current canonical file (what the symlink resolves to today) MUST
+    // NOT have been renamed.
+    await stat(currentDisabled);
+    await assertFileAbsent(join(currentTargetDir, "SKILL.md"));
   } finally {
     await fake.cleanup();
   }
