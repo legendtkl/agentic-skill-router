@@ -124,17 +124,25 @@ test("mode is honored on the created file", async () => {
     // Windows POSIX mode bits do not map cleanly to NTFS ACLs; skip.
     return;
   }
-  await withTempDir(async (dir) => {
-    const target = join(dir, "mode-600.txt");
-    await atomicWriteFile(target, "x", { mode: 0o600 });
-    const s = await stat(target);
-    assert.equal(s.mode & 0o777, 0o600);
+  // Temporarily zero the umask so open(O_CREAT) applies the requested mode
+  // exactly. Without this, a restrictive umask (e.g. 0o077) would mask out
+  // bits from the requested mode and cause the assertions to fail.
+  const savedUmask = process.umask(0);
+  try {
+    await withTempDir(async (dir) => {
+      const target = join(dir, "mode-600.txt");
+      await atomicWriteFile(target, "x", { mode: 0o600 });
+      const s = await stat(target);
+      assert.equal(s.mode & 0o777, 0o600);
 
-    const target2 = join(dir, "mode-644.txt");
-    await atomicWriteFile(target2, "x", { mode: 0o644 });
-    const s2 = await stat(target2);
-    assert.equal(s2.mode & 0o777, 0o644);
-  });
+      const target2 = join(dir, "mode-644.txt");
+      await atomicWriteFile(target2, "x", { mode: 0o644 });
+      const s2 = await stat(target2);
+      assert.equal(s2.mode & 0o777, 0o644);
+    });
+  } finally {
+    process.umask(savedUmask);
+  }
 });
 
 test("on a serialization error, the temp file is cleaned up", async () => {

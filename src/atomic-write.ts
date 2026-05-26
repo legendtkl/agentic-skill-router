@@ -117,32 +117,23 @@ function buildTempPath(targetPath: string): string {
 }
 
 /**
- * Best-effort fsync of a directory so a rename within it is durable. On
- * platforms that do not allow opening a directory fd (e.g. Windows) this is
- * a no-op: the durability guarantee degrades to "file content is on disk,
- * directory entry may not be" which is the same as what existed before this
- * helper landed.
+ * Best-effort fsync of a directory so a rename within it is durable. Any
+ * error is silently swallowed: the rename that moved data into place has
+ * already completed, so a directory-fsync failure only means the directory
+ * entry itself may not be persisted after a sudden power loss — the same
+ * guarantee that existed before this helper. Silently ignoring all errors
+ * also ensures we never surface a spurious failure to callers on platforms
+ * or filesystems that reject directory fsyncs (Windows, some network FSes,
+ * etc.).
  */
 async function fsyncDirectory(dirPath: string): Promise<void> {
   let dirHandle: Awaited<ReturnType<typeof open>> | null = null;
   try {
     dirHandle = await open(dirPath, "r");
     await dirHandle.sync();
-  } catch (err: unknown) {
-    const code = (err as NodeJS.ErrnoException).code;
-    // EISDIR / EPERM / EINVAL / ENOTSUP / ENOSYS — any of these mean the
-    // platform refused to fsync the directory. Treat as best-effort.
-    if (
-      code === "EISDIR" ||
-      code === "EPERM" ||
-      code === "EINVAL" ||
-      code === "ENOTSUP" ||
-      code === "ENOSYS" ||
-      code === "EACCES"
-    ) {
-      return;
-    }
-    throw err;
+  } catch {
+    // Intentionally swallow every error. Directory fsync is advisory; its
+    // failure does not affect the safety of data already renamed into place.
   } finally {
     if (dirHandle) {
       try {
