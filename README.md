@@ -373,6 +373,42 @@ definition. `metadataHitRate` is reported in `auto` and `metadata` modes; it
 is `n/a` in `lexical` and `dci`. `dciEscalationRate` is meaningful only in
 `auto` mode and is `n/a` elsewhere.
 
+### DCI grep/find `--regex` is power-user mode
+
+`skills dci grep` and `skills dci find` default to literal substring matching,
+which is the recommended path for both humans and agents. Passing `--regex`
+enables ECMAScript regex matching against every line of every disabled
+`SKILL.md` and is treated as an advanced/power-user surface. To protect the
+shared corpus walker from catastrophic-backtracking (ReDoS) inputs, the CLI
+applies a static guard before compiling the pattern AND a per-line wall-clock
+deadline at match time:
+
+Static guard (rejects with exit code 2 and `DciRegexComplexityError`):
+
+- Length cap (200 characters).
+- A quantifier (`+`, `*`, `?`, `{n,}`, `{n,m}` with `m > 10`) applied to a
+  group whose body itself contains another quantifier — the canonical
+  nested-repetition ReDoS shape. Covers `(a+)+`, `(.*)*`, `(a?)+`,
+  `(a{1,})+`, `(a+){2,}`, `([a-z]+){2,}`, and so on.
+- A quantifier applied to a group whose top-level alternatives share a
+  common prefix — e.g. `(a|aa)+`, `(foo|foobar)+`.
+- `{n,}` with no upper bound, or `{n,m}` with `m > 10`, applied to a group.
+- More than 4 consecutive quantified atoms with the same signature — e.g.
+  `a*a*a*a*a*…`, `\d*\d*\d*…`, `[a-z]*[a-z]*…`. These patterns have no
+  groups and slip past every other rule but produce exponential
+  backtracking that the post-hoc per-line deadline cannot pre-empt.
+
+Runtime deadline (rejects with exit code 2 and `DciRegexTimeoutError`):
+
+- A single per-line match that exceeds 50ms is treated as catastrophic and
+  aborts further matching for that pattern. The deadline is post-hoc — the
+  engine cannot be pre-empted without a Worker — so one slow line can still
+  burn its 50ms, but aggregate damage stays bounded.
+
+The static heuristic is intentionally over-rejecting on a power-user surface;
+if it flags a pattern you believe is safe, rewrite without nested repetition
+or overlapping alternatives, or drop `--regex` for literal mode.
+
 Layout:
 
 ```text
