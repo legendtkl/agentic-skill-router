@@ -533,26 +533,56 @@ async function reconcilePendingOp(
   pending: PendingOp,
   state: State,
 ): Promise<PendingResolution> {
-  const liveExists = await fileExists(pending.livePath);
-  const disabledExists = await fileExists(pending.disabledPath);
   // The pending op's own `instanceKey` is the canonical journal key. The
   // validator synthesizes it from `(id, disabledPath)` for legacy entries that
   // predate the field, so it is always populated here.
   const pendingInstanceKey = pending.instanceKey;
 
+  // P1 (#97 round 3): the disable / enable rename now flows through the
+  // canonical realpath (P1.B), so a crash AFTER the rename but BEFORE the
+  // final state save can leave the canonical disabled marker on disk while
+  // the in-root symlink at `pending.livePath` has been retargeted (by the
+  // user or some other tool) to a different file. Checking the symlink
+  // paths would then report "live absent / disabled absent" and roll back
+  // a record whose canonical disk file is actually in the renamed state —
+  // state and disk would silently diverge.
+  //
+  // Resolve which paths to consult: when we have a record (pending.record
+  // for disable, or the matching state record for enable) flagged
+  // `discoveredViaSymlink: true` AND carrying a `canonicalSkillMdPath`,
+  // make the commit-vs-rollback decision against the canonical paths
+  // instead. Otherwise (legacy record, missing canonical, or in-root skill)
+  // fall back to the original symlink-path behavior — the legacy shape
+  // predates the canonical guard and we have no other ground truth.
+  const recordForPaths = pending.op === "disable"
+    ? (pending.record ?? state.disabledSkills.find((r) => r.instanceKey === pendingInstanceKey))
+    : state.disabledSkills.find((r) => r.instanceKey === pendingInstanceKey);
+  const canonicalLive = recordForPaths?.discoveredViaSymlink && recordForPaths.canonicalSkillMdPath
+    ? recordForPaths.canonicalSkillMdPath
+    : null;
+  const checkLivePath = canonicalLive ?? pending.livePath;
+  const checkDisabledPath = canonicalLive
+    ? canonicalLive + DISABLED_SUFFIX
+    : pending.disabledPath;
+  const liveExists = await fileExists(checkLivePath);
+  const disabledExists = await fileExists(checkDisabledPath);
+
   if (pending.op === "disable") {
     if (disabledExists && !liveExists) {
       const baseRecord = pending.record ?? state.disabledSkills.find((r) => r.instanceKey === pendingInstanceKey);
-      // P1.C: a crash between rename and the post-rename canonical save (in
-      // the old two-phase shape), or any disable where the disable-time
-      // realpath silently failed, would leave the journal record flagged
+      // P1.C (#97 round 2): a disable where the disable-time realpath
+      // silently failed, or any legacy journal entry that predates the
+      // canonical capture, would leave the recovered record flagged
       // `discoveredViaSymlink: true` without a `canonicalSkillMdPath`. Then
       // enableSkillPaths' guard would treat the missing canonical as legacy
       // and silently skip the retarget check. Backfill the canonical now
       // (the disabled marker is on disk, so realpath works) before
       // committing the record so the safety net survives crash recovery.
+      // We prefer the canonical disabled-marker path when we have one, since
+      // the symlink at `pending.disabledPath` may already be retargeted and
+      // would resolve to the wrong file.
       const record = baseRecord && baseRecord.discoveredViaSymlink && !baseRecord.canonicalSkillMdPath
-        ? await backfillCanonical(baseRecord, pending.disabledPath)
+        ? await backfillCanonical(baseRecord, checkDisabledPath)
         : baseRecord;
       const withRecord = record ? addDisableRecord(state, record) : state;
       return { state: removePendingOp(withRecord, pendingInstanceKey), commit: "committed" };

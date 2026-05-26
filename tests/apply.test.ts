@@ -1535,6 +1535,185 @@ test("reconcilePendingOp backfills canonicalSkillMdPath on crash recovery (#97 P
   }
 });
 
+test("reconcilePendingOp consults canonical paths for symlink disable recovery (#97 round 3)", async () => {
+  // Threat scenario:
+  //   1. disable through an out-of-root symlink wrote the pending journal
+  //      entry and the rename of the canonical SKILL.md ran;
+  //   2. before the final state save committed the record, the process
+  //      crashed;
+  //   3. between crash and recovery, the in-root symlink got retargeted to
+  //      a different (empty) external dir.
+  //
+  // Pre-fix behavior: reconcilePendingOp checked fileExists against
+  // pending.livePath / pending.disabledPath, both of which now resolve
+  // through the retargeted symlink to a directory with no SKILL.md. That
+  // hits the `!live && !disabled` branch and ROLLS BACK the pending intent
+  // — state and disk diverge (the canonical disabled marker is still
+  // sitting at the ORIGINAL external target).
+  //
+  // Post-fix behavior: for `discoveredViaSymlink` records carrying
+  // `canonicalSkillMdPath`, the check uses canonical paths. The canonical
+  // disabled marker exists, the canonical live path does not — committed.
+  const { skill, statePath, externalDirA, symlinkSkillDir, cleanup } = await setupSymlinkSkill();
+  try {
+    // Put the disk in the post-rename / pre-state-save state by hand.
+    await rename(
+      join(externalDirA, "SKILL.md"),
+      join(externalDirA, "SKILL.md.agentic-skill-router-disabled"),
+    );
+    const canonicalLive = join(await realpath(externalDirA), "SKILL.md");
+    const canonicalDisabled = canonicalLive + ".agentic-skill-router-disabled";
+
+    // Hand-write the journal entry. canonicalSkillMdPath is in SKILL.md-form
+    // (suffix stripped), matching what disableSkill writes today.
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
+    const instanceKey = skillInstanceKey(skill.id, disabledPath);
+    const journalState = {
+      schema: 1,
+      host: "claude-code",
+      disabledSkills: [],
+      pendingOps: [{
+        instanceKey,
+        op: "disable",
+        id: skill.id,
+        livePath: skill.skillMdPath,
+        disabledPath,
+        startedAt: "2026-05-26T00:00:00.000Z",
+        record: {
+          instanceKey,
+          id: skill.id,
+          pluginKey: null,
+          skillMdPath: disabledPath,
+          skillName: skill.name,
+          source: "user",
+          disabledAt: "2026-05-26T00:00:00.000Z",
+          reason: "manual",
+          discoveredViaSymlink: true,
+          canonicalSkillMdPath: canonicalLive,
+        },
+      }],
+    };
+    await writeFile(statePath, JSON.stringify(journalState));
+
+    // Retarget the in-root symlink so the symlink-path checks would mislead
+    // recovery. The new external dir is fresh and contains no SKILL.md, so
+    // BOTH pending.livePath and pending.disabledPath resolve through it to
+    // nonexistent files — the pre-fix path-based branch would roll back.
+    await unlink(symlinkSkillDir);
+    const externalDirD = join(externalDirA, "..", "skill-d-empty");
+    await mkdir(externalDirD, { recursive: true });
+    await symlink(externalDirD, symlinkSkillDir);
+    // Sanity: confirm the path-based view really does see neither file.
+    assert.equal(await fileExists(skill.skillMdPath), false);
+    assert.equal(await fileExists(disabledPath), false);
+    // And the canonical view sees only the disabled marker.
+    assert.equal(await fileExists(canonicalLive), false);
+    assert.equal(await fileExists(canonicalDisabled), true);
+
+    const result = await reapplyMissing({ statePath, skills: [{ ...skill, outOfRoot: false }] });
+    // Must commit, not roll back. The retargeted symlink does not deceive
+    // recovery because canonical paths are consulted.
+    assert.deepEqual(result.recoveredCommits, [skill.id]);
+    assert.deepEqual(result.recoveredRollbacks, []);
+
+    const after = await loadState(statePath);
+    assert.equal(after.pendingOps?.length ?? 0, 0, "journal entry must be cleared");
+    assert.equal(after.disabledSkills.length, 1, "disable record must be committed");
+    assert.equal(after.disabledSkills[0]!.canonicalSkillMdPath, canonicalLive);
+    // Disk untouched: the canonical disabled marker is still there.
+    assert.equal(await fileExists(canonicalDisabled), true);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("reconcilePendingOp consults canonical paths for symlink enable recovery (#97 round 3)", async () => {
+  // Symmetric scenario for the enable journal:
+  //   1. enable through an out-of-root symlink wrote the pending journal
+  //      entry and the rename of the canonical disabled marker back to
+  //      live SKILL.md ran;
+  //   2. process crashed before clearing the disable record;
+  //   3. in-root symlink got retargeted to a fresh empty dir.
+  //
+  // Pre-fix: path-based fileExists sees neither file, hits the `!live &&
+  // !disabled` enable branch which COMMITS (removes the disable record).
+  // Disk reality: canonical SKILL.md is live at the original external
+  // target — committing happens to match disk by coincidence here, but
+  // for the path-based logic that's accidental. The asymmetric danger is
+  // the `disabledExists && !liveExists` rollback branch: if the path-based
+  // check reported disabled-present at the new symlink target but the
+  // canonical disabled marker was actually gone, the disable record would
+  // wrongly survive. Use canonical paths so the decision matches reality.
+  //
+  // To pin a deterministic divergence, point the retargeted symlink at a
+  // dir containing only a disabled marker. Path-based: disabled present,
+  // live absent → ROLLBACK (keeps disable record, but canonical SKILL.md is
+  // live — wrong). Canonical-based: live present, disabled absent →
+  // COMMIT (removes disable record — correct).
+  const { skill, statePath, externalDirA, symlinkSkillDir, cleanup } = await setupSymlinkSkill();
+  try {
+    const canonicalLive = join(await realpath(externalDirA), "SKILL.md");
+    const canonicalDisabled = canonicalLive + ".agentic-skill-router-disabled";
+    // Disk shape mimics post-rename of an enable: live present at canonical.
+    // (Already true from setupSymlinkSkill — externalDirA has SKILL.md.)
+    assert.equal(await fileExists(canonicalLive), true);
+
+    const disabledPath = skill.skillMdPath + ".agentic-skill-router-disabled";
+    const instanceKey = skillInstanceKey(skill.id, disabledPath);
+    const journalState = {
+      schema: 1,
+      host: "claude-code",
+      disabledSkills: [{
+        instanceKey,
+        id: skill.id,
+        pluginKey: null,
+        skillMdPath: disabledPath,
+        skillName: skill.name,
+        source: "user",
+        disabledAt: "2026-05-26T00:00:00.000Z",
+        reason: "manual",
+        discoveredViaSymlink: true,
+        canonicalSkillMdPath: canonicalLive,
+      }],
+      pendingOps: [{
+        instanceKey,
+        op: "enable",
+        id: skill.id,
+        livePath: skill.skillMdPath,
+        disabledPath,
+        startedAt: "2026-05-26T00:00:00.000Z",
+      }],
+    };
+    await writeFile(statePath, JSON.stringify(journalState));
+
+    // Retarget to a fresh dir containing only a disabled marker so the
+    // path-based view would mislead recovery into a rollback.
+    await unlink(symlinkSkillDir);
+    const externalDirE = join(externalDirA, "..", "skill-e-disabled-only");
+    await mkdir(externalDirE, { recursive: true });
+    await writeFile(join(externalDirE, "SKILL.md.agentic-skill-router-disabled"), "decoy");
+    await symlink(externalDirE, symlinkSkillDir);
+    // Confirm the deceptive path-based view.
+    assert.equal(await fileExists(skill.skillMdPath), false);
+    assert.equal(await fileExists(disabledPath), true);
+
+    const result = await reapplyMissing({ statePath, skills: [{ ...skill, outOfRoot: false }] });
+    // Canonical-based: live present, disabled absent → committed
+    // (disable record removed). Path-based would have rolled back.
+    assert.deepEqual(result.recoveredCommits, [skill.id]);
+    assert.deepEqual(result.recoveredRollbacks, []);
+
+    const after = await loadState(statePath);
+    assert.equal(after.pendingOps?.length ?? 0, 0);
+    assert.equal(after.disabledSkills.length, 0, "disable record must be removed");
+    // Canonical disk untouched.
+    assert.equal(await fileExists(canonicalLive), true);
+    assert.equal(await fileExists(canonicalDisabled), false);
+  } finally {
+    await cleanup();
+  }
+});
+
 test("legacy disable records without canonical fields still enable cleanly (#97 back-compat)", async () => {
   // A state file written before issue #97 has no `canonicalSkillMdPath` or
   // `discoveredViaSymlink` keys. loadState must accept the legacy shape and
