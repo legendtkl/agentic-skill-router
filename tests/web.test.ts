@@ -108,8 +108,8 @@ async function closeServer(server: Server): Promise<void> {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 }
 
-async function readMutationToken(url: string): Promise<string> {
-  const res = await fetch(url);
+async function readMutationToken(url: string, extraHeaders: Record<string, string> = {}): Promise<string> {
+  const res = await fetch(url, { headers: extraHeaders });
   assert.equal(res.status, 200);
   const page = await res.text();
   const match = page.match(/<meta name="agentic-skill-router-token" content="([^"]+)">/);
@@ -122,6 +122,12 @@ function mutationHeaders(token: string): Record<string, string> {
     "content-type": "application/json",
     "x-agentic-skill-router-token": token,
   };
+}
+
+function basicAuthHeader(credential: { username: string; password: string } | null): Record<string, string> {
+  if (!credential) return {};
+  const encoded = Buffer.from(`${credential.username}:${credential.password}`, "utf8").toString("base64");
+  return { authorization: `Basic ${encoded}` };
 }
 
 test("web UI serves logo asset and references it from the page", async () => {
@@ -326,6 +332,237 @@ test("web API requires mutation token and JSON content type", async () => {
           assert.equal(wrongType.status, 415);
 
           await stat(join(fixture.claudeHome, "skills", "global-skill", "SKILL.md"));
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
+test("startWebServer refuses to bind a non-loopback interface without --dangerously-bind-public", async () => {
+  await assert.rejects(
+    () => startWebServer({ hostName: "claude-code", port: 0, bind: "0.0.0.0" }),
+    (err) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /refusing to bind/i);
+      assert.match(err.message, /--dangerously-bind-public/);
+      return true;
+    },
+  );
+});
+
+test("startWebServer refuses an empty bind string (Node treats it as the wildcard)", async () => {
+  await assert.rejects(
+    () => startWebServer({ hostName: "claude-code", port: 0, bind: "" }),
+    (err) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /refusing to bind/i);
+      assert.match(err.message, /--dangerously-bind-public/);
+      return true;
+    },
+  );
+});
+
+test("startWebServer with --dangerously-bind-public warns, requires basic auth, and gates /api/skills reads on the token", async () => {
+  const fixture = await makeWebFixture();
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  const captured: string[] = [];
+  (process.stderr as unknown as { write: (chunk: string | Uint8Array) => boolean }).write = (chunk) => {
+    captured.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+    return true;
+  };
+  try {
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url, basicAuth } = await startWebServer({
+          hostName: "claude-code",
+          port: 0,
+          bind: "0.0.0.0",
+          dangerouslyBindPublic: true,
+        });
+        try {
+          const warning = captured.join("");
+          assert.match(warning, /WARNING: --dangerously-bind-public is set\./);
+          assert.match(warning, /Anyone who can reach this port/);
+          assert.ok(basicAuth);
+          assert.match(warning, /HTTP Basic auth is required/);
+          assert.match(warning, new RegExp(`username: ${basicAuth!.username}`));
+          assert.match(warning, new RegExp(`password: ${basicAuth!.password.replace(/[-/\\]/g, "\\$&")}`));
+
+          // GET / without basic auth must 401 (token in HTML is no longer free for LAN attackers).
+          const noAuthRoot = await fetch(url);
+          assert.equal(noAuthRoot.status, 401);
+          assert.match(noAuthRoot.headers.get("www-authenticate") ?? "", /^Basic/);
+
+          // GET /api/skills without basic auth must also 401.
+          const noAuthApi = await fetch(`${url}/api/skills?scope=global`);
+          assert.equal(noAuthApi.status, 401);
+
+          const authHeaders = basicAuthHeader(basicAuth);
+          const badUserAuthHeaders = basicAuthHeader({
+            username: `${basicAuth!.username}-bad`,
+            password: basicAuth!.password,
+          });
+
+          const badUserAuthApi = await fetch(`${url}/api/skills?scope=global`, { headers: badUserAuthHeaders });
+          assert.equal(badUserAuthApi.status, 401);
+
+          // With basic auth but without the mutation token, /api/skills still 403.
+          const noToken = await fetch(`${url}/api/skills?scope=global`, { headers: authHeaders });
+          assert.equal(noToken.status, 403);
+
+          const token = await readMutationToken(url, authHeaders);
+          const withToken = await fetch(`${url}/api/skills?scope=global`, {
+            headers: { ...authHeaders, "x-agentic-skill-router-token": token },
+          });
+          assert.equal(withToken.status, 200);
+          const data = await withToken.json() as SkillsResponse;
+          assert.ok(data.skills.some((skill) => skill.id === "user:global-skill"));
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    (process.stderr as unknown as { write: typeof originalWrite }).write = originalWrite;
+    await fixture.cleanup();
+  }
+});
+
+test("public-bound mutation requests require a matching Origin header", async () => {
+  const fixture = await makeWebFixture();
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  (process.stderr as unknown as { write: (chunk: string | Uint8Array) => boolean }).write = () => true;
+  try {
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url, basicAuth } = await startWebServer({
+          hostName: "claude-code",
+          port: 0,
+          bind: "0.0.0.0",
+          dangerouslyBindPublic: true,
+        });
+        try {
+          const authHeaders = basicAuthHeader(basicAuth);
+          const token = await readMutationToken(url, authHeaders);
+          const parsedUrl = new URL(url);
+          const listRes = await fetch(`${url}/api/skills?scope=global`, {
+            headers: { ...authHeaders, "x-agentic-skill-router-token": token },
+          });
+          assert.equal(listRes.status, 200);
+          const listData = await listRes.json() as SkillsResponse;
+          const target = listData.skills.find((skill) => skill.id === "user:global-skill");
+          assert.ok(target);
+
+          const badOrigin = await fetch(`${url}/api/skills/disable`, {
+            method: "POST",
+            headers: {
+              ...authHeaders,
+              ...mutationHeaders(token),
+              origin: "http://evil.example.com",
+            },
+            body: JSON.stringify({ scope: "global", instanceKey: target!.instanceKey }),
+          });
+          assert.equal(badOrigin.status, 403);
+          const badBody = await badOrigin.json() as { error: string };
+          assert.match(badBody.error, /Origin/);
+
+          // Cross-port Origin (same hostname, different port) must also be rejected.
+          const crossPortOrigin = await fetch(`${url}/api/skills/disable`, {
+            method: "POST",
+            headers: {
+              ...authHeaders,
+              ...mutationHeaders(token),
+              origin: `${parsedUrl.protocol}//${parsedUrl.hostname}:1`,
+            },
+            body: JSON.stringify({ scope: "global", instanceKey: target!.instanceKey }),
+          });
+          assert.equal(crossPortOrigin.status, 403);
+
+          // Bare-host Origin (no port) must be rejected even though the hostname matches.
+          const portlessOrigin = await fetch(`${url}/api/skills/disable`, {
+            method: "POST",
+            headers: {
+              ...authHeaders,
+              ...mutationHeaders(token),
+              origin: `${parsedUrl.protocol}//${parsedUrl.hostname}`,
+            },
+            body: JSON.stringify({ scope: "global", instanceKey: target!.instanceKey }),
+          });
+          assert.equal(portlessOrigin.status, 403);
+
+          // SKILL.md must still be on disk (not renamed to disabled).
+          await stat(join(fixture.claudeHome, "skills", "global-skill", "SKILL.md"));
+
+          const goodOrigin = await fetch(`${url}/api/skills/disable`, {
+            method: "POST",
+            headers: {
+              ...authHeaders,
+              ...mutationHeaders(token),
+              origin: `${parsedUrl.protocol}//${parsedUrl.host}`,
+            },
+            body: JSON.stringify({ scope: "global", instanceKey: target!.instanceKey }),
+          });
+          assert.equal(goodOrigin.status, 200);
+          await stat(join(fixture.claudeHome, "skills", "global-skill", "SKILL.md.agentic-skill-router-disabled"));
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    (process.stderr as unknown as { write: typeof originalWrite }).write = originalWrite;
+    await fixture.cleanup();
+  }
+});
+
+test("loopback-bound mutation requests still succeed without Origin/Referer", async () => {
+  const fixture = await makeWebFixture();
+  try {
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url } = await startWebServer({ hostName: "claude-code", port: 0 });
+        try {
+          const token = await readMutationToken(url);
+          const listRes = await fetch(`${url}/api/skills?scope=global`);
+          assert.equal(listRes.status, 200);
+          const listData = await listRes.json() as SkillsResponse;
+          const target = listData.skills.find((skill) => skill.id === "user:global-skill");
+          assert.ok(target);
+
+          // node fetch sends a Host header but no Origin or Referer for this request.
+          // The loopback default must accept it.
+          const disableRes = await fetch(`${url}/api/skills/disable`, {
+            method: "POST",
+            headers: mutationHeaders(token),
+            body: JSON.stringify({ scope: "global", instanceKey: target!.instanceKey }),
+          });
+          assert.equal(disableRes.status, 200);
+          await stat(join(fixture.claudeHome, "skills", "global-skill", "SKILL.md.agentic-skill-router-disabled"));
         } finally {
           await closeServer(server);
         }
