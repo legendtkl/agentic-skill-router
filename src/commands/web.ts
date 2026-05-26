@@ -715,25 +715,6 @@ function assertAncestorsAllowed(
 }
 
 /**
- * Reject requests where one of the actual `<ancestor>/<skillsDir>`
- * containers the host would open is a symlink (or otherwise resolves) to
- * a directory outside the allowlist.
- *
- * Production `walkSkillsDir` (`src/scan.ts`) calls
- * `readdir(skillsRoot, ...)`, which follows symlinks at the kernel level.
- * The per-entry symlink check inside that function only flips
- * `outOfRoot=true` for entries that are themselves symlinks — if the
- * SKILLS-ROOT container is a symlink, every real subdirectory of the
- * link target is reported as in-root and `canDisable: true`. A web
- * mutation against such a skill then renames `SKILL.md` outside the
- * allowlist via the symlink. We close that path here by realpath-ing
- * each candidate skills root and requiring containment.
- *
- * Both `.claude/skills` and `.agents/skills` are checked even though
- * only one matches the active host: the cost is two extra `lstat`s per
- * ancestor and it avoids coupling this guard to host-name plumbing.
- */
-/**
  * Reject project-scope mutations whose target `SKILL.md` realpath
  * escapes the allowlist. This catches the case where the SKILLS-ROOT
  * container is a real directory (passes `assertProjectSkillRootsAllowed`)
@@ -776,6 +757,25 @@ async function assertProjectSkillTargetAllowed(
   );
 }
 
+/**
+ * Reject requests where one of the actual `<ancestor>/<skillsDir>`
+ * containers the host would open is a symlink (or otherwise resolves) to
+ * a directory outside the allowlist.
+ *
+ * Production `walkSkillsDir` (`src/scan.ts`) calls
+ * `readdir(skillsRoot, ...)`, which follows symlinks at the kernel level.
+ * The per-entry symlink check inside that function only flips
+ * `outOfRoot=true` for entries that are themselves symlinks — if the
+ * SKILLS-ROOT container is a symlink, every real subdirectory of the
+ * link target is reported as in-root and `canDisable: true`. A web
+ * mutation against such a skill then renames `SKILL.md` outside the
+ * allowlist via the symlink. We close that path here by realpath-ing
+ * each candidate skills root and requiring containment.
+ *
+ * Both `.claude/skills` and `.agents/skills` are checked even though
+ * only one matches the active host: the cost is two extra `lstat`s per
+ * ancestor and it avoids coupling this guard to host-name plumbing.
+ */
 async function assertProjectSkillRootsAllowed(
   scanAncestors: string[],
   projectRootAllowlist: string[],
