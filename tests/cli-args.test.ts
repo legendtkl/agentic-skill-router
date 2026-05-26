@@ -516,6 +516,152 @@ test("skills disable still rejects builtin out-of-root symlink skills", async ()
   }
 });
 
+test("skills status never silently re-disables out-of-root symlink targets after external restore", async () => {
+  // Threat scenario (issue #124): user disables a skill that resolves through
+  // an out-of-root symlink (with --allow-symlink-target-mutation). Some
+  // external process later restores the live SKILL.md at the linked target.
+  // The next `skills status` call must NOT silently rename the file at the
+  // linked target back to `.agentic-skill-router-disabled`; that would mutate
+  // a file outside the host's skills root from a read-only-looking command.
+  // Instead, status reports the skill in a "skipped (manual repair required)"
+  // section and prints the explicit fix command.
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "linked-skill");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalLive,
+      "---\nname: linked-skill\ndescription: linked user skill\n---\n",
+    );
+    await symlink(externalSkillDir, join(fake.codexHome, "skills", "linked-skill"));
+
+    // 1) Explicitly opt in to disabling the symlink target. This is the only
+    //    path that writes a disable record for an out-of-root skill.
+    const disabled = await runCli(
+      ["skills", "disable", "user:codex:linked-skill", "--yes", "--allow-symlink-target-mutation"],
+      fake.env,
+    );
+    assert.match(disabled.stderr, /warning: user:codex:linked-skill is a symlink/);
+    await stat(externalDisabled);
+
+    // 2) Simulate an external process restoring the live SKILL.md (e.g. a
+    //    plugin reinstall that re-creates the file behind our back).
+    await rm(externalDisabled);
+    await writeFile(
+      externalLive,
+      "---\nname: linked-skill\ndescription: linked user skill (restored)\n---\n",
+    );
+
+    // 3) Run `skills status`. The fix: it must NOT rename the live SKILL.md
+    //    behind the symlink. Status itself does not take a symlink flag —
+    //    that's exactly the point of issue #124: status is supposed to be a
+    //    safe inspection surface.
+    const status = await runCli(["skills", "status", "--json"], fake.env);
+    const parsed = JSON.parse(status.stdout) as {
+      reapplied: string[];
+      skipped: Array<{ id: string; livePath: string; linkedTarget: string; fixCommand: string }>;
+    };
+    assert.ok(Array.isArray(parsed.skipped), "status --json must expose a skipped array");
+    assert.equal(parsed.reapplied.length, 0, `must not reapply: ${JSON.stringify(parsed.reapplied)}`);
+    const skipped = parsed.skipped.find((s) => s.id === "user:codex:linked-skill");
+    assert.ok(skipped, `expected skipped entry for linked-skill; got: ${JSON.stringify(parsed.skipped)}`);
+    assert.match(
+      skipped!.fixCommand,
+      /agentic-skill-router skills disable user:codex:linked-skill .*--allow-symlink-target-mutation/,
+    );
+    // The linkedTarget points at the external SKILL.md, NOT a path inside
+    // codexHome — the whole reason we refused to rename.
+    assert.ok(
+      skipped!.linkedTarget.includes(externalSkillDir),
+      `linkedTarget must surface the out-of-root path; got ${skipped!.linkedTarget}`,
+    );
+
+    // 4) The live external SKILL.md is still live; the disabled marker was
+    //    not re-created. This is the load-bearing safety assertion: status
+    //    has not mutated a file outside the host's skills root.
+    await stat(externalLive);
+    let disabledMarkerAbsent = false;
+    try {
+      await stat(externalDisabled);
+    } catch {
+      disabledMarkerAbsent = true;
+    }
+    assert.ok(
+      disabledMarkerAbsent,
+      "skills status must not have re-renamed the out-of-root symlink target",
+    );
+
+    // 5) Text output mentions the skip section and the fix command so a user
+    //    running `skills status` without --json sees actionable guidance.
+    const statusText = await runCli(["skills", "status"], fake.env);
+    assert.match(statusText.stdout, /skipped \(out-of-root symlink, manual repair required\)/);
+    assert.match(statusText.stdout, /user:codex:linked-skill/);
+    assert.match(
+      statusText.stdout,
+      /agentic-skill-router skills disable user:codex:linked-skill .*--allow-symlink-target-mutation/,
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills status still reapplies in-root skills with the same state", async () => {
+  // Regression guard for issue #124: the new out-of-root skip MUST NOT affect
+  // ordinary in-root skills. If a normal user skill's SKILL.md was restored
+  // upstream, `skills status` should still re-rename it to honor the disable
+  // record the same way it did before the fix.
+  const fake = await makeFakeCodexUser();
+  try {
+    // lark-mail is seeded by the fixture as already-disabled (only the
+    // .agentic-skill-router-disabled file exists). Add a disable record so
+    // reapplyMissing knows the user wants it disabled, then restore the live
+    // SKILL.md to simulate an upstream plugin upgrade.
+    const liveLark = join(fake.codexHome, "skills", "lark-mail", "SKILL.md");
+    const disabledLark = liveLark + ".agentic-skill-router-disabled";
+    // First do a real enable→disable cycle so a disable record is written
+    // through the normal CLI path (which is what we want to exercise).
+    await runCli(["skills", "enable", fake.disabledSkillId], fake.env);
+    await runCli(["skills", "disable", fake.disabledSkillId, "--yes"], fake.env);
+    await stat(disabledLark);
+
+    // Simulate upstream restoring the live SKILL.md behind our back.
+    await rm(disabledLark);
+    await writeFile(
+      liveLark,
+      "---\nname: lark-mail\ndescription: Lark mail workflows for office automation\n---\n",
+    );
+
+    const status = await runCli(["skills", "status", "--json"], fake.env);
+    const parsed = JSON.parse(status.stdout) as {
+      reapplied: string[];
+      skipped: Array<{ id: string }>;
+    };
+    assert.ok(
+      parsed.reapplied.includes(fake.disabledSkillId),
+      `in-root skill must be reapplied; got reapplied=${JSON.stringify(parsed.reapplied)}`,
+    );
+    assert.equal(
+      parsed.skipped.find((s) => s.id === fake.disabledSkillId),
+      undefined,
+      "in-root skill must not appear in skipped",
+    );
+
+    // Disk reflects the reapply: live gone, disabled marker present.
+    await stat(disabledLark);
+    let liveAbsent = false;
+    try {
+      await stat(liveLark);
+    } catch {
+      liveAbsent = true;
+    }
+    assert.ok(liveAbsent, "in-root SKILL.md should have been renamed back to disabled marker");
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("skills status rejects unknown option", async () => {
   const fake = await makeFakeCodexUser();
   try {
@@ -730,13 +876,13 @@ test("skills status --json emits parseable object with expected keys", async () 
     const parsed = JSON.parse(stdout) as Record<string, unknown>;
     for (const key of [
       "disabledCount", "reapplied", "orphaned", "conflicted",
-      "recoveredCommits", "recoveredRollbacks", "orphanMarkers",
+      "recoveredCommits", "recoveredRollbacks", "skipped", "orphanMarkers",
       "disabled", "pendingOps", "routed",
     ]) {
       assert.ok(key in parsed, `status --json missing key ${key}: ${JSON.stringify(parsed)}`);
     }
     assert.equal(typeof parsed.disabledCount, "number");
-    for (const arrKey of ["reapplied", "orphaned", "conflicted", "recoveredCommits", "recoveredRollbacks", "orphanMarkers", "disabled", "pendingOps", "routed"]) {
+    for (const arrKey of ["reapplied", "orphaned", "conflicted", "recoveredCommits", "recoveredRollbacks", "skipped", "orphanMarkers", "disabled", "pendingOps", "routed"]) {
       assert.ok(Array.isArray(parsed[arrKey]), `${arrKey} must be an array`);
     }
   } finally {

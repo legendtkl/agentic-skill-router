@@ -29,6 +29,7 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
       conflicted: reapplyResult.conflicted,
       recoveredCommits: reapplyResult.recoveredCommits,
       recoveredRollbacks: reapplyResult.recoveredRollbacks,
+      skipped: reapplyResult.skipped,
       orphanMarkers,
       disabled: state.disabledSkills,
       pendingOps: state.pendingOps ?? [],
@@ -48,6 +49,18 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
   }
   if (reapplyResult.reapplied.length > 0) {
     console.log(`\nreapplied (upstream restored these): ${reapplyResult.reapplied.join(", ")}`);
+  }
+  if (reapplyResult.skipped.length > 0) {
+    console.log(
+      `\nskipped (out-of-root symlink, manual repair required) — \`skills status\` will not silently rename files outside this host's skills root:`,
+    );
+    for (const s of reapplyResult.skipped) {
+      const linkedPart = s.linkedTarget && s.linkedTarget !== s.livePath
+        ? `${s.livePath} -> ${s.linkedTarget}`
+        : s.livePath;
+      console.log(`  ${s.id}  (linked target: ${linkedPart})`);
+      console.log(`    fix: ${s.fixCommand}`);
+    }
   }
   if (reapplyResult.orphaned.length > 0) {
     console.log(`\norphaned records (SKILL.md gone entirely; run \`enable <id>\` to clean state): ${reapplyResult.orphaned.join(", ")}`);
