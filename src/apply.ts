@@ -1,6 +1,7 @@
 import { readdir, realpath, rename, stat } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { DISABLED_SUFFIX } from "./scan.ts";
+import { canMutateSkill } from "./skill-policy.ts";
 import {
   addDisableRecord,
   addPendingOp,
@@ -63,7 +64,7 @@ export async function disableSkill(
   // discovered skills root or on a builtin; hosts intentionally do NOT
   // expose disable/enable, so this check is the single source of truth.
   if (skill.outOfRoot && !deps.allowOutOfRoot) throw new SkillOutOfRootError(skill.id, skill.skillMdPath);
-  if (!skill.canDisable && !(skill.outOfRoot && deps.allowOutOfRoot && skill.source !== "builtin")) {
+  if (!canMutateSkill(skill) && !(skill.outOfRoot && deps.allowOutOfRoot && skill.source !== "builtin")) {
     throw new BuiltinSkillCannotDisableError(skill.id);
   }
 

@@ -1,3 +1,4 @@
+import { canMutateSkill } from "./skill-policy.ts";
 import { isPluginShortAmbiguous, lookupUsage, lookupUsageStrict } from "./usage.ts";
 import type { Skill, Suggestion, UsageStat } from "./types.ts";
 
@@ -41,7 +42,7 @@ export function suggest(
   const out: Suggestion[] = [];
 
   for (const skill of skills) {
-    if (!skill.canDisable) continue;          // builtins
+    if (!canMutateSkill(skill)) continue;     // builtins / unsafe-to-mutate
     if (skill.isDisabled) continue;           // already disabled
     if (skill.isPluginDisabled) continue;     // whole plugin off, no point per-skill
     if (skill.conflict) continue;             // split-brain — resolve first
