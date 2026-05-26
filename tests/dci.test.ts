@@ -600,6 +600,26 @@ test("DCI regex validator rejects open or oversized group bounds", () => {
   assert.doesNotThrow(() => validateRegexPattern("(abc){1,5}"));
 });
 
+test("DCI regex validator open-bound check inspects only THIS group's quantifier (P2)", () => {
+  // Regression for chatgpt-codex inline review on PR #141: the previous
+  // implementation re-scanned `pattern.slice(group.end)` for `{n,}` and
+  // wrongly rejected patterns where an EARLIER group was quantified with
+  // `+`/`*` and any LATER unrelated atom happened to use `{n,}`. The
+  // attached quantifier is `+`, not `{n,}`, so this pattern must validate.
+  assert.doesNotThrow(() => validateRegexPattern("(foo)+bar{2,}"));
+  // Also: a `*` group followed by an unrelated `{n,}` on a non-group atom.
+  assert.doesNotThrow(() => validateRegexPattern("(foo)*baz{3,}"));
+  // And the same shape with a large bounded later atom — the group's `+`
+  // is not `{n,m>10}`, so this must validate.
+  assert.doesNotThrow(() => validateRegexPattern("(foo)+bar{0,100}"));
+  // Counter-checks: the actual quantifier on the group is `{n,}` /
+  // large-bounded → still correctly rejected.
+  assert.throws(() => validateRegexPattern("(foo){2,}"), DciRegexComplexityError);
+  assert.throws(() => validateRegexPattern("(foo){0,100}"), DciRegexComplexityError);
+  // A non-group atom with a small in-range bound must remain accepted.
+  assert.doesNotThrow(() => validateRegexPattern("(foo)+bar{0,3}"));
+});
+
 test("DCI regex validator does not flag non-capturing group prefix as inner quantifier", () => {
   // `(?:...)` inside an outer quantified group must not be treated as a
   // nested quantifier just because of the leading `?`.

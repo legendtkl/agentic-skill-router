@@ -1127,22 +1127,44 @@ function hasOverlappingAlternatives(alternatives: string[]): boolean {
   return false;
 }
 
+/**
+ * Categorizes a quantifier that immediately follows a group's closing `)`.
+ *
+ * - `plus` / `star` / `question` — the single-character forms.
+ * - `fixed` — `{n}`; bounded repetition with no flexibility.
+ * - `bounded` — `{n,m}` where `m` is a concrete number.
+ * - `open-bound` — `{n,}` with no upper bound.
+ *
+ * The split between `bounded` and `open-bound` is what powers the
+ * `{n,}`-on-group rejection rule. Earlier versions of this code inferred
+ * `{n,}` by re-scanning the rest of the pattern with `pattern.slice(group.end)`,
+ * which incorrectly fired whenever an unrelated later atom in the pattern
+ * contained a `{n,}` (for example, `(foo)+bar{2,}`). The `kind` field
+ * captures that classification directly so the rule fires only on the
+ * quantifier attached to THIS group.
+ */
+type ParsedQuantifierKind = "plus" | "star" | "question" | "fixed" | "bounded" | "open-bound";
+
 interface ParsedQuantifier {
   consumed: number;
   /** Upper bound; `null` means open (e.g. `{2,}`) or unbounded (`+`/`*`). */
   upper: number | null;
+  kind: ParsedQuantifierKind;
 }
 
 /**
  * Inspects the quantifier that follows a group's closing `)` at offset
  * `end`. Returns `null` if no quantifier is present. Handles `+`, `*`, `?`,
- * `{n}`, `{n,}`, `{n,m}` and ignores a trailing lazy `?` modifier.
+ * `{n}`, `{n,}`, `{n,m}` and ignores a trailing lazy `?` modifier. The
+ * returned `kind` classifies the quantifier shape so callers can ask
+ * "is THIS quantifier `{n,}`?" without re-scanning the pattern.
  */
 function parseTrailingQuantifier(pattern: string, end: number): ParsedQuantifier | null {
   const ch = pattern[end + 1];
   if (ch === undefined) return null;
-  if (ch === "+" || ch === "*") return { consumed: 1, upper: null };
-  if (ch === "?") return { consumed: 1, upper: 1 };
+  if (ch === "+") return { consumed: 1, upper: null, kind: "plus" };
+  if (ch === "*") return { consumed: 1, upper: null, kind: "star" };
+  if (ch === "?") return { consumed: 1, upper: 1, kind: "question" };
   if (ch === "{") {
     const close = pattern.indexOf("}", end + 2);
     if (close < 0) return null;
@@ -1152,11 +1174,23 @@ function parseTrailingQuantifier(pattern: string, end: number): ParsedQuantifier
     if (match[2] === undefined) {
       // `{n}` — fixed repetition; treat as bounded.
       const upper = Number(match[1]);
-      return { consumed: body.length, upper: Number.isFinite(upper) ? upper : null };
+      return {
+        consumed: body.length,
+        upper: Number.isFinite(upper) ? upper : null,
+        kind: "fixed",
+      };
     }
-    if (match[2] === "") return { consumed: body.length, upper: null };
+    if (match[2] === "") {
+      // `{n,}` — open upper bound. This is the form the false-positive bug
+      // hinged on; classify it explicitly.
+      return { consumed: body.length, upper: null, kind: "open-bound" };
+    }
     const upper = Number(match[2]);
-    return { consumed: body.length, upper: Number.isFinite(upper) ? upper : null };
+    return {
+      consumed: body.length,
+      upper: Number.isFinite(upper) ? upper : null,
+      kind: "bounded",
+    };
   }
   return null;
 }
@@ -1452,9 +1486,13 @@ export function validateRegexPattern(pattern: string): void {
             `Tighten the bound, or drop --regex for literal matching.`,
         );
       }
-      if (isOpenRepetition && quantifier.upper === null && /\{\d+,\}/.test(pattern.slice(group.end))) {
-        // `{n,}` with no upper bound directly on a group: reject even when
-        // the inner body looks tame; the engine still has to enumerate runs.
+      if (quantifier.kind === "open-bound") {
+        // `{n,}` with no upper bound directly on THIS group: reject even
+        // when the inner body looks tame; the engine still has to enumerate
+        // runs. Important: this checks the kind of the quantifier we just
+        // parsed, not a re-scan of `pattern.slice(group.end)`, which used
+        // to spuriously match a `{n,}` on an unrelated later atom (e.g.
+        // `(foo)+bar{2,}`).
         throw new DciRegexComplexityError(
           `--regex pattern applies an open-ended {n,} repetition to a group. ` +
             `Use a fixed upper bound, or drop --regex for literal matching.`,
