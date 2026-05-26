@@ -1631,6 +1631,7 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       rowsHost: null,
       rafToken: 0,
       lastSkills: null,
+      lastTotal: -1,
     };
     let searchDebounceTimer = 0;
 
@@ -1783,6 +1784,15 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
         return;
       }
       ensureVirtualList();
+      // Filtering or reloading changes the total. Jump back to the top of
+      // the new result set so the user sees matches immediately instead of
+      // landing in whatever scroll position the previous list had — and so
+      // a stale scrollTop never leaves the viewport past the end of a
+      // shrunken result set.
+      if (virt.lastTotal !== visibleSkills.length && virt.scrollEl) {
+        virt.scrollEl.scrollTop = 0;
+      }
+      virt.lastTotal = visibleSkills.length;
       renderVirtualSlice();
     }
 
@@ -1796,6 +1806,10 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       virt.topSpacer = null;
       virt.bottomSpacer = null;
       virt.rowsHost = null;
+      // Force the next ensureVirtualList() + renderVirtualSlice() to treat
+      // the rebuilt scroll container as a total-changed transition so we
+      // restart at the top of the new list.
+      virt.lastTotal = -1;
       if (virt.rafToken) {
         cancelAnimationFrame(virt.rafToken);
         virt.rafToken = 0;
@@ -1845,9 +1859,17 @@ function pageHtml(defaultHost: HostName, mutationToken: string): string {
       if (total <= 0) {
         return { first: 0, last: 0, topHeight: 0, bottomHeight: 0 };
       }
-      const rawFirst = Math.floor(scrollTop / rowHeight) - overscan;
-      const first = Math.max(0, Math.min(total, rawFirst));
       const visibleCount = Math.ceil(viewportHeight / rowHeight) + overscan * 2;
+      const rawFirst = Math.floor(scrollTop / rowHeight) - overscan;
+      // Clamp first so it can never exceed total - visibleCount. Without
+      // this, a stale scrollTop (e.g. user filters the list down while
+      // scrolled near the bottom) would produce first === last === total and
+      // render an empty slice even though total > 0. The render path also
+      // resets scrollTop on total change for the UX win of jumping to the
+      // top of new results, but the clamp keeps the math correct in
+      // isolation regardless of caller behavior.
+      const maxFirst = Math.max(0, total - visibleCount);
+      const first = Math.max(0, Math.min(maxFirst, rawFirst));
       const last = Math.min(total, first + visibleCount);
       return {
         first,

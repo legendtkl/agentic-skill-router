@@ -1431,3 +1431,67 @@ test("computeVirtualWindow slices a synthetic 500-item list correctly", async ()
   assert.equal(fallback.first, 0);
   assert.ok(fallback.last > 0 && fallback.last <= 10);
 });
+
+test("computeVirtualWindow clamps stale scrollTop so a shrunken filter still renders rows", async () => {
+  const { server, url } = await startWebServer({ hostName: "claude-code", port: 0 });
+  let computeVirtualWindow: (opts: {
+    total: number;
+    rowHeight: number;
+    viewportHeight: number;
+    scrollTop: number;
+    overscan: number;
+  }) => { first: number; last: number; topHeight: number; bottomHeight: number };
+  try {
+    const pageRes = await fetch(url);
+    assert.equal(pageRes.status, 200);
+    const page = await pageRes.text();
+    const match = page.match(/function computeVirtualWindow\(opts\) \{([\s\S]*?)\n {4}\}\n/);
+    assert.ok(match, "expected computeVirtualWindow source in the rendered page");
+    const body = match![1]!;
+    const factory = new Function(
+      "DEFAULT_ROW_HEIGHT",
+      "VIRTUAL_OVERSCAN",
+      `return function computeVirtualWindow(opts) {${body}\n}`,
+    );
+    computeVirtualWindow = factory(64, 6);
+  } finally {
+    await closeServer(server);
+  }
+
+  // Regression for the "blank list after filter" bug: the user was scrolled
+  // deep into a large result set, then typed a query that shrank the result
+  // set down to a handful of rows. With the stale scrollTop the previous
+  // implementation produced first === last === total and the rows host was
+  // empty even though the status line still claimed there were matches.
+  // The clamp inside computeVirtualWindow keeps `first` within
+  // [0, max(0, total - visibleCount)] so the returned slice is non-empty
+  // whenever `total > 0`, regardless of how stale scrollTop is.
+  const stale = computeVirtualWindow({
+    total: 10,
+    rowHeight: 40,
+    viewportHeight: 300,
+    scrollTop: 10000,
+    overscan: 0,
+  });
+  // visibleCount = ceil(300/40) + 0 = 8; with overscan 0 the window settles
+  // at the last full page, i.e. first = 10 - 8 = 2, last = 10.
+  assert.equal(stale.first, 2);
+  assert.equal(stale.last, 10);
+  assert.equal(stale.bottomHeight, 0);
+
+  // Same stale-scroll scenario but using the page's default overscan (6).
+  // Total (10) is smaller than visibleCount (ceil(300/40) + 12 = 20), so the
+  // entire list fits in the window starting at index 0. This matches the
+  // regression assertion called out in the bug report (first=0, last=10).
+  const fullyVisible = computeVirtualWindow({
+    total: 10,
+    rowHeight: 40,
+    viewportHeight: 300,
+    scrollTop: 10000,
+    overscan: 6,
+  });
+  assert.equal(fullyVisible.first, 0);
+  assert.equal(fullyVisible.last, 10);
+  assert.equal(fullyVisible.topHeight, 0);
+  assert.equal(fullyVisible.bottomHeight, 0);
+});
