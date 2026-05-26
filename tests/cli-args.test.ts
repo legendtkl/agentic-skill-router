@@ -1484,6 +1484,221 @@ test("skills enable rejects a tampered state record whose skillMdPath escapes th
   }
 });
 
+test("skills enable refuses broken-symlink record when canonical disabled marker still exists (#100/#125 + #97)", async () => {
+  // Reachable post-#97/#132: a record disabled through an out-of-root symlink
+  // carries `discoveredViaSymlink: true` + `canonicalSkillMdPath` (the
+  // canonical SKILL.md-form realpath). If the user later deletes or breaks
+  // the in-root symlink, both in-root probes miss but the canonical
+  // SKILL.md.agentic-skill-router-disabled file is still on disk. Without
+  // consulting the canonical fields, `enableSkillFromState` would fall
+  // through to the orphan-cleanup branch and silently drop the disable
+  // record, stranding the canonical disabled marker AND bypassing the root
+  // gate. The fix probes the canonical paths too and refuses without
+  // --allow-symlink-target-mutation.
+  const fake = await makeFakeCodexUser();
+  try {
+    // External (out-of-root) live skill, then disable through the symlink
+    // with explicit consent. After this, state holds a record with
+    // canonicalSkillMdPath pointing at the canonical SKILL.md outside the
+    // host's skill roots.
+    const externalSkillDir = join(fake.root, "external-skills", "broken-link-skill");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalLive,
+      "---\nname: broken-link-skill\ndescription: out-of-root via symlink\n---\n",
+    );
+    const inRootDir = join(fake.codexHome, "skills", "broken-link-skill");
+    await symlink(externalSkillDir, inRootDir);
+
+    await runCli(
+      ["skills", "disable", "user:codex:broken-link-skill", "--yes", "--allow-symlink-target-mutation"],
+      fake.env,
+    );
+    // Sanity: the canonical disabled marker is now the only on-disk artifact.
+    await stat(externalDisabled);
+
+    // Verify state captured the canonical fields (defends against a future
+    // refactor accidentally turning this back into a no-op probe scenario).
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const stateAfterDisable = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{
+        id: string;
+        canonicalSkillMdPath?: string;
+        discoveredViaSymlink?: boolean;
+      }>;
+    };
+    const recAfterDisable = stateAfterDisable.disabledSkills.find(
+      (r) => r.id === "user:codex:broken-link-skill",
+    );
+    assert.ok(recAfterDisable, "disable should have written a state record");
+    assert.equal(recAfterDisable!.discoveredViaSymlink, true);
+    assert.ok(
+      recAfterDisable!.canonicalSkillMdPath && recAfterDisable!.canonicalSkillMdPath.includes(externalSkillDir),
+      `canonicalSkillMdPath should point into the external dir; got ${recAfterDisable!.canonicalSkillMdPath}`,
+    );
+
+    // Now break the in-root symlink. After this, both `inRoot/SKILL.md` and
+    // `inRoot/SKILL.md.agentic-skill-router-disabled` probes miss (the
+    // parent symlink dangles), but the canonical disabled marker is still
+    // present at externalDisabled.
+    await rm(inRootDir, { force: true });
+
+    // Step 1: enable without the flag MUST refuse. The refusal must name the
+    // skill and the canonical out-of-root target, and the canonical disabled
+    // marker MUST still be on disk (the safety-load-bearing assertion).
+    let refused: unknown;
+    try {
+      await runCli(["skills", "enable", "user:codex:broken-link-skill"], fake.env);
+    } catch (err) {
+      refused = err;
+    }
+    assert.ok(refused, "enable of broken-symlink record without flag must fail");
+    assert.equal((refused as { code?: number }).code, 1);
+    const refusedStderr = (refused as { stderr?: string }).stderr ?? "";
+    assert.match(refusedStderr, /refusing to enable user:codex:broken-link-skill/);
+    assert.match(refusedStderr, /symlink target outside this host's skills root/);
+    assert.match(refusedStderr, /--allow-symlink-target-mutation/);
+    assert.ok(
+      refusedStderr.includes(externalSkillDir),
+      `refusal must disclose the canonical out-of-root target; got: ${refusedStderr}`,
+    );
+    await stat(externalDisabled);
+    await assertFileAbsent(externalLive);
+    // The state record must still be present — we refused, we didn't clean
+    // up. (This guards against the pre-fix orphan-cleanup leak.)
+    const stateAfterRefuse = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{ id: string }>;
+    };
+    assert.ok(
+      stateAfterRefuse.disabledSkills.some((r) => r.id === "user:codex:broken-link-skill"),
+      "refused enable must not drop the disable record",
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable succeeds on broken-symlink record with --allow-symlink-target-mutation (#100/#125 + #97)", async () => {
+  // Companion to the refusal test above: with explicit consent, the
+  // state-only enable path uses the canonical realpath as both the gate
+  // probe AND the rename source, so the canonical disabled marker is
+  // restored to SKILL.md at the out-of-root location and the disable record
+  // is cleared from state.
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "broken-link-skill-2");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalLive,
+      "---\nname: broken-link-skill-2\ndescription: out-of-root via symlink\n---\n",
+    );
+    const inRootDir = join(fake.codexHome, "skills", "broken-link-skill-2");
+    await symlink(externalSkillDir, inRootDir);
+
+    await runCli(
+      ["skills", "disable", "user:codex:broken-link-skill-2", "--yes", "--allow-symlink-target-mutation"],
+      fake.env,
+    );
+    await stat(externalDisabled);
+
+    // Break the in-root symlink so we go through the state-only branch.
+    await rm(inRootDir, { force: true });
+
+    const enabled = await runCli(
+      [
+        "skills",
+        "enable",
+        "user:codex:broken-link-skill-2",
+        "--allow-symlink-target-mutation",
+      ],
+      fake.env,
+    );
+    assert.equal(
+      enabled.stderr.includes("refusing to enable"),
+      false,
+      `enable with flag should not refuse; got: ${enabled.stderr}`,
+    );
+    // Canonical file restored to live; disabled marker gone.
+    await stat(externalLive);
+    await assertFileAbsent(externalDisabled);
+
+    // State record dropped after a successful enable.
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const stateAfter = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{ id: string }>;
+    };
+    assert.ok(
+      !stateAfter.disabledSkills.some((r) => r.id === "user:codex:broken-link-skill-2"),
+      "successful enable should clear the disable record",
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable still orphan-cleans a broken-symlink record when canonical files are ALSO gone (regression)", async () => {
+  // Regression guard for the canonical-fallback fix: the new branch must
+  // ONLY redirect to canonical paths when at least one of them exists on
+  // disk. If both the in-root paths AND the canonical paths are missing
+  // (plugin uninstalled, external dir wiped), the record is a true orphan
+  // and `skills enable` must clean up state without refusing — exactly the
+  // pre-#97 behavior for a fully gone skill.
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "fully-gone-skill");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalLive,
+      "---\nname: fully-gone-skill\ndescription: orphan candidate\n---\n",
+    );
+    const inRootDir = join(fake.codexHome, "skills", "fully-gone-skill");
+    await symlink(externalSkillDir, inRootDir);
+
+    await runCli(
+      ["skills", "disable", "user:codex:fully-gone-skill", "--yes", "--allow-symlink-target-mutation"],
+      fake.env,
+    );
+    await stat(externalDisabled);
+
+    // Now wipe both the in-root symlink AND the external dir, leaving the
+    // state record as a true orphan with nowhere to land.
+    await rm(inRootDir, { force: true });
+    await rm(externalSkillDir, { recursive: true, force: true });
+
+    // Plain `skills enable` must succeed (orphan cleanup), NOT refuse with
+    // the new gate. Use --json so we can read the result deterministically.
+    const enabled = await runCli(
+      ["skills", "enable", "user:codex:fully-gone-skill", "--json"],
+      fake.env,
+    );
+    assert.equal(
+      enabled.stderr.includes("refusing to enable"),
+      false,
+      `orphan enable must not refuse; got stderr: ${enabled.stderr}`,
+    );
+    const parsed = JSON.parse(enabled.stdout) as Array<{ id: string; alreadyEnabled: boolean }>;
+    assert.equal(parsed[0]?.id, "user:codex:fully-gone-skill");
+
+    // State record must be gone.
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const stateAfter = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{ id: string }>;
+    };
+    assert.ok(
+      !stateAfter.disabledSkills.some((r) => r.id === "user:codex:fully-gone-skill"),
+      "orphan enable should clear the disable record",
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("user error: stderr carries the message, stdout stays empty", async () => {
   const fake = await makeFakeCodexUser();
   try {

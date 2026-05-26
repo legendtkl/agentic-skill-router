@@ -212,15 +212,56 @@ export async function enableSkillFromState(
   return withStateLock(deps.statePath, async () => {
     const state = await loadState(deps.statePath, deps.host);
     const rec = resolveDisableRecord(state, idOrInstanceKey);
-    const { livePath, disabledPath } = pathsForRecord(rec);
-    const liveBefore = await fileExists(livePath);
-    const disabledBefore = await fileExists(disabledPath);
-    // Re-validate the state-recorded path against the host's current skill
-    // roots BEFORE renaming. The state file is plain JSON and might be
+    const inRoot = pathsForRecord(rec);
+    const inRootLiveBefore = await fileExists(inRoot.livePath);
+    const inRootDisabledBefore = await fileExists(inRoot.disabledPath);
+
+    // P1 follow-up to #100/#125 on top of #97: when a symlink-recorded skill
+    // has its in-root symlink later deleted or broken, both in-root probes
+    // miss even though the actual file the user renamed (the canonical
+    // out-of-root SKILL.md.agentic-skill-router-disabled) is still on disk.
+    // Without the canonical fallback below, we would fall straight through
+    // to `enableSkillPaths`'s "both absent → clean up state" branch, silently
+    // drop the disable record, and strand the canonical disabled marker —
+    // bypassing both the root-gate and #97's canonical-drift guard. When the
+    // record was discovered via a symlink and captured its canonical
+    // realpath (#97 / PR #132), probe the canonical paths too; if either
+    // exists, operate against the canonical pair so the gate runs against an
+    // out-of-root realpath (it IS out-of-root by construction for
+    // `discoveredViaSymlink: true`) and the rename hits the real file.
+    let livePath = inRoot.livePath;
+    let disabledPath = inRoot.disabledPath;
+    let liveBefore = inRootLiveBefore;
+    let disabledBefore = inRootDisabledBefore;
+    if (
+      !inRootLiveBefore &&
+      !inRootDisabledBefore &&
+      rec.discoveredViaSymlink &&
+      rec.canonicalSkillMdPath
+    ) {
+      const canonicalLive = rec.canonicalSkillMdPath.endsWith(DISABLED_SUFFIX)
+        ? rec.canonicalSkillMdPath.slice(0, -DISABLED_SUFFIX.length)
+        : rec.canonicalSkillMdPath;
+      const canonicalDisabled = canonicalLive + DISABLED_SUFFIX;
+      const canonicalLiveExists = await fileExists(canonicalLive);
+      const canonicalDisabledExists = await fileExists(canonicalDisabled);
+      if (canonicalLiveExists || canonicalDisabledExists) {
+        livePath = canonicalLive;
+        disabledPath = canonicalDisabled;
+        liveBefore = canonicalLiveExists;
+        disabledBefore = canonicalDisabledExists;
+      }
+    }
+
+    // Re-validate whichever path we ended up with against the host's current
+    // skill roots BEFORE renaming. The state file is plain JSON and might be
     // tampered, hand-edited, or stale; without this gate
     // `enableSkillFromState` would happily rename arbitrary local paths a
     // record points at (#100) and would also bypass the out-of-root symlink
-    // gate the inventory-path enable flow already enforces (#125).
+    // gate the inventory-path enable flow already enforces (#125). When we
+    // swapped to the canonical paths above, this also covers the broken
+    // in-root symlink case: the canonical path is out-of-root by definition
+    // for a `discoveredViaSymlink` record, so this refuses without the flag.
     if (deps.allowedSkillRoots && deps.allowedSkillRoots.length > 0) {
       // Prefer the file that actually exists on disk; fall back to the
       // disabled marker (the canonical resting location for a disable record)
@@ -237,6 +278,10 @@ export async function enableSkillFromState(
       }
     }
     const result = await enableSkillPaths(rec.instanceKey, livePath, disabledPath, deps, state);
+    // `cleanedStateOnly` reports "no on-disk file existed for this record";
+    // honour that across BOTH the in-root and the canonical probe sites so a
+    // record cleaned up via the canonical fallback (or fully orphaned at
+    // both sites) is still correctly classified.
     return {
       ...result,
       cleanedStateOnly: !liveBefore && !disabledBefore,
