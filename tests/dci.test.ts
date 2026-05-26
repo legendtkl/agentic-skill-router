@@ -908,6 +908,197 @@ test("DCI read truncates content and select returns a read action", async () => 
   }
 });
 
+test("DCI read honors the byte budget at the read syscall, not after a full readFile", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    // 100 KB body (well past a 4 KB read budget) to prove the helper does
+    // not materialize the full file in memory. The body is plain ASCII so
+    // each character maps to one byte.
+    const bigBody = "a".repeat(100_000);
+    const huge = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:read-budget-probe",
+      name: "read-budget-probe",
+      description: "Bounded-read fixture",
+      body: bigBody,
+      isDisabled: true,
+    });
+    corpus.skills.push(huge);
+
+    const budget = 4096;
+    const read = await dciReadSkill(corpus.skills, "user:codex:read-budget-probe", { maxChars: budget });
+    assert.equal(read.action, "read-skill-file");
+    assert.equal(read.truncated, true);
+    assert.equal(read.maxChars, budget);
+    assert.equal(read.content.length, budget);
+    // The +1 detection byte is allowed but we must not pull the whole file.
+    assert.ok(read.bytesRead <= budget + 1, `bytesRead should be <= budget+1, got ${read.bytesRead}`);
+    // Sanity: content really came from the file — frontmatter sits at the
+    // top of every SKILL.md the corpus helper writes.
+    assert.ok(read.content.startsWith("---\nname: read-budget-probe"));
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI read on a small file still returns the same content as before", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const body = "hello world\nsecond line\n";
+    const small = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:small-read-probe",
+      name: "small-read-probe",
+      description: "Small read fixture",
+      body,
+      isDisabled: true,
+    });
+    corpus.skills.push(small);
+
+    const read = await dciReadSkill(corpus.skills, "user:codex:small-read-probe");
+    assert.equal(read.action, "read-skill-file");
+    assert.equal(read.truncated, false);
+    // The full SKILL.md contents (frontmatter + body) survive the round trip.
+    assert.match(read.content, /name: small-read-probe/);
+    assert.match(read.content, /hello world/);
+    assert.match(read.content, /second line/);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI find stops at the byte budget and reports truncation for matches past the cap", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const cap = DCI_BUDGET.maxSkillBytes;
+    // Build a body whose only match for `zephyrfindmarker` sits well past
+    // the byte cap. Strict semantics: find must NOT scan past the cap.
+    const padding = "x".repeat(cap + 8_192);
+    const big = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:find-budget-probe",
+      name: "find-budget-probe",
+      description: "Find byte-budget fixture",
+      body: `${padding}\nzephyrfindmarker on a line near EOF`,
+      isDisabled: true,
+    });
+    corpus.skills.push(big);
+
+    const found = await dciFindInSkill(
+      corpus.skills,
+      "user:codex:find-budget-probe",
+      "zephyrfindmarker",
+      { maxSnippets: 1 },
+    );
+    assert.equal(found.snippets.length, 0, "match past the byte cap must not be returned");
+    assert.equal(found.action, "no-matches");
+    assert.equal(found.truncated, true);
+    assert.equal(found.maxBytes, cap);
+    // We must have actually scanned bytes — we just stopped at the cap.
+    assert.ok(found.bytesRead > 0);
+    // In-chunk cap enforcement guarantees we never report more than `cap`
+    // bytes consumed, even when readable's highWaterMark is larger.
+    assert.ok(found.bytesRead <= cap, `bytesRead must stay at or under cap, got ${found.bytesRead}`);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI find caps a single pathologically long line inside the chunk handler", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const cap = DCI_BUDGET.maxSkillBytes;
+    // Build a single line of length 2 * maxSkillBytes with the match
+    // marker placed at byte offset `cap + 100` (well past the cap) and NO
+    // newline before the marker. Streamed naively, readline would buffer
+    // the whole line before yielding; the chunk-level cap must prevent
+    // both the heap blow-up AND the false-positive match past the cap.
+    const lineLength = cap * 2;
+    const markerOffset = cap + 100;
+    const marker = "zephyrlonglinemarker";
+    // SKILL.md is wrapped in frontmatter, so the giant single line sits
+    // a few lines down. Account for the prefix bytes when placing the
+    // marker so its byte offset relative to file start is past the cap.
+    const frontmatter = "---\nname: long-line-cap-probe\ndescription: Long-line cap fixture\n---\n\n";
+    const frontmatterBytes = Buffer.byteLength(frontmatter, "utf8");
+    const beforeMarker = "x".repeat(markerOffset - frontmatterBytes);
+    const afterMarker = "x".repeat(lineLength - beforeMarker.length - marker.length);
+    const giantLine = `${beforeMarker}${marker}${afterMarker}`;
+    assert.equal(giantLine.length, lineLength);
+    const fileContent = `${frontmatter}${giantLine}\n`;
+
+    const dir = join(corpus.root, "long-line-cap-probe");
+    await mkdir(dir, { recursive: true });
+    const skillMdPath = join(dir, "SKILL.md.agentic-skill-router-disabled");
+    await writeFile(skillMdPath, fileContent);
+    const skill: Skill = {
+      id: "user:codex:long-line-cap-probe",
+      name: "long-line-cap-probe",
+      description: "Long-line cap fixture",
+      source: "user",
+      pluginKey: null,
+      skillMdPath,
+      isDisabled: true,
+      isPluginDisabled: false,
+      canDisable: true,
+      conflict: false,
+    };
+    corpus.skills.push(skill);
+
+    const start = Date.now();
+    const found = await dciFindInSkill(
+      corpus.skills,
+      "user:codex:long-line-cap-probe",
+      marker,
+      { maxSnippets: 1 },
+    );
+    const elapsed = Date.now() - start;
+
+    // Strict-cap semantic: marker past the cap means no snippet, truncated.
+    assert.equal(found.snippets.length, 0, "match past the byte cap must not be returned");
+    assert.equal(found.action, "no-matches");
+    assert.equal(found.truncated, true);
+    assert.equal(found.maxBytes, cap);
+    assert.ok(found.bytesRead <= cap, `bytesRead must stay at or under cap, got ${found.bytesRead}`);
+
+    // Latency guard: at ~200 KB on disk, reading just the in-cap prefix
+    // should complete in well under 500ms. A regressed implementation
+    // that buffers the whole line through readline takes much longer
+    // because of allocation pressure on the giant pending buffer.
+    assert.ok(elapsed < 500, `dciFindInSkill should return quickly when capped, took ${elapsed}ms`);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI find on a small file still returns the same snippets and is not flagged truncated", async () => {
+  const corpus = await makeCorpus();
+  try {
+    const search = await dciSearchDisabledSkills(corpus.skills, "dci-orchid-ledger-repair");
+    const ref = search.matches[0]!.ref;
+    const found = await dciFindInSkill(corpus.skills, ref, "final answer", { maxSnippets: 1 });
+    assert.equal(found.id, "user:codex:body-only-probe");
+    assert.equal(found.snippets.length, 1);
+    assert.equal(found.truncated, false);
+    assert.ok(found.bytesRead > 0);
+    assert.equal(found.maxBytes, DCI_BUDGET.maxSkillBytes);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI open streams the file and reports bytesRead for the window scan", async () => {
+  const corpus = await makeCorpus();
+  try {
+    const search = await dciSearchDisabledSkills(corpus.skills, "dci-orchid-ledger-repair");
+    const ref = search.matches[0]!.ref;
+    const found = await dciFindInSkill(corpus.skills, ref, "final answer", { maxSnippets: 1 });
+    const opened = await dciOpenSkillWindow(corpus.skills, ref, { line: found.snippets[0]!.line, window: 3 });
+    assert.equal(opened.action, "read-skill-window");
+    assert.ok(opened.bytesRead > 0, "open should report streamed bytes");
+    assert.match(opened.content, /\d+: .*final answer/);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI multi-select records a bounded set of disabled skills", async () => {
   const corpus = await makeCorpus();
   try {
