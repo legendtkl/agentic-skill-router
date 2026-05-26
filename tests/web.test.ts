@@ -1311,3 +1311,123 @@ test("web API rejects a project-scope mutation whose skill SKILL.md resolves out
     await fixture.cleanup();
   }
 });
+
+test("web UI page exposes virtualized-list scaffolding and debounced search hooks", async () => {
+  const { server, url } = await startWebServer({ hostName: "claude-code", port: 0 });
+  try {
+    const pageRes = await fetch(url);
+    assert.equal(pageRes.status, 200);
+    const page = await pageRes.text();
+
+    // Search status line is present near the search input.
+    assert.match(page, /id="searchStatus"/);
+    assert.match(page, /class="search-status"/);
+
+    // Scrollable virtualization container CSS and DOM scaffolding hooks.
+    assert.match(page, /\.list-scroll\s*\{[^}]*overflow-y:\s*auto/);
+    assert.match(page, /virtual-spacer-top/);
+    assert.match(page, /virtual-spacer-bottom/);
+    assert.match(page, /virtual-rows/);
+
+    // Debounce and overscan constants exist in the bundled inline script.
+    assert.match(page, /SEARCH_DEBOUNCE_MS\s*=\s*150/);
+    assert.match(page, /VIRTUAL_OVERSCAN\s*=\s*6/);
+    assert.match(page, /requestAnimationFrame\(/);
+
+    // The pure window-math helper is exposed for harness inspection.
+    assert.match(page, /computeVirtualWindow/);
+  } finally {
+    await closeServer(server);
+  }
+});
+
+test("computeVirtualWindow slices a synthetic 500-item list correctly", async () => {
+  const { server, url } = await startWebServer({ hostName: "claude-code", port: 0 });
+  let computeVirtualWindow: (opts: {
+    total: number;
+    rowHeight: number;
+    viewportHeight: number;
+    scrollTop: number;
+    overscan: number;
+  }) => { first: number; last: number; topHeight: number; bottomHeight: number };
+  try {
+    const pageRes = await fetch(url);
+    assert.equal(pageRes.status, 200);
+    const page = await pageRes.text();
+
+    // Pull the function source out of the inline script. It is a top-level
+    // `function computeVirtualWindow(opts) { ... }` declaration so we can
+    // rebuild it inside a Function() sandbox without dragging in the rest of
+    // the script or any DOM globals.
+    const match = page.match(/function computeVirtualWindow\(opts\) \{([\s\S]*?)\n {4}\}\n/);
+    assert.ok(match, "expected computeVirtualWindow source in the rendered page");
+    const body = match![1]!;
+    // The function relies on DEFAULT_ROW_HEIGHT and VIRTUAL_OVERSCAN constants
+    // from the surrounding scope. Recreate them with the same values the page
+    // declares so the rebuilt function behaves identically.
+    const factory = new Function(
+      "DEFAULT_ROW_HEIGHT",
+      "VIRTUAL_OVERSCAN",
+      `return function computeVirtualWindow(opts) {${body}\n}`,
+    );
+    computeVirtualWindow = factory(64, 6);
+  } finally {
+    await closeServer(server);
+  }
+
+  const total = 500;
+  const rowHeight = 64;
+  const viewportHeight = 540;
+  const overscan = 6;
+  const visiblePerViewport = Math.ceil(viewportHeight / rowHeight); // 9
+
+  // At the top of the list, `first` should clamp to 0 even though the raw
+  // computation would go negative because of the overscan buffer.
+  const top = computeVirtualWindow({ total, rowHeight, viewportHeight, scrollTop: 0, overscan });
+  assert.equal(top.first, 0);
+  assert.equal(top.last, visiblePerViewport + overscan * 2);
+  assert.equal(top.topHeight, 0);
+  assert.equal(top.bottomHeight, (total - top.last) * rowHeight);
+
+  // Mid-scroll: the window should slide and both spacers should account for
+  // every off-screen row.
+  const midScroll = 100 * rowHeight + 30; // just past row 100
+  const mid = computeVirtualWindow({
+    total,
+    rowHeight,
+    viewportHeight,
+    scrollTop: midScroll,
+    overscan,
+  });
+  assert.equal(mid.first, 100 - overscan);
+  assert.equal(mid.last, mid.first + visiblePerViewport + overscan * 2);
+  assert.equal(mid.topHeight, mid.first * rowHeight);
+  assert.equal(mid.bottomHeight, (total - mid.last) * rowHeight);
+  assert.equal(
+    mid.topHeight + (mid.last - mid.first) * rowHeight + mid.bottomHeight,
+    total * rowHeight,
+  );
+
+  // Bottom of the list: `last` clamps to `total` and the bottom spacer is 0.
+  const bottomScroll = (total - visiblePerViewport) * rowHeight + 1;
+  const bottom = computeVirtualWindow({
+    total,
+    rowHeight,
+    viewportHeight,
+    scrollTop: bottomScroll,
+    overscan,
+  });
+  assert.equal(bottom.last, total);
+  assert.equal(bottom.bottomHeight, 0);
+  assert.ok(bottom.first <= total - visiblePerViewport);
+
+  // Empty list: both spacers collapse and the window is degenerate.
+  const empty = computeVirtualWindow({ total: 0, rowHeight, viewportHeight, scrollTop: 0, overscan });
+  assert.deepEqual(empty, { first: 0, last: 0, topHeight: 0, bottomHeight: 0 });
+
+  // Row height fallback: passing 0 should not divide by zero; the helper
+  // should fall back to the DEFAULT_ROW_HEIGHT (64) baked into the page.
+  const fallback = computeVirtualWindow({ total: 10, rowHeight: 0, viewportHeight, scrollTop: 0, overscan: 2 });
+  assert.equal(fallback.first, 0);
+  assert.ok(fallback.last > 0 && fallback.last <= 10);
+});
