@@ -100,6 +100,83 @@ test("collectUsageStats skips unreadable transcript files", async () => {
   }
 });
 
+test("collectUsageStats skips unreadable transcript subdirs and warns", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based unreadable dir test is unreliable on Windows");
+    return;
+  }
+  if (process.getuid && process.getuid() === 0) {
+    t.skip("root bypasses POSIX directory permission checks");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-usage-dir-eacces-"));
+  const projectsDir = join(root, "projects");
+  const readableDir = join(projectsDir, "readable");
+  const unreadableDir = join(projectsDir, "unreadable");
+  const readableSession = join(readableDir, "session.jsonl");
+  const buriedSession = join(unreadableDir, "session.jsonl");
+  const mkLine = (skill: string) => `${JSON.stringify({
+    timestamp: "2026-04-10T08:00:00.000Z",
+    message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
+  })}\n`;
+  await mkdir(readableDir, { recursive: true });
+  await mkdir(unreadableDir, { recursive: true });
+  await writeFile(readableSession, mkLine("foo"), "utf8");
+  await writeFile(buriedSession, mkLine("bar"), "utf8");
+  await chmod(unreadableDir, 0o000);
+
+  // Verify the OS actually rejects readdir for the test user; some
+  // filesystems / sandboxes silently grant access despite chmod 000.
+  let dirIsActuallyBlocked = false;
+  try {
+    const { readdir } = await import("node:fs/promises");
+    await readdir(unreadableDir);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    dirIsActuallyBlocked = code === "EACCES" || code === "EPERM";
+  }
+  if (!dirIsActuallyBlocked) {
+    await chmod(unreadableDir, 0o700).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+    t.skip("filesystem did not honor chmod 0o000 (likely overlay/sandbox FS)");
+    return;
+  }
+
+  const errors: string[] = [];
+  const origError = console.error;
+  console.error = (...args: unknown[]) => {
+    errors.push(args.map((a) => String(a)).join(" "));
+  };
+  try {
+    const stats = await collectUsageStats(projectsDir);
+    assert.equal(stats.get("foo")?.callCount, 1, "readable subtree must still be scanned");
+    assert.equal(stats.get("bar"), undefined, "unreadable subtree must not contribute");
+    const matched = errors.find((m) => m.includes(unreadableDir) && /EACCES|EPERM/.test(m));
+    assert.ok(matched, `expected a stderr warning naming ${unreadableDir}; got ${JSON.stringify(errors)}`);
+  } finally {
+    console.error = origError;
+    await chmod(unreadableDir, 0o700).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("collectUsageStats propagates unexpected directory errors", async () => {
+  // readdir on a regular file produces ENOTDIR — that is not in the
+  // EACCES/EPERM/ENOENT allowlist and must still surface as a thrown error
+  // rather than being silently swallowed.
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-usage-enotdir-"));
+  const notADir = join(root, "not-a-dir");
+  await writeFile(notADir, "ignored", "utf8");
+  try {
+    await assert.rejects(
+      () => collectUsageStats(notADir),
+      (err: NodeJS.ErrnoException) => err.code === "ENOTDIR",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("collectUsageStats: bar is tracked once", async () => {
   const stats = await collectUsageStats(FIXTURE_PROJECTS);
   const bar = stats.get("bar");

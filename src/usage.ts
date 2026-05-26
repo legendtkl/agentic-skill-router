@@ -253,7 +253,16 @@ async function listJsonlFiles(root: string): Promise<string[]> {
   try {
     entries = await readdir(root, { withFileTypes: true });
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return [];
+    // Treat unreadable transcript subtrees (e.g. mode-000 dirs left over by
+    // other tooling) as empty rather than letting a single permission error
+    // crash `skills list` / `skills suggest`. Surface a one-line warning so
+    // the user can investigate without losing the rest of the scan.
+    if (code === "EACCES" || code === "EPERM") {
+      console.error(`agentic-skill-router: skipping unreadable transcript dir ${root} (${code})`);
+      return [];
+    }
     throw err;
   }
   const out: string[] = [];
