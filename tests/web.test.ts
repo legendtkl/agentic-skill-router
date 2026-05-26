@@ -1167,3 +1167,66 @@ test("web API accepts a projectPath whose entire ancestor walk stays within the 
     await fixture.cleanup();
   }
 });
+
+test("web API rejects a project root whose .claude/skills container is a symlink to outside", async () => {
+  // P1.E: production `walkSkillsDir` calls `readdir(skillsRoot, ...)`,
+  // which follows symlinks at the kernel level. The per-entry symlink
+  // check inside it only flips `outOfRoot=true` for entries that are
+  // themselves symlinks. If the SKILLS-ROOT container
+  // (`<allowed>/.claude/skills`) is a symlink to `/outside/skills`,
+  // every real subdirectory under `/outside/skills` is reported as
+  // in-root and `canDisable: true`, so a web mutation would rename
+  // SKILL.md files outside the allowlist via the symlink. The
+  // allowlist guard must realpath the skills-root container and reject
+  // when it lands outside.
+  const fixture = await makeWebFixture();
+  const allowedRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-skillsroot-allowed-"));
+  const outsideRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-skillsroot-outside-"));
+  try {
+    // Make `allowedRoot` a project boundary so the ancestor walk stops here.
+    await mkdir(join(allowedRoot, ".git"), { recursive: true });
+    // Lay out the outside skills tree with a sentinel skill.
+    await mkdir(join(outsideRoot, "skills", "evil-skill"), { recursive: true });
+    await writeFile(
+      join(outsideRoot, "skills", "evil-skill", "SKILL.md"),
+      "---\nname: evil-skill\ndescription: Must not surface through a skills-root symlink\n---\n",
+    );
+    // Replace `<allowed>/.claude/skills` with a symlink to the outside
+    // tree. We create `.claude/` as a real directory first, then point
+    // `skills` at the outside dir.
+    await mkdir(join(allowedRoot, ".claude"), { recursive: true });
+    await symlink(join(outsideRoot, "skills"), join(allowedRoot, ".claude", "skills"));
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url } = await startWebServer({
+          hostName: "claude-code",
+          port: 0,
+          projectRoots: [allowedRoot],
+        });
+        try {
+          const res = await fetch(
+            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`,
+          );
+          assert.equal(res.status, 403);
+          const body = await res.json() as { error: string };
+          assert.match(body.error, /outside the allowed project roots/);
+          // The outside SKILL.md must still be intact (no rename leak).
+          await stat(join(outsideRoot, "skills", "evil-skill", "SKILL.md"));
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    await rm(allowedRoot, { recursive: true, force: true });
+    await rm(outsideRoot, { recursive: true, force: true });
+    await fixture.cleanup();
+  }
+});

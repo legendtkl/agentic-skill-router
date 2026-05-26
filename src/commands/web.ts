@@ -519,7 +519,18 @@ async function createScopedHost(
   // that subtree. Reject if any ancestor the project host would scan is
   // outside the allowlist. When no `.git` ancestor exists, the production
   // host only scans the start dir itself, so no parent check is required.
-  await assertProjectAncestorsAllowed(canonical, projectRootAllowlist, resolved);
+  const scanAncestors = await collectScanAncestors(canonical);
+  assertAncestorsAllowed(scanAncestors, projectRootAllowlist, resolved);
+  // P1.E: also realpath each `<ancestor>/.claude/skills` and
+  // `<ancestor>/.agents/skills` that exists on disk. If the skills root
+  // itself is a symlink to a directory outside the allowlist,
+  // `walkSkillsDir` would follow it at the kernel level and surface skills
+  // from the outside tree with `outOfRoot=false` (because the per-entry
+  // symlink check in `scan.ts` only flips that flag for entries that are
+  // themselves symlinks, not for the case where the skills root container
+  // is a symlink). The result would be mutable skills whose rename
+  // operations escape the allowlist.
+  await assertProjectSkillRootsAllowed(scanAncestors, projectRootAllowlist, resolved);
   // P1.D: pass the canonical (OS-resolved) cwd into the host. The host
   // re-`resolve()`s but does NOT realpath, so passing the resolved-but-not-
   // canonicalized form leaves a TOCTOU window in which a writable path
@@ -527,6 +538,18 @@ async function createScopedHost(
   // outside between our validation and the scan. Passing the canonical
   // path closes that window because the discovery walk runs on a path
   // string that has already been OS-resolved against the allowlist.
+  //
+  // P1.F (residual risk, NOT fully closed here): all of the above checks
+  // run on canonical paths captured at validation time, but the
+  // subsequent host scan re-opens those paths as strings inside
+  // `walkSkillsDir` (`src/scan.ts`). An attacker with write access UNDER
+  // an allowlisted root can swap a path component (e.g. replace
+  // `<allowed>/.claude/skills` with a symlink to `/outside`) AFTER we
+  // validate and BEFORE the scan opens it. Fully closing this race
+  // requires pinning directory handles (`open()` -> fd, then operate via
+  // fd) across `walkSkillsDir`, `projectSkillRoots`, and the rename in
+  // `apply.ts`. The current threat model assumes the allowlisted
+  // directory tree is not attacker-writable; a follow-up will pin fds.
   return createHost(hostName, { cwd: canonical });
 }
 
@@ -628,45 +651,99 @@ function assertProjectPathAllowed(
 }
 
 /**
- * Reject requests whose project host would walk UP into a directory outside
- * the allowlist. Mirrors `src/hosts/project.ts:projectSkillRoots` exactly:
+ * Returns the exact list of directories `src/hosts/project.ts:projectSkillRoots`
+ * will scan for the given canonical start dir:
  *
- *   - If no `.git` ancestor exists at or above `canonicalStart`, the host
- *     scans ONLY the start dir. No parent check is required.
- *   - If a `.git` ancestor is found, the host scans every directory from
- *     `canonicalStart` up to and including the repo root. Each of those
- *     directories must be inside the allowlist.
+ *   - If no `.git` ancestor exists at or above `canonicalStart`, returns
+ *     `[canonicalStart]` only.
+ *   - If a `.git` ancestor is found, returns every directory from
+ *     `canonicalStart` up to and including the repo root.
  *
  * Because `canonicalStart` is already realpath-ed, pure-string `dirname()`
  * walks the real filesystem tree (no symlinks remain in the prefix), so we
- * don't need to realpath each parent again.
+ * don't need to realpath each parent again here. The skills-root check
+ * downstream realpaths the actual `<dir>/<skillsDir>` containers.
  */
-async function assertProjectAncestorsAllowed(
-  canonicalStart: string,
+async function collectScanAncestors(canonicalStart: string): Promise<string[]> {
+  const repoRoot = await findRepoRootLike(canonicalStart);
+  if (repoRoot === null) return [canonicalStart];
+  const dirs: string[] = [];
+  let current = canonicalStart;
+  while (true) {
+    dirs.push(current);
+    if (current === repoRoot) return dirs;
+    const parent = dirname(current);
+    if (parent === current) return dirs; // safety: never happens because repoRoot is an ancestor
+    current = parent;
+  }
+}
+
+/**
+ * Reject requests whose project host would scan a directory outside the
+ * allowlist. The ancestor list comes from `collectScanAncestors`, which
+ * mirrors production semantics exactly.
+ */
+function assertAncestorsAllowed(
+  scanAncestors: string[],
+  projectRootAllowlist: string[],
+  originalResolved: string,
+): void {
+  for (const dir of scanAncestors) {
+    if (isWithinAllowlist(dir, projectRootAllowlist)) continue;
+    throw new WebHttpError(
+      403,
+      `projectPath \`${originalResolved}\` would cause project skill discovery to scan ` +
+        `\`${dir}\`, which is outside the allowed project roots. ` +
+        `Allowed roots: ${projectRootAllowlist.join(", ")}`,
+    );
+  }
+}
+
+/**
+ * Reject requests where one of the actual `<ancestor>/<skillsDir>`
+ * containers the host would open is a symlink (or otherwise resolves) to
+ * a directory outside the allowlist.
+ *
+ * Production `walkSkillsDir` (`src/scan.ts`) calls
+ * `readdir(skillsRoot, ...)`, which follows symlinks at the kernel level.
+ * The per-entry symlink check inside that function only flips
+ * `outOfRoot=true` for entries that are themselves symlinks — if the
+ * SKILLS-ROOT container is a symlink, every real subdirectory of the
+ * link target is reported as in-root and `canDisable: true`. A web
+ * mutation against such a skill then renames `SKILL.md` outside the
+ * allowlist via the symlink. We close that path here by realpath-ing
+ * each candidate skills root and requiring containment.
+ *
+ * Both `.claude/skills` and `.agents/skills` are checked even though
+ * only one matches the active host: the cost is two extra `lstat`s per
+ * ancestor and it avoids coupling this guard to host-name plumbing.
+ */
+async function assertProjectSkillRootsAllowed(
+  scanAncestors: string[],
   projectRootAllowlist: string[],
   originalResolved: string,
 ): Promise<void> {
-  const repoRoot = await findRepoRootLike(canonicalStart);
-  if (repoRoot === null) {
-    // Production semantics: no `.git` ancestor -> the host only scans
-    // `<canonicalStart>/<skillsDir>`. We already validated `canonicalStart`.
-    return;
-  }
-  // Walk the same `[canonicalStart ... repoRoot]` range the host will scan.
-  let current = canonicalStart;
-  while (true) {
-    if (!isWithinAllowlist(current, projectRootAllowlist)) {
+  const skillsDirNames = [".claude/skills", ".agents/skills"];
+  for (const ancestor of scanAncestors) {
+    for (const skillsDirName of skillsDirNames) {
+      const candidate = join(ancestor, skillsDirName);
+      if (!(await pathExists(candidate))) continue;
+      let canonicalCandidate: string;
+      try {
+        canonicalCandidate = await realpath(candidate);
+      } catch {
+        // Broken symlink or transient error: production `walkSkillsDir`
+        // would treat it as ENOENT (no skills), so skip without rejecting.
+        continue;
+      }
+      if (isWithinAllowlist(canonicalCandidate, projectRootAllowlist)) continue;
       throw new WebHttpError(
         403,
-        `projectPath \`${originalResolved}\` would cause project skill discovery to scan ` +
-          `\`${current}\`, which is outside the allowed project roots. ` +
+        `projectPath \`${originalResolved}\` exposes skill root \`${candidate}\` which ` +
+          `resolves to \`${canonicalCandidate}\`, outside the allowed project roots. ` +
           `Allowed roots: ${projectRootAllowlist.join(", ")}`,
       );
     }
-    if (current === repoRoot) return;
-    const parent = dirname(current);
-    if (parent === current) return; // safety: never happens because repoRoot is an ancestor
-    current = parent;
   }
 }
 
