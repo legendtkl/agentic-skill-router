@@ -181,3 +181,77 @@ metadata:
   assert.deepEqual(data, {});
   assert.deepEqual(warnings, []);
 });
+
+test("parseFrontmatterWithWarnings drops block list-of-mapping with child lines and warns", () => {
+  // Regression for #101: previously the parser silently stored each `- key: value`
+  // line as a raw string (e.g. `["input: send email"]`), producing bogus
+  // routing metadata. It must now drop the key and warn with the line number
+  // of the first mapping item.
+  const src = `---
+name: lark-mail
+description: A CLI
+examples:
+  - input: send email
+    output: email body
+license: MIT
+---`;
+  const { data, warnings } = parseFrontmatterWithWarnings(src);
+  assert.equal(data["name"], "lark-mail");
+  assert.equal(data["description"], "A CLI");
+  assert.equal(data["license"], "MIT");
+  assert.equal(data["examples"], undefined);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /skipped list-of-mapping under `examples`/);
+  assert.match(warnings[0]!, /line 5/);
+});
+
+test("parseFrontmatterWithWarnings drops single-line block list-of-mapping and warns", () => {
+  // A `- key: value` item without further indented child lines is still a
+  // YAML mapping in a sequence, not a plain string. Treat it the same as the
+  // multi-line case so we don't silently include `key: value` as text.
+  const src = `---
+name: lark-mail
+examples:
+  - input: send email
+license: MIT
+---`;
+  const { data, warnings } = parseFrontmatterWithWarnings(src);
+  assert.equal(data["name"], "lark-mail");
+  assert.equal(data["license"], "MIT");
+  assert.equal(data["examples"], undefined);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /skipped list-of-mapping under `examples`/);
+  assert.match(warnings[0]!, /line 4/);
+});
+
+test("parseFrontmatterWithWarnings drops inline list-of-mapping and warns", () => {
+  // Inline `[{...}]` flow arrays are also list-of-mapping in disguise; the
+  // parser cannot meaningfully turn them into a string array, so it drops
+  // the key and warns at the line of the `key:` line.
+  const src = `---
+name: lark-mail
+examples: [{input: send email, output: email body}]
+license: MIT
+---`;
+  const { data, warnings } = parseFrontmatterWithWarnings(src);
+  assert.equal(data["name"], "lark-mail");
+  assert.equal(data["license"], "MIT");
+  assert.equal(data["examples"], undefined);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /skipped list-of-mapping under `examples`/);
+  assert.match(warnings[0]!, /line 3/);
+});
+
+test("parseFrontmatterWithWarnings still parses plain `- foo` block string arrays", () => {
+  // Regression guard: the list-of-mapping detection must not break the
+  // existing string-array form.
+  const src = `---
+name: lark-mail
+aliases:
+  - 飞书邮箱
+  - lark mail
+---`;
+  const { data, warnings } = parseFrontmatterWithWarnings(src);
+  assert.deepEqual(data["aliases"], ["飞书邮箱", "lark mail"]);
+  assert.deepEqual(warnings, []);
+});

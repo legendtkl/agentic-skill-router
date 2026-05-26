@@ -12,6 +12,9 @@
  *   - Nested mappings under any key. When encountered the key is dropped and a
  *     warning is emitted so callers (and ultimately the user) can spot the
  *     silently-skipped metadata.
+ *   - Lists of mappings (block `- key: value` items or inline `[{...}]`).
+ *     Treated the same way as nested mappings: the key is dropped and a
+ *     warning is emitted.
  *   - Anchors, aliases, tags, multi-document streams, flow mappings.
  *
  * Lines outside the `---` delimiters are ignored. If the opening `---` exists
@@ -89,6 +92,7 @@ export function parseFrontmatterWithWarnings(content: string): FrontmatterParseR
       let sawIndented = false;
       let isArray = true;
       let nestedMappingAt = -1;
+      let listOfMappingAt = -1;
       for (; j < lines.length; j++) {
         const next = lines[j] ?? "";
         if (next.trim() === "---") break;
@@ -109,10 +113,23 @@ export function parseFrontmatterWithWarnings(content: string): FrontmatterParseR
           }
           continue;
         }
+        // A `- key: value` item is the start of a list-of-mapping (a YAML
+        // sequence of maps). We don't support those: silently treating the
+        // raw line text as a string would produce bogus routing metadata.
+        // Drop the whole key and remember the line for a warning. The match
+        // accepts both bare `- key: value` and `- key: value` followed by
+        // further indented child lines (`  child: ...`).
+        if (/^[A-Za-z0-9_-]+\s*:(\s|$)/.test(item[1]!)) {
+          isArray = false;
+          if (listOfMappingAt === -1) listOfMappingAt = j;
+          continue;
+        }
         arr.push(unquote(item[1]!.trim()));
       }
       if (sawIndented && isArray) out[key] = arr;
-      if (sawIndented && !isArray && nestedMappingAt >= 0) {
+      if (sawIndented && !isArray && listOfMappingAt >= 0) {
+        warnings.push(formatListOfMappingWarning(key, listOfMappingAt + 1));
+      } else if (sawIndented && !isArray && nestedMappingAt >= 0) {
         warnings.push(formatNestedMappingWarning(key, nestedMappingAt + 1));
       }
       i = j - 1;
@@ -120,6 +137,13 @@ export function parseFrontmatterWithWarnings(content: string): FrontmatterParseR
     }
 
     if (/^\[.*\]$/.test(rawValue)) {
+      // Inline flow arrays that contain `{` or `}` are list-of-mapping in
+      // disguise (e.g. `examples: [{input: foo, output: bar}]`). Drop the
+      // key and warn, mirroring the block-array case.
+      if (/[{}]/.test(rawValue)) {
+        warnings.push(formatListOfMappingWarning(key, i + 1));
+        continue;
+      }
       const parsed = parseInlineArray(rawValue);
       if (parsed) {
         out[key] = parsed;
@@ -136,6 +160,10 @@ export function parseFrontmatterWithWarnings(content: string): FrontmatterParseR
 
 function formatNestedMappingWarning(key: string, line: number): string {
   return `frontmatter: skipped nested mapping under \`${key}\` (line ${line})`;
+}
+
+function formatListOfMappingWarning(key: string, line: number): string {
+  return `frontmatter: skipped list-of-mapping under \`${key}\` (line ${line})`;
 }
 
 function normalizeLiteralBlock(lines: string[]): string {
