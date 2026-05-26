@@ -891,6 +891,58 @@ test("skills route --json emits parseable object with selected/matches schema", 
   }
 });
 
+test("skills route --mode=body and --mode=dci return identical selection (#111)", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const query = "lark mail office";
+    const body = await runOk(
+      ["skills", "route", "--query", query, "--mode=body", "--json", "--no-record"],
+      fake.env,
+    );
+    const dci = await runOk(
+      ["skills", "route", "--query", query, "--mode=dci", "--json", "--no-record"],
+      fake.env,
+    );
+    const parsedBody = JSON.parse(body.stdout) as Record<string, unknown>;
+    const parsedDci = JSON.parse(dci.stdout) as Record<string, unknown>;
+
+    // body is an alias for dci: same selection, same match ordering.
+    const selectedBody = parsedBody.selected as Record<string, unknown> | null;
+    const selectedDci = parsedDci.selected as Record<string, unknown> | null;
+    assert.equal(selectedBody?.id, selectedDci?.id, "body alias must pick the same skill as dci");
+    const matchesBody = parsedBody.matches as Array<Record<string, unknown>>;
+    const matchesDci = parsedDci.matches as Array<Record<string, unknown>>;
+    assert.deepEqual(
+      matchesBody.map((m) => m.id),
+      matchesDci.map((m) => m.id),
+      "body alias must return the same matches in the same order as dci",
+    );
+
+    // routeMode reflects what the caller asked for; alias is only surfaced
+    // for the body spelling, never for the canonical dci.
+    assert.equal(parsedBody.routeMode, "body");
+    assert.equal(parsedBody.routeModeAlias, "dci");
+    assert.equal(parsedDci.routeMode, "dci");
+    assert.ok(!("routeModeAlias" in parsedDci), "dci canonical mode must not emit routeModeAlias");
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills --help mentions that body is an alias for dci (#111)", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const { stdout } = await runOk(["--help"], fake.env);
+    assert.match(
+      stdout,
+      /--mode=body is an alias for --mode=dci/,
+      `--help must group body and dci together as aliases; got:\n${stdout}`,
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("skills status --json emits parseable object with expected keys", async () => {
   const fake = await makeFakeCodexUser();
   try {

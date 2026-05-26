@@ -373,6 +373,19 @@ definition. `metadataHitRate` is reported in `auto` and `metadata` modes; it
 is `n/a` in `lexical` and `dci`. `dciEscalationRate` is meaningful only in
 `auto` mode and is `n/a` elsewhere.
 
+#### `--mode=body` is an alias for `--mode=dci`
+
+`dci` is the canonical name for the disabled-skill body/DCI router; `body`
+was the original spelling and is kept as a compatibility alias. Both modes
+call the same underlying router and therefore return identical
+`selected`/`matches` for the same query — only the `routeMode` label in the
+output reflects which spelling the caller used. When `--mode=body` is
+passed, `skills route --json` also emits `routeModeAlias: "dci"` so
+consumers can tell that the canonical mode is `dci`. `--mode=dci` does not
+emit a `routeModeAlias` field. The same alias applies to the
+`routeMode` config key (`agentic-skill-router skills config set routeMode body`
+behaves identically to `... routeMode dci`).
+
 ### DCI grep/find `--regex` is power-user mode
 
 `skills dci grep` and `skills dci find` default to literal substring matching,

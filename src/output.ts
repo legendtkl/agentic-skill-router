@@ -16,7 +16,10 @@ USAGE
   agentic-skill-router init [codex|claude-code] [project|global] [--cwd=<dir>] [--force] [--json]
   agentic-skill-router skills list [--json]
   agentic-skill-router skills suggest [--unused-for=<dur>] [--json]
-  agentic-skill-router skills route --query=<text> [--mode=auto|metadata|body|lexical|dci] [--json] [--top-k=N] [--no-record]
+  agentic-skill-router skills route --query=<text> [--mode=auto|metadata|lexical|dci|body] [--json] [--top-k=N] [--no-record]
+                                       (--mode=body is an alias for --mode=dci;
+                                       both invoke the disabled-skill DCI router.
+                                       --json reports routeModeAlias when an alias is used.)
   agentic-skill-router skills corpus search (--any=<term>... | --all=<term>...) [--ranker=weighted|bm25] [--limit=N] [--json]
   agentic-skill-router skills corpus inspect <id-or-name-or-ref...> [--json]
   agentic-skill-router skills corpus select <id-or-name-or-ref> --query=<text> --confidence=high|medium --reason=<text> [--json]
@@ -42,7 +45,7 @@ USAGE
 
 DURATION  bare integer = days. Suffixed: 30d / 2w / 3m / 1y
 CONFIG    ~/.agentic-skill-router/config.json   { "unusedForDays": 30, "routeMode": "auto" }
-          keys: unusedForDays (int), routeMode (auto|metadata|body|lexical|dci),
+          keys: unusedForDays (int), routeMode (auto|metadata|lexical|dci; body is an alias for dci),
                 keepNames (JSON array), keepIds (JSON array)
 HOST      installed plugin wrappers set their host; repo checkouts default to claude-code
 STATE     ~/.agentic-skill-router/state-<host>.json
@@ -91,7 +94,12 @@ export function projectSuggestion(s: Suggestion) {
 }
 
 /** Shape a route result for `skills route --json` output. */
-export function projectRoute(result: SkillRouteResult, recorded: boolean, warnings: string[] = []) {
+export function projectRoute(
+  result: SkillRouteResult,
+  recorded: boolean,
+  warnings: string[] = [],
+  routeModeAlias?: string,
+) {
   const projectMatch = (m: SkillRouteMatch) => ({
     id: m.skill.id,
     name: m.skill.name,
@@ -109,6 +117,7 @@ export function projectRoute(result: SkillRouteResult, recorded: boolean, warnin
     query: result.query,
     mode: result.mode,
     routeMode: result.routeMode,
+    ...(routeModeAlias ? { routeModeAlias } : {}),
     action: result.selected ? "read-skill-file" as const : "no-confident-match" as const,
     recorded,
     warnings,
