@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { open as openFile } from "node:fs/promises";
-import { createInterface } from "node:readline";
 import { compact, isGenericTerm, termsFor } from "./text-match.ts";
 import type { Confidence, Skill } from "./types.ts";
 import { isRoutableDisabledSkill, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
@@ -756,49 +755,124 @@ interface StreamScanResult {
   bytesExhausted: boolean;
 }
 
+const NEWLINE = 0x0a;
+const CARRIAGE_RETURN = 0x0d;
+
 /**
- * Stream `path` line-by-line via `readline.createInterface` over a
- * `fs.createReadStream`. The callback is invoked once per line with the
- * 1-based line number and may return `false` to stop the scan early
- * (e.g. once enough matches were collected). The scan also stops when
- * `maxBytes` bytes have been consumed; the caller can distinguish the
- * two cases via `bytesExhausted` on the return value. The stream is
- * always destroyed so the file descriptor does not leak.
+ * Stream `path` line-by-line under a hard byte cap. The cap is enforced
+ * *inside* the chunk handler — before any line is yielded — so a single
+ * line longer than `maxBytes` cannot accumulate in memory and cannot
+ * leak a partial match past the cap to the callback.
+ *
+ * Implementation notes:
+ *
+ *  - We read in binary mode and split on `\n` ourselves. `readline` was
+ *    rejected because it yields each line only after the trailing newline
+ *    arrives; for a pathological SKILL.md whose first newline is past the
+ *    cap, readline would buffer past the cap before we got a chance to
+ *    enforce it (issue #105 follow-up).
+ *  - When the next chunk would push us past `maxBytes`, we accept the
+ *    in-cap prefix only (so any complete `\n`-terminated lines inside
+ *    that prefix still flush), then drop the pending partial line and
+ *    stop reading. The partial line is intentionally NOT yielded: we
+ *    cannot prove the matcher's hit falls before or after the cap byte.
+ *  - The callback may return `false` to stop the scan early; in that
+ *    case `bytesExhausted` is reported as `false` unless the cap was
+ *    independently hit by the time the callback returned.
+ *  - The stream is destroyed in a `finally` so the file descriptor never
+ *    leaks even when the callback throws.
+ *
+ * UTF-8 boundaries: lines are decoded via `Buffer.toString('utf8')`. A
+ * SKILL.md whose final pre-cap line ends mid-character can emit a
+ * U+FFFD on the trailing byte; the call sites (`dciFindInSkill`,
+ * `dciOpenSkillWindow`) tolerate this because the cap is a hard
+ * memory/I/O guard for pathological inputs, not a normal code path.
  */
 async function streamSkillLines(
   path: string,
   maxBytes: number,
   onLine: (line: string, lineNumber: number) => boolean,
 ): Promise<StreamScanResult> {
-  const stream = createReadStream(path, { encoding: "utf8" });
-  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+  const stream = createReadStream(path);
   let bytesRead = 0;
   let bytesExhausted = false;
   let lineNumber = 0;
   let stop = false;
-  // Track raw byte consumption from the read stream so the byte budget is
-  // enforced regardless of how many decoded characters readline emitted.
-  stream.on("data", (chunk: string | Buffer) => {
-    bytesRead += Buffer.byteLength(chunk);
-    if (bytesRead >= maxBytes) {
-      bytesExhausted = true;
+  // Pending bytes of the in-progress (un-terminated) line. Capped at
+  // `maxBytes` total bytes read so a runaway long line cannot grow this
+  // buffer past the cap.
+  let pending: Buffer = Buffer.alloc(0);
+
+  const decodeLine = (buf: Buffer): string => {
+    // Strip a trailing CR so `\r\n` terminated files behave identically to
+    // `\n` terminated ones, matching the previous readline-based behavior.
+    if (buf.length > 0 && buf[buf.length - 1] === CARRIAGE_RETURN) {
+      return buf.subarray(0, buf.length - 1).toString("utf8");
     }
-  });
+    return buf.toString("utf8");
+  };
+
+  const emitLine = (buf: Buffer): boolean => {
+    lineNumber++;
+    return onLine(decodeLine(buf), lineNumber);
+  };
+
   try {
-    for await (const line of rl) {
-      lineNumber++;
-      if (!onLine(line, lineNumber)) {
-        stop = true;
+    for await (const chunk of stream as AsyncIterable<Buffer>) {
+      // Trim the chunk to whatever still fits inside the byte budget.
+      // Anything past the cap is discarded immediately, before we ever
+      // search it for newlines.
+      let usable: Buffer = chunk;
+      if (bytesRead + chunk.length > maxBytes) {
+        const room = Math.max(0, maxBytes - bytesRead);
+        usable = chunk.subarray(0, room);
+        bytesExhausted = true;
+      }
+      bytesRead += usable.length;
+
+      // Walk the usable bytes splitting on `\n`. Each complete line is
+      // yielded; bytes after the last newline accumulate as `pending`.
+      let cursor = 0;
+      while (cursor < usable.length) {
+        const newlineIdx = usable.indexOf(NEWLINE, cursor);
+        if (newlineIdx === -1) {
+          // No newline in the remaining chunk slice — buffer it.
+          const tail = usable.subarray(cursor);
+          pending = pending.length === 0 ? Buffer.from(tail) : Buffer.concat([pending, tail]);
+          break;
+        }
+        const segment = usable.subarray(cursor, newlineIdx);
+        const line = pending.length === 0
+          ? segment
+          : Buffer.concat([pending, segment]);
+        pending = Buffer.alloc(0);
+        if (!emitLine(line)) {
+          stop = true;
+          break;
+        }
+        cursor = newlineIdx + 1;
+      }
+
+      if (stop) break;
+      if (bytesExhausted) {
+        // Discard the pending partial line: when the cap straddles a
+        // line we can't safely yield it (callers must treat the cap as a
+        // hard boundary, including for matches that might sit inside the
+        // partial line).
+        pending = Buffer.alloc(0);
         break;
       }
-      if (bytesExhausted) break;
+    }
+
+    // EOF without exhaustion: flush any trailing un-terminated line.
+    if (!stop && !bytesExhausted && pending.length > 0) {
+      emitLine(pending);
+      pending = Buffer.alloc(0);
     }
   } finally {
-    rl.close();
     stream.destroy();
   }
-  // If we stopped early on the callback's request, do not report the
-  // remaining budget as "exhausted" — those are two different signals.
+
   if (stop && bytesRead < maxBytes) bytesExhausted = false;
   return { bytesRead, bytesExhausted };
 }

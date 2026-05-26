@@ -991,9 +991,78 @@ test("DCI find stops at the byte budget and reports truncation for matches past 
     assert.equal(found.action, "no-matches");
     assert.equal(found.truncated, true);
     assert.equal(found.maxBytes, cap);
-    // We must have actually scanned bytes — we just stopped before the match.
+    // We must have actually scanned bytes — we just stopped at the cap.
     assert.ok(found.bytesRead > 0);
-    assert.ok(found.bytesRead <= cap + 64_000, `bytesRead should be near the cap, got ${found.bytesRead}`);
+    // In-chunk cap enforcement guarantees we never report more than `cap`
+    // bytes consumed, even when readable's highWaterMark is larger.
+    assert.ok(found.bytesRead <= cap, `bytesRead must stay at or under cap, got ${found.bytesRead}`);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI find caps a single pathologically long line inside the chunk handler", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const cap = DCI_BUDGET.maxSkillBytes;
+    // Build a single line of length 2 * maxSkillBytes with the match
+    // marker placed at byte offset `cap + 100` (well past the cap) and NO
+    // newline before the marker. Streamed naively, readline would buffer
+    // the whole line before yielding; the chunk-level cap must prevent
+    // both the heap blow-up AND the false-positive match past the cap.
+    const lineLength = cap * 2;
+    const markerOffset = cap + 100;
+    const marker = "zephyrlonglinemarker";
+    // SKILL.md is wrapped in frontmatter, so the giant single line sits
+    // a few lines down. Account for the prefix bytes when placing the
+    // marker so its byte offset relative to file start is past the cap.
+    const frontmatter = "---\nname: long-line-cap-probe\ndescription: Long-line cap fixture\n---\n\n";
+    const frontmatterBytes = Buffer.byteLength(frontmatter, "utf8");
+    const beforeMarker = "x".repeat(markerOffset - frontmatterBytes);
+    const afterMarker = "x".repeat(lineLength - beforeMarker.length - marker.length);
+    const giantLine = `${beforeMarker}${marker}${afterMarker}`;
+    assert.equal(giantLine.length, lineLength);
+    const fileContent = `${frontmatter}${giantLine}\n`;
+
+    const dir = join(corpus.root, "long-line-cap-probe");
+    await mkdir(dir, { recursive: true });
+    const skillMdPath = join(dir, "SKILL.md.agentic-skill-router-disabled");
+    await writeFile(skillMdPath, fileContent);
+    const skill: Skill = {
+      id: "user:codex:long-line-cap-probe",
+      name: "long-line-cap-probe",
+      description: "Long-line cap fixture",
+      source: "user",
+      pluginKey: null,
+      skillMdPath,
+      isDisabled: true,
+      isPluginDisabled: false,
+      canDisable: true,
+      conflict: false,
+    };
+    corpus.skills.push(skill);
+
+    const start = Date.now();
+    const found = await dciFindInSkill(
+      corpus.skills,
+      "user:codex:long-line-cap-probe",
+      marker,
+      { maxSnippets: 1 },
+    );
+    const elapsed = Date.now() - start;
+
+    // Strict-cap semantic: marker past the cap means no snippet, truncated.
+    assert.equal(found.snippets.length, 0, "match past the byte cap must not be returned");
+    assert.equal(found.action, "no-matches");
+    assert.equal(found.truncated, true);
+    assert.equal(found.maxBytes, cap);
+    assert.ok(found.bytesRead <= cap, `bytesRead must stay at or under cap, got ${found.bytesRead}`);
+
+    // Latency guard: at ~200 KB on disk, reading just the in-cap prefix
+    // should complete in well under 500ms. A regressed implementation
+    // that buffers the whole line through readline takes much longer
+    // because of allocation pressure on the giant pending buffer.
+    assert.ok(elapsed < 500, `dciFindInSkill should return quickly when capped, took ${elapsed}ms`);
   } finally {
     await corpus.cleanup();
   }
