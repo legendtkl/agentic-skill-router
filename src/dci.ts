@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { open as openFile, readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { open as openFile } from "node:fs/promises";
+import { createInterface } from "node:readline";
 import { compact, isGenericTerm, termsFor } from "./text-match.ts";
 import type { Confidence, Skill } from "./types.ts";
 import { isRoutableDisabledSkill, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
@@ -113,6 +115,15 @@ export interface DciFindResult extends DciSkillRef {
     matchedLines: number;
   };
   snippets: DciSnippet[];
+  /** Bytes streamed from the skill file before stopping. */
+  bytesRead: number;
+  /**
+   * True when the find loop exhausted its byte budget before reaching EOF.
+   * A match later in the file may exist but was not scanned.
+   */
+  truncated: boolean;
+  /** Hard byte cap the find loop honored. */
+  maxBytes: number;
 }
 
 export interface DciOpenResult extends DciSkillRef {
@@ -125,6 +136,8 @@ export interface DciOpenResult extends DciSkillRef {
   content: string;
   truncated: boolean;
   maxChars: number;
+  /** Bytes streamed from the skill file while collecting the window. */
+  bytesRead: number;
 }
 
 export interface DciInspectResult extends DciSkillRef {
@@ -139,6 +152,8 @@ export interface DciReadResult extends DciSkillRef {
   content: string;
   truncated: boolean;
   maxChars: number;
+  /** Bytes actually read from disk while honoring the budget. */
+  bytesRead: number;
 }
 
 export interface DciSelectResult extends DciSkillRef {
@@ -363,6 +378,16 @@ export async function dciGrepDisabledSkills(
   };
 }
 
+/**
+ * Stream the target skill file line by line and collect up to `maxSnippets`
+ * matches, then stop. The scan honors a hard byte budget (`DCI_BUDGET.maxSkillBytes`)
+ * to keep memory bounded for pathologically large SKILL.md files.
+ *
+ * Strict-budget semantics: if the byte budget is exhausted before EOF and
+ * before `maxSnippets` matches have been collected, the result is marked
+ * `truncated: true`. A match that exists past the byte budget will NOT be
+ * found; the budget is a hard cap on bytes scanned, not a soft hint.
+ */
 export async function dciFindInSkill(
   skills: Skill[],
   idOrRef: string,
@@ -373,15 +398,25 @@ export async function dciFindInSkill(
   const skill = findRoutableSkillOrThrow(skills, idOrRef);
   const mode = opts.regex ? "regex" : "literal";
   const maxSnippets = normalizePositiveInt(opts.maxSnippets, DEFAULT_MAX_SNIPPETS, MAX_SNIPPETS);
-  const content = await readFile(skill.skillMdPath, "utf8");
-  const lines = content.split(/\r?\n/);
+  const maxBytes = DCI_BUDGET.maxSkillBytes;
   const snippets: DciSnippet[] = [];
+  let bytesRead = 0;
+  let truncated = false;
 
   if (trimmedPattern !== "") {
     const matcher = createGrepMatcher(trimmedPattern, mode);
-    for (let i = 0; i < lines.length && snippets.length < maxSnippets; i++) {
-      if (matcher(lines[i]!)) snippets.push({ line: i + 1, text: clampLine(lines[i]!) });
-    }
+    const scan = await streamSkillLines(skill.skillMdPath, maxBytes, (line, lineNumber) => {
+      if (matcher(line) && snippets.length < maxSnippets) {
+        snippets.push({ line: lineNumber, text: clampLine(line) });
+      }
+      // Stop iterating as soon as we have collected enough snippets.
+      return snippets.length < maxSnippets;
+    });
+    bytesRead = scan.bytesRead;
+    // Only flag truncation when we genuinely ran out of byte budget AND we
+    // had not already collected the requested number of snippets. Stopping
+    // early because `maxSnippets` was reached is not truncation.
+    truncated = scan.bytesExhausted && snippets.length < maxSnippets;
   }
 
   return {
@@ -392,9 +427,22 @@ export async function dciFindInSkill(
     budget: DCI_BUDGET,
     corpus: { mode: "single-disabled-skill", matchedLines: snippets.length },
     snippets,
+    bytesRead,
+    truncated,
+    maxBytes,
   };
 }
 
+/**
+ * Stream the skill file once via `readline` and buffer only the window
+ * of lines around `anchorLine`. Memory stays bounded to the window size
+ * plus a single in-flight line buffer; we never materialize the whole
+ * file. The numbered window is then capped to `DCI_BUDGET.maxOpenChars`.
+ *
+ * Note: the stream still walks the whole file so `totalLines` is accurate
+ * and an anchor past EOF can be clamped back. Memory pressure — not raw
+ * I/O — is the primary concern this guards against.
+ */
 export async function dciOpenSkillWindow(
   skills: Skill[],
   idOrRef: string,
@@ -403,15 +451,37 @@ export async function dciOpenSkillWindow(
   const skill = findRoutableSkillOrThrow(skills, idOrRef);
   const anchorLine = normalizePositiveInt(opts.line, 1, Number.MAX_SAFE_INTEGER);
   const window = normalizePositiveInt(opts.window, DCI_BUDGET.defaultWindowLines, DCI_BUDGET.maxWindowLines);
-  const content = await readFile(skill.skillMdPath, "utf8");
-  const lines = content.split(/\r?\n/);
-  const totalLines = lines.length;
-  const safeAnchor = Math.min(anchorLine, Math.max(1, totalLines));
+  // Read the candidate window plus a small look-ahead so the safeAnchor
+  // clamp below can still adjust if the file ends near `anchorLine`.
   const before = Math.floor((window - 1) / 2);
+  const provisionalStart = Math.max(1, anchorLine - before);
+  const provisionalEnd = provisionalStart + window - 1;
+
+  // Buffer only the candidate window lines; count the rest to expose
+  // accurate `totalLines` without retaining content past the window.
+  const buffered = new Map<number, string>();
+  let totalLines = 0;
+  let bytesRead = 0;
+  const scan = await streamSkillLines(skill.skillMdPath, Number.POSITIVE_INFINITY, (line, lineNumber) => {
+    totalLines = lineNumber;
+    if (lineNumber >= provisionalStart && lineNumber <= provisionalEnd) {
+      buffered.set(lineNumber, line);
+    }
+    return true;
+  });
+  bytesRead = scan.bytesRead;
+  if (totalLines === 0) totalLines = 1;
+
+  const safeAnchor = Math.min(anchorLine, Math.max(1, totalLines));
   let startLine = Math.max(1, safeAnchor - before);
   let endLine = Math.min(totalLines, startLine + window - 1);
   startLine = Math.max(1, endLine - window + 1);
-  const numbered = lines.slice(startLine - 1, endLine).map((line, idx) => `${startLine + idx}: ${line}`).join("\n");
+
+  const collected: string[] = [];
+  for (let n = startLine; n <= endLine; n++) {
+    collected.push(buffered.get(n) ?? "");
+  }
+  const numbered = collected.map((line, idx) => `${startLine + idx}: ${line}`).join("\n");
   const truncated = numbered.length > DCI_BUDGET.maxOpenChars;
   const boundedContent = truncated ? numbered.slice(0, DCI_BUDGET.maxOpenChars) : numbered;
 
@@ -426,6 +496,7 @@ export async function dciOpenSkillWindow(
     content: boundedContent,
     truncated,
     maxChars: DCI_BUDGET.maxOpenChars,
+    bytesRead,
   };
 }
 
@@ -440,6 +511,15 @@ export function dciInspectSkill(skills: Skill[], idOrRef: string): DciInspectRes
   };
 }
 
+/**
+ * Read the skill file using a bounded `fileHandle.read` against a
+ * pre-allocated buffer. `maxChars` is treated as a byte budget at the I/O
+ * layer: at most `maxChars + 1` bytes are pulled from disk so we can
+ * detect truncation without paying for the full file. The result is then
+ * decoded as UTF-8 (with a safe-boundary walk to avoid U+FFFD on
+ * mid-character truncation) and sliced to at most `maxChars` characters
+ * for backward-compatible content shape.
+ */
 export async function dciReadSkill(
   skills: Skill[],
   idOrRef: string,
@@ -447,14 +527,14 @@ export async function dciReadSkill(
 ): Promise<DciReadResult> {
   const skill = findRoutableSkillOrThrow(skills, idOrRef);
   const maxChars = normalizePositiveInt(opts.maxChars, DEFAULT_MAX_READ_CHARS, MAX_READ_CHARS);
-  const content = await readFile(skill.skillMdPath, "utf8");
-  const truncated = content.length > maxChars;
+  const read = await readSkillWithBudget(skill.skillMdPath, maxChars);
   return {
     ...skillRef(skill),
     action: "read-skill-file",
-    content: truncated ? content.slice(0, maxChars) : content,
-    truncated,
+    content: read.content,
+    truncated: read.truncated,
     maxChars,
+    bytesRead: read.bytesRead,
   };
 }
 
@@ -630,6 +710,97 @@ function skillMetadataText(skill: Skill): string {
     skill.name,
     skill.description,
   ].join("\n");
+}
+
+/**
+ * Read up to `maxChars + 1` bytes from `path` and decode as UTF-8 (slicing
+ * to at most `maxChars` characters). The +1 byte lets the caller detect
+ * truncation without reading the whole file. The handle is always closed.
+ */
+async function readSkillWithBudget(
+  path: string,
+  maxChars: number,
+): Promise<{ content: string; bytesRead: number; truncated: boolean }> {
+  const handle = await openFile(path, "r");
+  try {
+    const stats = await handle.stat();
+    // Pull at most maxChars+1 bytes so we can detect "file is bigger than
+    // the budget" without materializing the entire file in memory.
+    const bytesToRead = Math.min(maxChars + 1, stats.size);
+    if (bytesToRead <= 0) {
+      return { content: "", bytesRead: 0, truncated: false };
+    }
+    const buffer = Buffer.allocUnsafe(bytesToRead);
+    const result = await handle.read({ buffer, length: bytesToRead, position: 0 });
+    const bytesRead = result.bytesRead;
+    // Truncation is defined relative to the caller's budget, not the read
+    // window: the file is bigger than the budget either when stat() said so
+    // or when we successfully read more than maxChars bytes.
+    const truncated = stats.size > maxChars;
+    // When the buffer ends inside a multibyte UTF-8 sequence, walk back to
+    // the last complete boundary before decoding.
+    const decodeEnd = bytesRead > maxChars
+      ? utf8SafeEnd(buffer, maxChars)
+      : (truncated ? utf8SafeEnd(buffer, bytesRead) : bytesRead);
+    const decoded = buffer.subarray(0, decodeEnd).toString("utf8");
+    const content = decoded.length > maxChars ? decoded.slice(0, maxChars) : decoded;
+    return { content, bytesRead, truncated };
+  } finally {
+    await handle.close();
+  }
+}
+
+interface StreamScanResult {
+  bytesRead: number;
+  /** True when the byte budget was reached before EOF. */
+  bytesExhausted: boolean;
+}
+
+/**
+ * Stream `path` line-by-line via `readline.createInterface` over a
+ * `fs.createReadStream`. The callback is invoked once per line with the
+ * 1-based line number and may return `false` to stop the scan early
+ * (e.g. once enough matches were collected). The scan also stops when
+ * `maxBytes` bytes have been consumed; the caller can distinguish the
+ * two cases via `bytesExhausted` on the return value. The stream is
+ * always destroyed so the file descriptor does not leak.
+ */
+async function streamSkillLines(
+  path: string,
+  maxBytes: number,
+  onLine: (line: string, lineNumber: number) => boolean,
+): Promise<StreamScanResult> {
+  const stream = createReadStream(path, { encoding: "utf8" });
+  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+  let bytesRead = 0;
+  let bytesExhausted = false;
+  let lineNumber = 0;
+  let stop = false;
+  // Track raw byte consumption from the read stream so the byte budget is
+  // enforced regardless of how many decoded characters readline emitted.
+  stream.on("data", (chunk: string | Buffer) => {
+    bytesRead += Buffer.byteLength(chunk);
+    if (bytesRead >= maxBytes) {
+      bytesExhausted = true;
+    }
+  });
+  try {
+    for await (const line of rl) {
+      lineNumber++;
+      if (!onLine(line, lineNumber)) {
+        stop = true;
+        break;
+      }
+      if (bytesExhausted) break;
+    }
+  } finally {
+    rl.close();
+    stream.destroy();
+  }
+  // If we stopped early on the callback's request, do not report the
+  // remaining budget as "exhausted" — those are two different signals.
+  if (stop && bytesRead < maxBytes) bytesExhausted = false;
+  return { bytesRead, bytesExhausted };
 }
 
 async function readSkillPrefix(
