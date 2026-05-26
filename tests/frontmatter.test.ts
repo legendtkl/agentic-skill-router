@@ -242,6 +242,19 @@ license: MIT
   assert.match(warnings[0]!, /line 3/);
 });
 
+test("parseFrontmatterWithWarnings keeps inline string arrays containing quoted braces", () => {
+  const src = `---
+name: lark-mail
+tags: ['{x}', "a{b}c"]
+license: MIT
+---`;
+  const { data, warnings } = parseFrontmatterWithWarnings(src);
+  assert.equal(data["name"], "lark-mail");
+  assert.equal(data["license"], "MIT");
+  assert.deepEqual(data["tags"], ["{x}", "a{b}c"]);
+  assert.deepEqual(warnings, []);
+});
+
 test("parseFrontmatterWithWarnings still parses plain `- foo` block string arrays", () => {
   // Regression guard: the list-of-mapping detection must not break the
   // existing string-array form.

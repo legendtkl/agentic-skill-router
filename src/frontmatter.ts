@@ -137,10 +137,10 @@ export function parseFrontmatterWithWarnings(content: string): FrontmatterParseR
     }
 
     if (/^\[.*\]$/.test(rawValue)) {
-      // Inline flow arrays that contain `{` or `}` are list-of-mapping in
-      // disguise (e.g. `examples: [{input: foo, output: bar}]`). Drop the
-      // key and warn, mirroring the block-array case.
-      if (/[{}]/.test(rawValue)) {
+      // Inline flow arrays with unquoted `{`/`}` are list-of-mapping in
+      // disguise (e.g. `examples: [{input: foo, output: bar}]`). Ignore
+      // braces inside quoted string items (e.g. `tags: ['{x}']`).
+      if (hasUnquotedFlowMappingBraces(rawValue)) {
         warnings.push(formatListOfMappingWarning(key, i + 1));
         continue;
       }
@@ -222,6 +222,32 @@ function parseInlineArray(raw: string): string[] | null {
   if (quote) return null;
   out.push(unquote(current.trim()));
   return out;
+}
+
+function hasUnquotedFlowMappingBraces(raw: string): boolean {
+  const body = raw.slice(1, -1);
+  let quote: "'" | "\"" | null = null;
+  let escaped = false;
+  for (const ch of body) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === "'" || ch === "\"") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "{" || ch === "}") return true;
+  }
+  return false;
 }
 
 function unquote(s: string): string {
