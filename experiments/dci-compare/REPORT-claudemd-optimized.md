@@ -607,6 +607,8 @@ A-router 直接把长 query 交给固定 scorer。真实 query 中大量步骤�
 
 | 内容 | 路径 |
 | --- | --- |
+| **All-experiments visualization (HTML)** | `experiments/dci-compare/runs/report-all-experiments.html` |
+| All-experiments renderer | `experiments/dci-compare/render-all-experiments.mjs` |
 | Claude paired driver | `experiments/dci-compare/routing-only-paired.mjs` |
 | Claude paired raw summary | `experiments/dci-compare/runs/routing-only-9x24-claudemd/summary.json` |
 | Claude paired HTML report | `experiments/dci-compare/runs/routing-only-9x24-claudemd/report.html` |

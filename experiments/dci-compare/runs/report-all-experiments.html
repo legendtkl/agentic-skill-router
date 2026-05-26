@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<title>Disabled-Skill Routing — All Experiments</title>
+<style>
+  :root {
+    --claude: #8b5cf6;
+    --codex: #3b82f6;
+    --paper: #64748b;
+    --emerald: #059669;
+    --amber: #d97706;
+    --rose: #e11d48;
+  }
+  body { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; margin: 0; padding: 24px; max-width: 1400px; margin: 0 auto; color: #111; background: #fafafa; }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  h2 { margin: 32px 0 12px; font-size: 19px; padding-bottom: 6px; border-bottom: 2px solid #d1d5db; }
+  h3 { margin: 18px 0 8px; font-size: 15px; color: #1f2937; }
+  h4 { margin: 12px 0 6px; font-size: 13px; color: #4b5563; font-weight: 600; }
+  p.intro { color: #4b5563; font-size: 13px; line-height: 1.55; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; margin: 8px 0; }
+  th, td { padding: 6px 9px; text-align: left; border-bottom: 1px solid #eef2f7; }
+  th { background: #f3f4f6; font-weight: 600; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .hit { color: var(--emerald); font-weight: 600; }
+  .miss { color: var(--rose); }
+  .mid { color: var(--amber); }
+  .gray { color: #6b7280; }
+  .pill { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; color: white; white-space: nowrap; }
+  .pill-claude { background: var(--claude); }
+  .pill-codex { background: var(--codex); }
+  .pill-paper { background: var(--paper); }
+  .pill-best { background: #059669; }
+  .pill-gray { background: #94a3b8; }
+  .badge { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10.5px; font-weight: 600; background: #e5e7eb; color: #1f2937; margin-left: 4px; }
+  .takeaway { background: #f0f9ff; border-left: 3px solid #0284c7; padding: 8px 12px; margin: 8px 0; font-size: 13px; color: #0c4a6e; border-radius: 0 4px 4px 0; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 8px 0; }
+  .panel { background: white; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px 14px; }
+  .panel h3 { margin-top: 0; }
+  details { background: white; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 12px; margin: 6px 0; }
+  details > summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+  code { background: #f1f5f9; padding: 0 4px; border-radius: 3px; font-size: 12px; }
+  .toc { background: white; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 16px; margin: 10px 0 20px; font-size: 13px; }
+  .toc a { color: #2563eb; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .toc li { margin: 3px 0; }
+  .matrix-row td { font-size: 11.5px; padding: 4px 6px; }
+  .matrix-row .gt { color: #6b7280; font-style: italic; }
+  .footnote { font-size: 12px; color: #6b7280; margin-top: 4px; }
+  .bar-wrap { width: 80px; height: 10px; background: #e5e7eb; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }
+  .bar-fill { height: 100%; background: var(--claude); }
+  .bar-fill.codex { background: var(--codex); }
+  .bar-fill.paper { background: var(--paper); }
+</style>
+</head><body>
+<h1>Disabled-Skill Routing — All Experiments</h1>
+<p class="intro">
+  Consolidated visualization of every experiment in
+  <code>REPORT-claudemd-optimized.md</code>. Sections are organized by
+  <b>dataset size</b> (150-skill → 1K synthetic → 79K Hard → 78K Easy 75-core)
+  and then split by <b>host</b> (Claude Code <span class="pill pill-claude">claude</span>
+  vs Codex <span class="pill pill-codex">codex</span>) to make
+  apples-to-apples comparisons obvious. Paper baselines from the SkillRouter
+  paper (arXiv:2603.22455) are shown as gray <span class="pill pill-paper">paper</span>
+  pills where relevant.
+</p>
+
+<div class="toc">
+  <b>Sections:</b>
+  <ul>
+    <li><a href="#small-claude">1. 150-skill × Claude Code</a> — 9 variants paired (with/without CLAUDE.md)</li>
+    <li><a href="#small-codex">2. 150-skill × Codex</a> — initial 9 variants + 7 follow-on iterations</li>
+    <li><a href="#medium-codex">3. 1K synthetic × Codex</a> — L-agentic scale check</li>
+    <li><a href="#hard-claude">4. 79K Hard × Claude Code</a> — J-bounded-v2 large-pool stress</li>
+    <li><a href="#hard-codex">5. 79K Hard × Codex</a> — paper-core single + current-24 subset</li>
+    <li><a href="#easy-claude">6.1 78K Easy × 75 core × Claude Code</a> — K / J-v2 / M-bm25 (§9)</li>
+    <li><a href="#easy-codex">6.2 78K Easy × 75 core × Codex</a> — K / J-v2 / M-bm25 (§9)</li>
+    <li><a href="#easy-compare">7. 78K Easy — cross-cell comparison &amp; paper baselines</a></li>
+    <li><a href="#easy-traces">8. 78K Easy — per-query execution traces</a> (link to separate file)</li>
+  </ul>
+</div>
+<h2 id="small-claude">1. 150-skill × Claude Code <span class="pill pill-claude">claude</span></h2>
+<p class="intro">
+  Paired experiment: each (variant, condition) gets an isolated HOME and runs all 24 SkillsBench
+  single-skill queries. <b>with-CLAUDE.md</b> injects a 5-line user-message context block telling
+  the agent to call <code>skill-router-skills</code> when no enabled skill matches.
+  Trigger lift and accuracy lift are the primary CLAUDE.md signal.
+</p>
+<div class="takeaway">
+  <b>Headline:</b> CLAUDE.md injection lifts accuracy +18pp on average across 7 comparable router
+  variants (excl. D-agentic rerun). B-cc / C-lite reach 23/24 (95.8%). J-bounded is the lowest-cost
+  router in the 22/24 group ($3.07, 30.7K avg ctx). A-router is the only router below G-native.
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Variant</th>
+      <th class="num">Acc (with)</th>
+      <th class="num">Acc (without)</th>
+      <th class="num">Δ acc</th>
+      <th class="num">Trigger (with)</th>
+      <th class="num">Trigger (without)</th>
+      <th class="num">Cost (with)</th>
+      <th class="num">Wall (with)</th>
+      <th class="num">Turns (with)</th>
+      <th class="num">Avg ctx<sub>end</sub></th>
+    </tr>
+  </thead>
+  <tbody><tr>
+      <td><b>A-router</b></td>
+      <td class="num">13/24 <span class="gray">(54.2%)</span></td>
+      <td class="num">10/24 <span class="gray">(41.7%)</span></td>
+      <td class="num hit">+12.5pp</td>
+      <td class="num">23/24</td>
+      <td class="num">20/24</td>
+      <td class="num">$3.90</td>
+      <td class="num">499s</td>
+      <td class="num">96</td>
+      <td class="num">94.2k</td>
+    </tr><tr>
+      <td><b>B-cc</b></td>
+      <td class="num">23/24 <span class="gray">(95.8%)</span></td>
+      <td class="num">19/24 <span class="gray">(79.2%)</span></td>
+      <td class="num hit">+16.7pp</td>
+      <td class="num">24/24</td>
+      <td class="num">19/24</td>
+      <td class="num">$5.56</td>
+      <td class="num">896s</td>
+      <td class="num">197</td>
+      <td class="num">219.0k</td>
+    </tr><tr>
+      <td><b>C-lite</b></td>
+      <td class="num">23/24 <span class="gray">(95.8%)</span></td>
+      <td class="num">16/24 <span class="gray">(66.7%)</span></td>
+      <td class="num hit">+29.2pp</td>
+      <td class="num">24/24</td>
+      <td class="num">16/24</td>
+      <td class="num">$4.30</td>
+      <td class="num">654s</td>
+      <td class="num">156</td>
+      <td class="num">145.0k</td>
+    </tr><tr>
+      <td><b>D-agentic</b></td>
+      <td class="num">16/24 <span class="gray">(66.7%)</span></td>
+      <td class="num">9/24 <span class="gray">(37.5%)</span></td>
+      <td class="num hit">+29.2pp</td>
+      <td class="num">23/24</td>
+      <td class="num">22/24</td>
+      <td class="num">$3.92</td>
+      <td class="num">459s</td>
+      <td class="num">107</td>
+      <td class="num">108.4k</td>
+    </tr><tr>
+      <td><b>E-digest</b></td>
+      <td class="num">22/24 <span class="gray">(91.7%)</span></td>
+      <td class="num">17/24 <span class="gray">(70.8%)</span></td>
+      <td class="num hit">+20.8pp</td>
+      <td class="num">24/24</td>
+      <td class="num">19/24</td>
+      <td class="num">$4.11</td>
+      <td class="num">355s</td>
+      <td class="num">96</td>
+      <td class="num">95.5k</td>
+    </tr><tr>
+      <td><b>G-native</b></td>
+      <td class="num">15/24 <span class="gray">(62.5%)</span></td>
+      <td class="num">15/24 <span class="gray">(62.5%)</span></td>
+      <td class="num gray">0.0pp</td>
+      <td class="num">0/24</td>
+      <td class="num">0/24</td>
+      <td class="num">$2.98</td>
+      <td class="num">130s</td>
+      <td class="num">24</td>
+      <td class="num">36.5k</td>
+    </tr><tr>
+      <td><b>H-bounded</b></td>
+      <td class="num">22/24 <span class="gray">(91.7%)</span></td>
+      <td class="num">19/24 <span class="gray">(79.2%)</span></td>
+      <td class="num hit">+12.5pp</td>
+      <td class="num">23/24</td>
+      <td class="num">19/24</td>
+      <td class="num">$4.16</td>
+      <td class="num">542s</td>
+      <td class="num">132</td>
+      <td class="num">139.3k</td>
+    </tr><tr>
+      <td><b>I-meta</b></td>
+      <td class="num">21/24 <span class="gray">(87.5%)</span></td>
+      <td class="num">17/24 <span class="gray">(70.8%)</span></td>
+      <td class="num hit">+16.7pp</td>
+      <td class="num">23/24</td>
+      <td class="num">19/24</td>
+      <td class="num">$4.16</td>
+      <td class="num">404s</td>
+      <td class="num">93</td>
+      <td class="num">93.1k</td>
+    </tr><tr>
+      <td><b>J-bounded</b></td>
+      <td class="num">22/24 <span class="gray">(91.7%)</span></td>
+      <td class="num">18/24 <span class="gray">(75.0%)</span></td>
+      <td class="num hit">+16.7pp</td>
+      <td class="num">23/24</td>
+      <td class="num">19/24</td>
+      <td class="num">$3.07</td>
+      <td class="num">374s</td>
+      <td class="num">96</td>
+      <td class="num">89.6k</td>
+    </tr></tbody>
+</table>
+<div class="footnote">Acc / Trigger denominators are 24. Δ acc = with − without (pp). Wall + cost are summed across 24 queries.</div>
+
+<h2 id="small-codex">2. 150-skill × Codex <span class="pill pill-codex">codex</span></h2>
+<p class="intro">
+  Same 24-query / 150-skill corpus as §1 above, run on <code>codex exec</code> (model gpt-5.5,
+  reasoning effort high). Codex native G-native scores 24/24 vs Claude native 15/24 — the largest
+  host-driven gap in the report. After A-J, follow-on iterations (D-metadata, K, K-lite, L, M)
+  are appended below.
+</p>
+<div class="takeaway">
+  <b>Headline:</b> Codex G-native + D-agentic both 24/24. C-lite / E-digest / H-bounded reach 23/24.
+  All Codex follow-on iterations (K, K-lite fixed, L, M) also reach 24/24 on 150-skill — the small
+  corpus cannot rank them further. L-agentic scales to 1K with only 1 miss (pptx-reference-formatting).
+</div>
+<h3>2.1 Initial 9 variants (A–J)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Variant</th>
+      <th class="num">Accuracy</th>
+      <th class="num">Trigger</th>
+      <th class="num">Wall</th>
+      <th class="num">In tokens</th>
+      <th class="num">Out tokens</th>
+      <th class="num">Reasoning tokens</th>
+      <th class="num">Cost est.</th>
+    </tr>
+  </thead>
+  <tbody><tr>
+      <td><b>G-native</b></td>
+      <td class="num hit">24/24 <span class="gray">(100.0%)</span></td>
+      <td class="num">n/a</td>
+      <td class="num">185s</td>
+      <td class="num">466.9k</td>
+      <td class="num">3.0k</td>
+      <td class="num">2.6k</td>
+      <td class="num">$1.82</td>
+    </tr><tr>
+      <td><b>A-router</b></td>
+      <td class="num miss">8/24 <span class="gray">(33.3%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">946s</td>
+      <td class="num">1.7kk</td>
+      <td class="num">34.0k</td>
+      <td class="num">9.5k</td>
+      <td class="num">$4.49</td>
+    </tr><tr>
+      <td><b>B-cc</b></td>
+      <td class="num mid">22/24 <span class="gray">(91.7%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">718s</td>
+      <td class="num">2.3kk</td>
+      <td class="num">17.2k</td>
+      <td class="num">6.7k</td>
+      <td class="num">$4.85</td>
+    </tr><tr>
+      <td><b>C-lite</b></td>
+      <td class="num hit">23/24 <span class="gray">(95.8%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">659s</td>
+      <td class="num">1.9kk</td>
+      <td class="num">19.7k</td>
+      <td class="num">4.9k</td>
+      <td class="num">$3.59</td>
+    </tr><tr>
+      <td><b>D-agentic</b></td>
+      <td class="num hit">24/24 <span class="gray">(100.0%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">539s</td>
+      <td class="num">1.4kk</td>
+      <td class="num">13.2k</td>
+      <td class="num">4.9k</td>
+      <td class="num">$2.87</td>
+    </tr><tr>
+      <td><b>E-digest</b></td>
+      <td class="num hit">23/24 <span class="gray">(95.8%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">638s</td>
+      <td class="num">1.5kk</td>
+      <td class="num">11.6k</td>
+      <td class="num">5.2k</td>
+      <td class="num">$2.95</td>
+    </tr><tr>
+      <td><b>H-bounded</b></td>
+      <td class="num hit">23/24 <span class="gray">(95.8%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">751s</td>
+      <td class="num">2.3kk</td>
+      <td class="num">21.7k</td>
+      <td class="num">6.7k</td>
+      <td class="num">$4.35</td>
+    </tr><tr>
+      <td><b>I-meta</b></td>
+      <td class="num mid">22/24 <span class="gray">(91.7%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">495s</td>
+      <td class="num">1.6kk</td>
+      <td class="num">12.1k</td>
+      <td class="num">5.1k</td>
+      <td class="num">$3.31</td>
+    </tr><tr>
+      <td><b>J-bounded</b></td>
+      <td class="num mid">22/24 <span class="gray">(91.7%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">474s</td>
+      <td class="num">1.2kk</td>
+      <td class="num">11.3k</td>
+      <td class="num">4.9k</td>
+      <td class="num">$2.42</td>
+    </tr></tbody>
+</table>
+<h3>2.2 Follow-on iterations (D-metadata, K, K-lite, L, L-1K, M)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Variant</th>
+      <th class="num">Accuracy</th>
+      <th class="num">Trigger</th>
+      <th class="num">Wall</th>
+      <th class="num">In tokens</th>
+      <th class="num">Out tokens</th>
+      <th class="num">Reasoning tokens</th>
+      <th class="num">Cost est.</th>
+    </tr>
+  </thead>
+  <tbody><tr>
+      <td><b>D-agentic (metadata-only)</b> <span class="badge">150-skill</span></td>
+      <td class="num hit">24/24 <span class="gray">(100.0%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">578s</td>
+      <td class="num">1.6kk</td>
+      <td class="num">14.9k</td>
+      <td class="num">4.6k</td>
+      <td class="num">$3.60</td>
+    </tr><tr>
+      <td><b>K-bounded</b> <span class="badge">150-skill</span></td>
+      <td class="num hit">24/24 <span class="gray">(100.0%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">726s</td>
+      <td class="num">1.8kk</td>
+      <td class="num">18.8k</td>
+      <td class="num">6.4k</td>
+      <td class="num">$3.55</td>
+    </tr><tr>
+      <td><b>K-lite (high)</b> <span class="badge">150-skill</span></td>
+      <td class="num mid">21/24 <span class="gray">(87.5%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">606s</td>
+      <td class="num">1.7kk</td>
+      <td class="num">15.4k</td>
+      <td class="num">4.8k</td>
+      <td class="num">$3.52</td>
+    </tr><tr>
+      <td><b>K-lite (fixed)</b> <span class="badge">150-skill</span></td>
+      <td class="num hit">24/24 <span class="gray">(100.0%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">704s</td>
+      <td class="num">1.7kk</td>
+      <td class="num">20.2k</td>
+      <td class="num">4.9k</td>
+      <td class="num">$3.32</td>
+    </tr><tr>
+      <td><b>L-agentic</b> <span class="badge">150-skill</span></td>
+      <td class="num hit">24/24 <span class="gray">(100.0%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">537s</td>
+      <td class="num">1.4kk</td>
+      <td class="num">14.1k</td>
+      <td class="num">5.0k</td>
+      <td class="num">$2.77</td>
+    </tr><tr>
+      <td><b>L-agentic (1K)</b> <span class="badge">1000-skill</span></td>
+      <td class="num hit">23/24 <span class="gray">(95.8%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">637s</td>
+      <td class="num">1.5kk</td>
+      <td class="num">14.5k</td>
+      <td class="num">5.4k</td>
+      <td class="num">$3.44</td>
+    </tr><tr>
+      <td><b>M-bm25</b> <span class="badge">150-skill</span></td>
+      <td class="num hit">24/24 <span class="gray">(100.0%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">593s</td>
+      <td class="num">1.5kk</td>
+      <td class="num">15.6k</td>
+      <td class="num">5.8k</td>
+      <td class="num">$2.98</td>
+    </tr></tbody>
+</table>
+<div class="footnote">Cost est. uses gpt-5.5 standard list price (2026-05-24) per §5 of the markdown report; treat as Codex-internal magnitude comparison, not financial truth.</div>
+
+<details>
+  <summary>2.3 Per-query matrix (initial 9 variants × 24 queries)</summary>
+  <table style="font-size:11.5px">
+    <thead><tr><th>Query</th><th>Expected</th><th class="num">G-native</th><th class="num">A-router</th><th class="num">B-cc</th><th class="num">C-lite</th><th class="num">D-agentic</th><th class="num">E-digest</th><th class="num">H-bounded</th><th class="num">I-meta</th><th class="num">J-bounded</th></tr></thead>
+    <tbody><tr class="matrix-row"><td><code>3d-scan-calc</code></td><td><code>skill-079</code></td><td class="num hit">✓ skill-079</td><td class="num miss">✗ skill-043</td><td class="num hit">✓ skill-079</td><td class="num hit">✓ skill-079</td><td class="num hit">✓ skill-079</td><td class="num hit">✓ skill-079</td><td class="num hit">✓ skill-079</td><td class="num hit">✓ skill-079</td><td class="num hit">✓ skill-079</td></tr><tr class="matrix-row"><td><code>azure-bgp-oscillation-route-leak</code></td><td><code>skill-070</code></td><td class="num hit">✓ skill-070</td><td class="num hit">✓ skill-070</td><td class="num hit">✓ skill-070</td><td class="num hit">✓ skill-070</td><td class="num hit">✓ skill-070</td><td class="num hit">✓ skill-070</td><td class="num hit">✓ skill-070</td><td class="num hit">✓ skill-070</td><td class="num hit">✓ skill-070</td></tr><tr class="matrix-row"><td><code>citation-check</code></td><td><code>skill-043</code></td><td class="num hit">✓ skill-043</td><td class="num hit">✓ skill-043</td><td class="num hit">✓ skill-043</td><td class="num hit">✓ skill-043</td><td class="num hit">✓ skill-043</td><td class="num hit">✓ skill-043</td><td class="num hit">✓ skill-043</td><td class="num hit">✓ skill-043</td><td class="num hit">✓ skill-043</td></tr><tr class="matrix-row"><td><code>court-form-filling</code></td><td><code>skill-003</code></td><td class="num hit">✓ skill-003</td><td class="num miss">✗ skill-140</td><td class="num hit">✓ skill-003</td><td class="num hit">✓ skill-003</td><td class="num hit">✓ skill-003</td><td class="num hit">✓ skill-003</td><td class="num hit">✓ skill-003</td><td class="num hit">✓ skill-003</td><td class="num hit">✓ skill-003</td></tr><tr class="matrix-row"><td><code>data-to-d3</code></td><td><code>skill-037</code></td><td class="num hit">✓ skill-037</td><td class="num miss">✗ skill-140</td><td class="num hit">✓ skill-037</td><td class="num hit">✓ skill-037</td><td class="num hit">✓ skill-037</td><td class="num hit">✓ skill-037</td><td class="num hit">✓ skill-037</td><td class="num hit">✓ skill-037</td><td class="num hit">✓ skill-037</td></tr><tr class="matrix-row"><td><code>dialogue-parser</code></td><td><code>skill-009</code></td><td class="num hit">✓ skill-009</td><td class="num miss">✗ skill-140</td><td class="num hit">✓ skill-009</td><td class="num hit">✓ skill-009</td><td class="num hit">✓ skill-009</td><td class="num hit">✓ skill-009</td><td class="num hit">✓ skill-009</td><td class="num hit">✓ skill-009</td><td class="num hit">✓ skill-009</td></tr><tr class="matrix-row"><td><code>earthquake-plate-calculation</code></td><td><code>skill-135</code></td><td class="num hit">✓ skill-135</td><td class="num hit">✓ skill-135</td><td class="num hit">✓ skill-135</td><td class="num hit">✓ skill-135</td><td class="num hit">✓ skill-135</td><td class="num hit">✓ skill-135</td><td class="num hit">✓ skill-135</td><td class="num miss">✗ skill-092</td><td class="num hit">✓ skill-135</td></tr><tr class="matrix-row"><td><code>econ-detrending-correlation</code></td><td><code>skill-080</code></td><td class="num hit">✓ skill-080</td><td class="num miss">✗ skill-043</td><td class="num hit">✓ skill-080</td><td class="num hit">✓ skill-080</td><td class="num hit">✓ skill-080</td><td class="num hit">✓ skill-080</td><td class="num hit">✓ skill-080</td><td class="num hit">✓ skill-080</td><td class="num miss">✗ skill-105</td></tr><tr class="matrix-row"><td><code>enterprise-information-search</code></td><td><code>skill-049</code></td><td class="num hit">✓ skill-049</td><td class="num hit">✓ skill-049</td><td class="num hit">✓ skill-049</td><td class="num miss">✗ skill-087</td><td class="num hit">✓ skill-049</td><td class="num hit">✓ skill-049</td><td class="num hit">✓ skill-049</td><td class="num hit">✓ skill-049</td><td class="num hit">✓ skill-049</td></tr><tr class="matrix-row"><td><code>gh-repo-analytics</code></td><td><code>skill-021</code></td><td class="num hit">✓ skill-021</td><td class="num miss">✗ skill-043</td><td class="num miss">✗ skill-046</td><td class="num hit">✓ skill-021</td><td class="num hit">✓ skill-021</td><td class="num hit">✓ skill-021</td><td class="num hit">✓ skill-021</td><td class="num miss">✗ skill-046</td><td class="num hit">✓ skill-021</td></tr><tr class="matrix-row"><td><code>jax-computing-basics</code></td><td><code>skill-042</code></td><td class="num hit">✓ skill-042</td><td class="num miss">✗ skill-043</td><td class="num hit">✓ skill-042</td><td class="num hit">✓ skill-042</td><td class="num hit">✓ skill-042</td><td class="num hit">✓ skill-042</td><td class="num hit">✓ skill-042</td><td class="num hit">✓ skill-042</td><td class="num hit">✓ skill-042</td></tr><tr class="matrix-row"><td><code>lab-unit-harmonization</code></td><td><code>skill-123</code></td><td class="num hit">✓ skill-123</td><td class="num hit">✓ skill-123</td><td class="num hit">✓ skill-123</td><td class="num hit">✓ skill-123</td><td class="num hit">✓ skill-123</td><td class="num hit">✓ skill-123</td><td class="num hit">✓ skill-123</td><td class="num hit">✓ skill-123</td><td class="num hit">✓ skill-123</td></tr><tr class="matrix-row"><td><code>offer-letter-generator</code></td><td><code>skill-116</code></td><td class="num hit">✓ skill-116</td><td class="num miss">✗ skill-140</td><td class="num hit">✓ skill-116</td><td class="num hit">✓ skill-116</td><td class="num hit">✓ skill-116</td><td class="num hit">✓ skill-116</td><td class="num hit">✓ skill-116</td><td class="num hit">✓ skill-116</td><td class="num hit">✓ skill-116</td></tr><tr class="matrix-row"><td><code>pddl-tpp-planning</code></td><td><code>skill-117</code></td><td class="num hit">✓ skill-117</td><td class="num miss">✗ skill-140</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td></tr><tr class="matrix-row"><td><code>pptx-reference-formatting</code></td><td><code>skill-140</code></td><td class="num hit">✓ skill-140</td><td class="num hit">✓ skill-140</td><td class="num hit">✓ skill-140</td><td class="num hit">✓ skill-140</td><td class="num hit">✓ skill-140</td><td class="num hit">✓ skill-140</td><td class="num hit">✓ skill-140</td><td class="num hit">✓ skill-140</td><td class="num hit">✓ skill-140</td></tr><tr class="matrix-row"><td><code>protein-expression-analysis</code></td><td><code>skill-105</code></td><td class="num hit">✓ skill-105</td><td class="num miss">✗ skill-140</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td></tr><tr class="matrix-row"><td><code>quantum-numerical-simulation</code></td><td><code>skill-033</code></td><td class="num hit">✓ skill-033</td><td class="num hit">✓ skill-033</td><td class="num hit">✓ skill-033</td><td class="num hit">✓ skill-033</td><td class="num hit">✓ skill-033</td><td class="num hit">✓ skill-033</td><td class="num hit">✓ skill-033</td><td class="num hit">✓ skill-033</td><td class="num hit">✓ skill-033</td></tr><tr class="matrix-row"><td><code>reserves-at-risk-calc</code></td><td><code>skill-105</code></td><td class="num hit">✓ skill-105</td><td class="num miss">✗ skill-043</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td></tr><tr class="matrix-row"><td><code>shock-analysis-demand</code></td><td><code>skill-105</code></td><td class="num hit">✓ skill-105</td><td class="num miss">✗ skill-043</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td></tr><tr class="matrix-row"><td><code>shock-analysis-supply</code></td><td><code>skill-105</code></td><td class="num hit">✓ skill-105</td><td class="num miss">✗ skill-043</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num miss">✗ skill-080</td><td class="num hit">✓ skill-105</td><td class="num miss">✗ skill-080</td></tr><tr class="matrix-row"><td><code>taxonomy-tree-merge</code></td><td><code>skill-068</code></td><td class="num hit">✓ skill-068</td><td class="num miss">✗ skill-140</td><td class="num hit">✓ skill-068</td><td class="num hit">✓ skill-068</td><td class="num hit">✓ skill-068</td><td class="num hit">✓ skill-068</td><td class="num hit">✓ skill-068</td><td class="num hit">✓ skill-068</td><td class="num hit">✓ skill-068</td></tr><tr class="matrix-row"><td><code>video-tutorial-indexer</code></td><td><code>skill-113</code></td><td class="num hit">✓ skill-113</td><td class="num miss">✗ skill-140</td><td class="num hit">✓ skill-113</td><td class="num hit">✓ skill-113</td><td class="num hit">✓ skill-113</td><td class="num hit">✓ skill-113</td><td class="num hit">✓ skill-113</td><td class="num hit">✓ skill-113</td><td class="num hit">✓ skill-113</td></tr><tr class="matrix-row"><td><code>virtualhome-agent-planning</code></td><td><code>skill-117</code></td><td class="num hit">✓ skill-117</td><td class="num miss">✗ skill-037</td><td class="num miss">✗ skill-110</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td><td class="num hit">✓ skill-117</td></tr><tr class="matrix-row"><td><code>weighted-gdp-calc</code></td><td><code>skill-105</code></td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num miss">✗ skill-026</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td><td class="num hit">✓ skill-105</td></tr></tbody>
+  </table>
+</details>
+
+<h2 id="medium-codex">3. 1K synthetic × Codex <span class="pill pill-codex">codex</span></h2>
+<p class="intro">
+  L-agentic (CLI-driven <code>corpus search/inspect</code> + structured candidates) is the only
+  variant scaled past 150. The 1K corpus = 150-skill comparison set + 850 synthetic noise skills
+  drawn from the easy pool. This validates that the L abstraction's index + pagination handles
+  ~7× the candidate pool without prompt blowup.
+</p>
+<table>
+  <thead><tr><th>Corpus</th><th class="num">Accuracy</th><th class="num">Trigger</th><th class="num">Wall</th><th class="num">In tokens</th><th class="num">Out tokens</th><th class="num">Δ acc vs 150</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>L-agentic × 150-skill</b></td>
+      <td class="num hit">24/24 <span class="gray">(100.0%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">537s</td>
+      <td class="num">1.4kk</td>
+      <td class="num">14.1k</td>
+      <td class="num gray">baseline</td>
+    </tr>
+    <tr>
+      <td><b>L-agentic × 1K synthetic</b></td>
+      <td class="num mid">23/24 <span class="gray">(95.8%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">637s</td>
+      <td class="num">1.5kk</td>
+      <td class="num">14.5k</td>
+      <td class="num miss">−4.2pp</td>
+    </tr>
+  </tbody>
+</table>
+<div class="footnote">1K miss: <code>pptx-reference-formatting</code> → <code>skill-103</code>. Avg ctx<sub>end</sub> only grows from 17.5K → 17.9K, confirming CLI pagination prevents prompt blowup.</div>
+
+<h2 id="hard-claude">4. 79K Hard × Claude Code <span class="pill pill-claude">claude</span></h2>
+<p class="intro">
+  J-bounded-v2 scaling from 150 to 79,141 Hard pool (SkillRouter <code>eval-core/hard</code>).
+  v2 fixes v1's shell glob ARG_MAX overflow (~13K paths cap) and removes head-20 truncation.
+  Same 24 SkillsBench queries; bounded payload, cost only +35%, accuracy drops from 22/24 to 12/24.
+</p>
+<div class="takeaway">
+  <b>Headline:</b> J-bounded-v2 is mechanically stable at 79K (bounded ctx, no timeouts) but
+  accuracy collapses from 91.7% → 50.0% because description-only signal is insufficient against
+  the Hard pool's 780 LLM-distilled distractors. Metadata-only cannot serve as the sole decision
+  source at this scale — body-on-tie / full-text rerank is required.
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Cell</th>
+      <th class="num">Accuracy</th>
+      <th class="num">Trigger</th>
+      <th class="num">Wall</th>
+      <th class="num">Cost</th>
+      <th class="num">Avg ctx<sub>end</sub></th>
+      <th class="num">Turns</th>
+      <th class="num">Timeouts</th>
+    </tr>
+  </thead>
+  <tbody><tr>
+      <td><b>J-v2 × 150 (Claude Code)</b></td>
+      <td class="num hit">22/24 <span class="gray">(91.7%)</span></td>
+      <td class="num">95.8%</td>
+      <td class="num">665s</td>
+      <td class="num">$3.95</td>
+      <td class="num">30.8k</td>
+      <td class="num">131</td>
+      <td class="num">0</td>
+    </tr><tr>
+      <td><b>J-v2 × 79K Hard (Claude Code)</b></td>
+      <td class="num mid">12/24 <span class="gray">(50.0%)</span></td>
+      <td class="num">95.8%</td>
+      <td class="num">1577s</td>
+      <td class="num">$5.33</td>
+      <td class="num">36.6k</td>
+      <td class="num">140</td>
+      <td class="num">0</td>
+    </tr></tbody>
+</table>
+
+<h2 id="hard-codex">5. 79K Hard × Codex <span class="pill pill-codex">codex</span></h2>
+<p class="intro">
+  Codex M-bm25 and J-bounded-v2 against the full 79,141-skill Hard pool on two query sets:
+  <b>paper-core single</b> (24 single-skill queries from SkillRouter <code>relevance.json</code>)
+  and the original <b>current 24 subset</b> (overlapping but not identical). J-v2 has 3 outputs in
+  raw <code>name:</code> form rather than opaque <code>sr-*</code> ids; strict scoring counts those
+  as misses (11/24), alias-normalized would give 14/24.
+</p>
+<div class="takeaway">
+  <b>Headline:</b> M-bm25 reaches 58.3% on paper-core single Hard, materially beating BM25-nd (0%)
+  and Qwen3-Emb-8B-nd (20.0%) on Hard but well below full-body SR pipeline (~73%). Both Codex Hard
+  runs cost ~$6-12 and run 16-50 min — significantly more expensive than 150-skill runs.
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Variant / Query set</th>
+      <th class="num">Accuracy</th>
+      <th class="num">Trigger</th>
+      <th class="num">Wall</th>
+      <th class="num">In tokens</th>
+      <th class="num">Out tokens</th>
+      <th class="num">Reasoning tokens</th>
+      <th class="num">Cost est.</th>
+    </tr>
+  </thead>
+  <tbody><tr>
+      <td><b>M-bm25</b> <span class="badge">paper-core single</span></td>
+      <td class="num mid">14/24 <span class="gray">(58.3%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">964s</td>
+      <td class="num">3.7kk</td>
+      <td class="num">23.2k</td>
+      <td class="num">7.7k</td>
+      <td class="num">$6.82</td>
+    </tr><tr>
+      <td><b>J-bounded-v2</b> <span class="badge">paper-core single</span></td>
+      <td class="num mid">11/24 <span class="gray">(45.8%)</span> <span class="gray">(strict; alias-norm 14/24)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">3056s</td>
+      <td class="num">9.0kk</td>
+      <td class="num">46.1k</td>
+      <td class="num">15.2k</td>
+      <td class="num">$12.44</td>
+    </tr><tr>
+      <td><b>M-bm25</b> <span class="badge">current 24 subset</span></td>
+      <td class="num mid">11/24 <span class="gray">(45.8%)</span></td>
+      <td class="num">24/24</td>
+      <td class="num">1016s</td>
+      <td class="num">3.7kk</td>
+      <td class="num">22.8k</td>
+      <td class="num">7.5k</td>
+      <td class="num">$6.35</td>
+    </tr></tbody>
+</table>
+
+<h2 id="easy-claude">6.1. 78K Easy × 75 core × Claude Code <span class="pill pill-claude">claude</span></h2>
+<table>
+  <thead>
+    <tr>
+      <th>Variant</th>
+      <th class="num">Hit@1</th>
+      <th class="num">Single (n=24)</th>
+      <th class="num">Multi (n=51)</th>
+      <th class="num">Answered</th>
+      <th class="num">Timeouts</th>
+      <th class="num">Errors</th>
+      <th class="num">Wall</th>
+    </tr>
+  </thead>
+  <tbody><tr>
+      <td><b>J-bounded-v2</b></td>
+      <td class="num miss"><b>21.3%</b> <span class="gray">(16/75)</span></td>
+      <td class="num">5/24 <span class="gray">(20.8%)</span></td>
+      <td class="num">11/51 <span class="gray">(21.6%)</span></td>
+      <td class="num">75/75</td>
+      <td class="num">0</td>
+      <td class="num">0</td>
+      <td class="num">1009s</td>
+    </tr><tr>
+      <td><b>K-bounded</b></td>
+      <td class="num miss"><b>25.3%</b> <span class="gray">(19/75)</span></td>
+      <td class="num">4/24 <span class="gray">(16.7%)</span></td>
+      <td class="num">15/51 <span class="gray">(29.4%)</span></td>
+      <td class="num">75/75</td>
+      <td class="num">0</td>
+      <td class="num">0</td>
+      <td class="num">1037s</td>
+    </tr><tr>
+      <td><b>M-bm25</b></td>
+      <td class="num mid"><b>34.7%</b> <span class="gray">(26/75)</span></td>
+      <td class="num">7/24 <span class="gray">(29.2%)</span></td>
+      <td class="num">19/51 <span class="gray">(37.3%)</span></td>
+      <td class="num">75/75</td>
+      <td class="num">0</td>
+      <td class="num">0</td>
+      <td class="num">1329s</td>
+    </tr></tbody>
+</table>
+
+<h2 id="easy-codex">6.2. 78K Easy × 75 core × Codex <span class="pill pill-codex">codex</span></h2>
+<table>
+  <thead>
+    <tr>
+      <th>Variant</th>
+      <th class="num">Hit@1</th>
+      <th class="num">Single (n=24)</th>
+      <th class="num">Multi (n=51)</th>
+      <th class="num">Answered</th>
+      <th class="num">Timeouts</th>
+      <th class="num">Errors</th>
+      <th class="num">Wall</th>
+    </tr>
+  </thead>
+  <tbody><tr>
+      <td><b>J-bounded-v2</b></td>
+      <td class="num hit"><b>40.0%</b> <span class="gray">(30/75)</span></td>
+      <td class="num">9/24 <span class="gray">(37.5%)</span></td>
+      <td class="num">21/51 <span class="gray">(41.2%)</span></td>
+      <td class="num">75/75</td>
+      <td class="num">0</td>
+      <td class="num">0</td>
+      <td class="num">2532s</td>
+    </tr><tr>
+      <td><b>K-bounded</b></td>
+      <td class="num mid"><b>32.0%</b> <span class="gray">(24/75)</span></td>
+      <td class="num">5/24 <span class="gray">(20.8%)</span></td>
+      <td class="num">19/51 <span class="gray">(37.3%)</span></td>
+      <td class="num">74/75</td>
+      <td class="num">1</td>
+      <td class="num">0</td>
+      <td class="num">2966s</td>
+    </tr><tr>
+      <td><b>M-bm25</b></td>
+      <td class="num hit"><b>37.3%</b> <span class="gray">(28/75)</span></td>
+      <td class="num">7/24 <span class="gray">(29.2%)</span></td>
+      <td class="num">21/51 <span class="gray">(41.2%)</span></td>
+      <td class="num">75/75</td>
+      <td class="num">0</td>
+      <td class="num">0</td>
+      <td class="num">3444s</td>
+    </tr></tbody>
+</table>
+
+<h2 id="easy-compare">7. 78K Easy — cross-cell comparison &amp; paper baselines</h2>
+<div class="takeaway">
+  <b>Headline:</b> Best cell <b>codex/J-bounded-v2 at 40.0%</b> exceeds the strongest paper nd
+  baseline (Qwen3-Emb-8B 30.7%) by +9.3pp, and also beats BM25 with full body (34.7%) despite
+  having no body access. 6/6 cells beat BM25 nd, 4/6 beat Qwen3-Emb-0.6B nd, 3/6 beat
+  Qwen3-Emb-8B nd. The remaining 25–36pp gap to full-body SR-pipeline (74–76%) is structural.
+</div>
+<div class="grid-2">
+  <div class="panel">
+    <h3>By variant (avg across hosts)</h3>
+    <table><thead><tr><th>Variant</th><th class="num">Avg Hit@1</th></tr></thead><tbody><tr><td><b>M-bm25</b></td><td class="num">36.0% <span class="gray">(2 cells)</span></td></tr><tr><td><b>J-bounded-v2</b></td><td class="num">30.7% <span class="gray">(2 cells)</span></td></tr><tr><td><b>K-bounded</b></td><td class="num">28.7% <span class="gray">(2 cells)</span></td></tr></tbody></table>
+  </div>
+  <div class="panel">
+    <h3>By host (avg across variants)</h3>
+    <table><thead><tr><th>Host</th><th class="num">Avg Hit@1</th></tr></thead><tbody><tr><td><span class="pill pill-codex">codex</span></td><td class="num">36.4% <span class="gray">(3 cells)</span></td></tr><tr><td><span class="pill pill-claude">claude</span></td><td class="num">27.1% <span class="gray">(3 cells)</span></td></tr></tbody></table>
+  </div>
+</div>
+<h3>All 6 cells + paper baselines, ranked by Hit@1</h3>
+<table>
+  <thead><tr><th>Source</th><th class="num">Hit@1</th><th>Bar (relative to max)</th></tr></thead>
+  <tbody><tr>
+      <td><span class="pill pill-codex">codex/J-bounded-v2</span></td>
+      <td class="num"><b>40.0%</b> <span class="gray">(30/75)</span></td>
+      <td><div class="bar-wrap"><div class="bar-fill codex" style="width:52.6%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-codex">codex/M-bm25</span></td>
+      <td class="num"><b>37.3%</b> <span class="gray">(28/75)</span></td>
+      <td><div class="bar-wrap"><div class="bar-fill codex" style="width:49.1%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-claude">claude/M-bm25</span></td>
+      <td class="num"><b>34.7%</b> <span class="gray">(26/75)</span></td>
+      <td><div class="bar-wrap"><div class="bar-fill " style="width:45.6%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-codex">codex/K-bounded</span></td>
+      <td class="num"><b>32.0%</b> <span class="gray">(24/75)</span></td>
+      <td><div class="bar-wrap"><div class="bar-fill codex" style="width:42.1%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-claude">claude/K-bounded</span></td>
+      <td class="num"><b>25.3%</b> <span class="gray">(19/75)</span></td>
+      <td><div class="bar-wrap"><div class="bar-fill " style="width:33.3%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-claude">claude/J-bounded-v2</span></td>
+      <td class="num"><b>21.3%</b> <span class="gray">(16/75)</span></td>
+      <td><div class="bar-wrap"><div class="bar-fill " style="width:28.1%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-paper">paper</span> BM25 (nd, Easy)</td>
+      <td class="num">0.0%</td>
+      <td><div class="bar-wrap"><div class="bar-fill paper" style="width:0.0%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-paper">paper</span> Qwen3-Emb-0.6B (nd, Easy)</td>
+      <td class="num">22.7%</td>
+      <td><div class="bar-wrap"><div class="bar-fill paper" style="width:29.9%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-paper">paper</span> Qwen3-Emb-8B (nd, Easy)</td>
+      <td class="num">30.7%</td>
+      <td><div class="bar-wrap"><div class="bar-fill paper" style="width:40.4%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-paper">paper</span> BM25 (full body, Easy)</td>
+      <td class="num">34.7%</td>
+      <td><div class="bar-wrap"><div class="bar-fill paper" style="width:45.7%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-paper">paper</span> Qwen3-Emb-0.6B (full, Easy)</td>
+      <td class="num">58.7%</td>
+      <td><div class="bar-wrap"><div class="bar-fill paper" style="width:77.2%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-paper">paper</span> Qwen3-Emb-8B (full, Easy)</td>
+      <td class="num">65.3%</td>
+      <td><div class="bar-wrap"><div class="bar-fill paper" style="width:85.9%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-paper">paper</span> SR-Emb-0.6B (full, Easy)</td>
+      <td class="num">66.7%</td>
+      <td><div class="bar-wrap"><div class="bar-fill paper" style="width:87.8%"></div></div></td>
+    </tr><tr>
+      <td><span class="pill pill-paper">paper</span> SR-Emb × SR-Rank (full, A-Hit@1 avg)</td>
+      <td class="num">76.0%</td>
+      <td><div class="bar-wrap"><div class="bar-fill paper" style="width:100.0%"></div></div></td>
+    </tr></tbody>
+</table>
+<div class="footnote">Paper baselines from SkillRouter Table 9 (Easy tier, nd = name + description only;
+  full = full body). nd rows are directly comparable to our 6 metadata-only cells; full rows are
+  upper-bound reference (we have no body access by construction).</div>
+
+<details>
+  <summary>Per-query matrix (75 queries × 6 cells)</summary>
+  <p class="footnote">Each cell shows the agent's top-1 pick. <span class="hit">✓</span> = at least one ground-truth skill at rank 1 (paper any-gt Hit@1 definition). The leading badge after the query id summarizes hits across the 6 cells: <span class="hit">✓6</span> = full consensus hit, <span class="miss">✗0</span> = all miss, <span class="mid">N/6</span> = partial.</p>
+  <table style="font-size:11px">
+    <thead><tr><th>Query</th><th>Tier</th><th>GT</th><th class="num"><span class="pill pill-claude">claude/J-bounded-v2</span></th><th class="num"><span class="pill pill-claude">claude/K-bounded</span></th><th class="num"><span class="pill pill-claude">claude/M-bm25</span></th><th class="num"><span class="pill pill-codex">codex/J-bounded-v2</span></th><th class="num"><span class="pill pill-codex">codex/K-bounded</span></th><th class="num"><span class="pill pill-codex">codex/M-bm25</span></th></tr></thead>
+    <tbody><tr class="matrix-row"><td><code>3d-scan-calc</code> <span class="mid" style="font-weight:600">1/6</span></td><td>single</td><td class="gt"><code>sr-11138</code></td><td class="num miss">✗ sr-00114</td><td class="num miss">✗ sr-00114</td><td class="num miss">✗ sr-53645</td><td class="num hit">✓ sr-11138</td><td class="num miss">✗ sr-78049</td><td class="num miss">✗ sr-53645</td></tr><tr class="matrix-row"><td><code>adaptive-cruise-control</code> <span class="mid" style="font-weight:600">5/6</span></td><td>multi</td><td class="gt"><code>5 skills</code></td><td class="num miss">✗ sr-01207</td><td class="num hit">✓ sr-14008</td><td class="num hit">✓ sr-74164</td><td class="num hit">✓ sr-74164</td><td class="num hit">✓ sr-74164</td><td class="num hit">✓ sr-14008</td></tr><tr class="matrix-row"><td><code>azure-bgp-oscillation-route-leak</code> <span class="hit" style="font-weight:600">✓6</span></td><td>single</td><td class="gt"><code>sr-13751</code></td><td class="num hit">✓ sr-13751</td><td class="num hit">✓ sr-13751</td><td class="num hit">✓ sr-13751</td><td class="num hit">✓ sr-13751</td><td class="num hit">✓ sr-13751</td><td class="num hit">✓ sr-13751</td></tr><tr class="matrix-row"><td><code>citation-check</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-76598</code></td><td class="num miss">✗ sr-50937</td><td class="num miss">✗ sr-01976</td><td class="num miss">✗ sr-17851</td><td class="num miss">✗ sr-45564</td><td class="num miss">✗ sr-17851</td><td class="num miss">✗ sr-45564</td></tr><tr class="matrix-row"><td><code>civ6-adjacency-optimizer</code> <span class="hit" style="font-weight:600">✓6</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num hit">✓ sr-69978</td><td class="num hit">✓ sr-69978</td><td class="num hit">✓ sr-69978</td><td class="num hit">✓ sr-69978</td><td class="num hit">✓ sr-69978</td><td class="num hit">✓ sr-69978</td></tr><tr class="matrix-row"><td><code>crystallographic-wyckoff-position-analysis</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-17148</td><td class="num miss">✗ sr-17148</td><td class="num miss">✗ sr-17148</td><td class="num miss">✗ sr-17148</td><td class="num miss">✗ sr-17148</td><td class="num miss">✗ sr-17148</td></tr><tr class="matrix-row"><td><code>dapt-intrusion-detection</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-16235</td><td class="num miss">✗ sr-01386</td><td class="num miss">✗ sr-37860</td><td class="num miss">✗ sr-16235</td><td class="num miss">✗ sr-16235</td><td class="num miss">✗ sr-16235</td></tr><tr class="matrix-row"><td><code>data-to-d3</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-60079</code></td><td class="num miss">✗ sr-00419</td><td class="num miss">✗ sr-00419</td><td class="num miss">✗ sr-40799</td><td class="num miss">✗ sr-00419</td><td class="num miss">✗ sr-00419</td><td class="num miss">✗ sr-40799</td></tr><tr class="matrix-row"><td><code>dialogue-parser</code> <span class="mid" style="font-weight:600">3/6</span></td><td>single</td><td class="gt"><code>sr-35315</code></td><td class="num miss">✗ sr-03481</td><td class="num miss">✗ sr-00446</td><td class="num hit">✓ sr-35315</td><td class="num hit">✓ sr-35315</td><td class="num miss">✗ sr-26846</td><td class="num hit">✓ sr-35315</td></tr><tr class="matrix-row"><td><code>dynamic-object-aware-egomotion</code> <span class="hit" style="font-weight:600">✓6</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num hit">✓ sr-49453</td><td class="num hit">✓ sr-49453</td><td class="num hit">✓ sr-49453</td><td class="num hit">✓ sr-49453</td><td class="num hit">✓ sr-49453</td><td class="num hit">✓ sr-49453</td></tr><tr class="matrix-row"><td><code>earthquake-phase-association</code> <span class="hit" style="font-weight:600">✓6</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num hit">✓ sr-16603</td><td class="num hit">✓ sr-16603</td><td class="num hit">✓ sr-51022</td><td class="num hit">✓ sr-16603</td><td class="num hit">✓ sr-16603</td><td class="num hit">✓ sr-16603</td></tr><tr class="matrix-row"><td><code>earthquake-plate-calculation</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-07774</code></td><td class="num miss">✗ sr-26212</td><td class="num miss">✗ sr-26212</td><td class="num miss">✗ sr-26212</td><td class="num miss">✗ sr-26212</td><td class="num miss">✗ sr-26212</td><td class="num miss">✗ sr-26212</td></tr><tr class="matrix-row"><td><code>econ-detrending-correlation</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-33015</code></td><td class="num miss">✗ sr-37231</td><td class="num miss">✗ sr-37231</td><td class="num miss">✗ sr-37231</td><td class="num miss">✗ sr-37231</td><td class="num miss">✗ sr-37231</td><td class="num miss">✗ sr-37231</td></tr><tr class="matrix-row"><td><code>energy-ac-optimal-power-flow</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td></tr><tr class="matrix-row"><td><code>energy-market-pricing</code> <span class="mid" style="font-weight:600">1/6</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td><td class="num hit">✓ sr-48638</td></tr><tr class="matrix-row"><td><code>enterprise-information-search</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-16544</code></td><td class="num miss">✗ sr-01068</td><td class="num miss">✗ sr-00094</td><td class="num miss">✗ sr-12201</td><td class="num miss">✗ sr-12201</td><td class="num miss">✗ sr-01077</td><td class="num miss">✗ sr-12201</td></tr><tr class="matrix-row"><td><code>exoplanet-detection-period</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>5 skills</code></td><td class="num miss">✗ sr-60754</td><td class="num miss">✗ sr-00898</td><td class="num miss">✗ sr-61625</td><td class="num miss">✗ sr-60754</td><td class="num miss">✗ sr-60754</td><td class="num miss">✗ sr-60754</td></tr><tr class="matrix-row"><td><code>find-topk-similiar-chemicals</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-11508</td><td class="num miss">✗ sr-11508</td><td class="num miss">✗ sr-11508</td><td class="num miss">✗ sr-11508</td><td class="num miss">✗ sr-11508</td><td class="num miss">✗ sr-11508</td></tr><tr class="matrix-row"><td><code>fix-build-agentops</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num miss">✗ sr-01908</td><td class="num miss">✗ sr-01908</td><td class="num miss">✗ sr-01908</td><td class="num miss">✗ sr-01908</td><td class="num miss">✗ sr-00248</td><td class="num miss">✗ sr-01908</td></tr><tr class="matrix-row"><td><code>fix-build-google-auto</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-02028</td><td class="num miss">✗ sr-01908</td><td class="num miss">✗ sr-12281</td><td class="num miss">✗ sr-18627</td><td class="num miss">✗ sr-26384</td><td class="num miss">✗ sr-12281</td></tr><tr class="matrix-row"><td><code>fix-druid-loophole-cve</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-00023</td><td class="num miss">✗ sr-00023</td><td class="num miss">✗ sr-54337</td><td class="num miss">✗ sr-00023</td><td class="num miss">✗ ?</td><td class="num miss">✗ sr-57474</td></tr><tr class="matrix-row"><td><code>fix-erlang-ssh-cve</code> <span class="mid" style="font-weight:600">4/6</span></td><td>multi</td><td class="gt"><code>6 skills</code></td><td class="num miss">✗ sr-00023</td><td class="num miss">✗ sr-00023</td><td class="num hit">✓ sr-17174</td><td class="num hit">✓ sr-17174</td><td class="num hit">✓ sr-05965</td><td class="num hit">✓ sr-17174</td></tr><tr class="matrix-row"><td><code>fix-visual-stability</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-01093</td><td class="num miss">✗ sr-01069</td><td class="num miss">✗ sr-76419</td><td class="num miss">✗ sr-01093</td><td class="num miss">✗ sr-34792</td><td class="num miss">✗ sr-76419</td></tr><tr class="matrix-row"><td><code>flink-query</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-46127</code></td><td class="num miss">✗ sr-78274</td><td class="num miss">✗ sr-78274</td><td class="num miss">✗ sr-02876</td><td class="num miss">✗ sr-78274</td><td class="num miss">✗ sr-78274</td><td class="num miss">✗ sr-78274</td></tr><tr class="matrix-row"><td><code>flood-risk-analysis</code> <span class="hit" style="font-weight:600">✓6</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num hit">✓ sr-59008</td><td class="num hit">✓ sr-58327</td><td class="num hit">✓ sr-58327</td><td class="num hit">✓ sr-58327</td><td class="num hit">✓ sr-58327</td><td class="num hit">✓ sr-58327</td></tr><tr class="matrix-row"><td><code>gh-repo-analytics</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-51320</code></td><td class="num miss">✗ sr-18709</td><td class="num miss">✗ sr-00175</td><td class="num miss">✗ sr-42490</td><td class="num miss">✗ sr-00776</td><td class="num miss">✗ sr-00175</td><td class="num miss">✗ sr-42490</td></tr><tr class="matrix-row"><td><code>glm-lake-mendota</code> <span class="hit" style="font-weight:600">✓6</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num hit">✓ sr-66049</td><td class="num hit">✓ sr-66049</td><td class="num hit">✓ sr-63693</td><td class="num hit">✓ sr-63693</td><td class="num hit">✓ sr-63693</td><td class="num hit">✓ sr-63693</td></tr><tr class="matrix-row"><td><code>gravitational-wave-detection</code> <span class="hit" style="font-weight:600">✓6</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num hit">✓ sr-31403</td><td class="num hit">✓ sr-31403</td><td class="num hit">✓ sr-31403</td><td class="num hit">✓ sr-31403</td><td class="num hit">✓ sr-31403</td><td class="num hit">✓ sr-31403</td></tr><tr class="matrix-row"><td><code>grid-dispatch-operator</code> <span class="mid" style="font-weight:600">1/6</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td><td class="num hit">✓ sr-78196</td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td><td class="num miss">✗ sr-09729</td></tr><tr class="matrix-row"><td><code>hvac-control</code> <span class="mid" style="font-weight:600">1/6</span></td><td>multi</td><td class="gt"><code>5 skills</code></td><td class="num miss">✗ sr-01167</td><td class="num miss">✗ sr-02295</td><td class="num miss">✗ sr-74164</td><td class="num hit">✓ sr-04749</td><td class="num miss">✗ sr-74164</td><td class="num miss">✗ sr-74164</td></tr><tr class="matrix-row"><td><code>invoice-fraud-detection</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-65157</code></td><td class="num miss">✗ sr-00103</td><td class="num miss">✗ sr-00103</td><td class="num miss">✗ sr-12132</td><td class="num miss">✗ sr-00103</td><td class="num miss">✗ sr-00103</td><td class="num miss">✗ sr-00751</td></tr><tr class="matrix-row"><td><code>jax-computing-basics</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-44661</code></td><td class="num miss">✗ sr-56000</td><td class="num miss">✗ sr-63428</td><td class="num miss">✗ sr-63428</td><td class="num miss">✗ sr-63428</td><td class="num miss">✗ sr-63428</td><td class="num miss">✗ sr-63428</td></tr><tr class="matrix-row"><td><code>jpg-ocr-stat</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-00103</td><td class="num miss">✗ sr-00103</td><td class="num miss">✗ sr-63239</td><td class="num miss">✗ sr-00103</td><td class="num miss">✗ sr-00103</td><td class="num miss">✗ sr-63239</td></tr><tr class="matrix-row"><td><code>lab-unit-harmonization</code> <span class="mid" style="font-weight:600">4/6</span></td><td>single</td><td class="gt"><code>sr-16389</code></td><td class="num miss">✗ sr-00764</td><td class="num miss">✗ sr-00764</td><td class="num hit">✓ sr-16389</td><td class="num hit">✓ sr-16389</td><td class="num hit">✓ sr-16389</td><td class="num hit">✓ sr-16389</td></tr><tr class="matrix-row"><td><code>lake-warming-attribution</code> <span class="mid" style="font-weight:600">2/6</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num miss">✗ sr-18215</td><td class="num miss">✗ sr-01369</td><td class="num hit">✓ sr-28596</td><td class="num miss">✗ sr-01369</td><td class="num miss">✗ sr-18215</td><td class="num hit">✓ sr-28596</td></tr><tr class="matrix-row"><td><code>latex-formula-extraction</code> <span class="mid" style="font-weight:600">1/6</span></td><td>single</td><td class="gt"><code>sr-59618</code></td><td class="num miss">✗ sr-00851</td><td class="num miss">✗ sr-00851</td><td class="num miss">✗ sr-34411</td><td class="num hit">✓ sr-59618</td><td class="num miss">✗ sr-21339</td><td class="num miss">✗ sr-34411</td></tr><tr class="matrix-row"><td><code>lean4-proof</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-07164</td><td class="num miss">✗ sr-07164</td><td class="num miss">✗ sr-07164</td><td class="num miss">✗ sr-32589</td><td class="num miss">✗ sr-07164</td><td class="num miss">✗ sr-07164</td></tr><tr class="matrix-row"><td><code>manufacturing-codebook-normalization</code> <span class="mid" style="font-weight:600">5/6</span></td><td>single</td><td class="gt"><code>sr-35628</code></td><td class="num hit">✓ sr-35628</td><td class="num miss">✗ sr-00474</td><td class="num hit">✓ sr-35628</td><td class="num hit">✓ sr-35628</td><td class="num hit">✓ sr-35628</td><td class="num hit">✓ sr-35628</td></tr><tr class="matrix-row"><td><code>manufacturing-equipment-maintenance</code> <span class="mid" style="font-weight:600">5/6</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-00044</td><td class="num hit">✓ sr-54974</td><td class="num hit">✓ sr-54974</td><td class="num hit">✓ sr-72981</td><td class="num hit">✓ sr-72981</td><td class="num hit">✓ sr-54974</td></tr><tr class="matrix-row"><td><code>manufacturing-fjsp-optimization</code> <span class="mid" style="font-weight:600">2/6</span></td><td>single</td><td class="gt"><code>sr-43036</code></td><td class="num hit">✓ sr-43036</td><td class="num hit">✓ sr-43036</td><td class="num miss">✗ sr-74287</td><td class="num miss">✗ sr-74287</td><td class="num miss">✗ sr-74287</td><td class="num miss">✗ sr-74287</td></tr><tr class="matrix-row"><td><code>mario-coin-counting</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-53226</td><td class="num miss">✗ sr-02019</td><td class="num miss">✗ sr-74628</td><td class="num miss">✗ sr-53226</td><td class="num miss">✗ sr-07557</td><td class="num miss">✗ sr-53226</td></tr><tr class="matrix-row"><td><code>mars-clouds-clustering</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-50051</td><td class="num miss">✗ sr-50051</td><td class="num miss">✗ sr-35333</td><td class="num miss">✗ sr-35333</td><td class="num miss">✗ sr-00034</td><td class="num miss">✗ sr-35333</td></tr><tr class="matrix-row"><td><code>mhc-layer-impl</code> <span class="mid" style="font-weight:600">3/6</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num hit">✓ sr-56316</td><td class="num hit">✓ sr-20150</td><td class="num miss">✗ sr-78116</td><td class="num hit">✓ sr-56316</td><td class="num miss">✗ sr-07857</td><td class="num miss">✗ sr-07857</td></tr><tr class="matrix-row"><td><code>multilingual-video-dubbing</code> <span class="hit" style="font-weight:600">✓6</span></td><td>multi</td><td class="gt"><code>6 skills</code></td><td class="num hit">✓ sr-16538</td><td class="num hit">✓ sr-27461</td><td class="num hit">✓ sr-16538</td><td class="num hit">✓ sr-27461</td><td class="num hit">✓ sr-16538</td><td class="num hit">✓ sr-16538</td></tr><tr class="matrix-row"><td><code>organize-messy-files</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-00601</td><td class="num miss">✗ sr-00601</td><td class="num miss">✗ sr-74195</td><td class="num miss">✗ sr-46747</td><td class="num miss">✗ sr-00601</td><td class="num miss">✗ sr-46747</td></tr><tr class="matrix-row"><td><code>paper-anonymizer</code> <span class="mid" style="font-weight:600">3/6</span></td><td>single</td><td class="gt"><code>sr-50850</code></td><td class="num miss">✗ sr-00294</td><td class="num miss">✗ sr-00294</td><td class="num hit">✓ sr-50850</td><td class="num hit">✓ sr-50850</td><td class="num miss">✗ sr-00294</td><td class="num hit">✓ sr-50850</td></tr><tr class="matrix-row"><td><code>parallel-tfidf-search</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-69859</td><td class="num miss">✗ sr-00634</td><td class="num miss">✗ sr-69859</td><td class="num miss">✗ sr-69859</td><td class="num miss">✗ sr-44230</td><td class="num miss">✗ sr-69859</td></tr><tr class="matrix-row"><td><code>pddl-tpp-planning</code> <span class="hit" style="font-weight:600">✓6</span></td><td>single</td><td class="gt"><code>sr-47544</code></td><td class="num hit">✓ sr-47544</td><td class="num hit">✓ sr-47544</td><td class="num hit">✓ sr-47544</td><td class="num hit">✓ sr-47544</td><td class="num hit">✓ sr-47544</td><td class="num hit">✓ sr-47544</td></tr><tr class="matrix-row"><td><code>pedestrian-traffic-counting</code> <span class="mid" style="font-weight:600">4/6</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num miss">✗ sr-00448</td><td class="num miss">✗ sr-02397</td><td class="num hit">✓ sr-55732</td><td class="num hit">✓ sr-25131</td><td class="num hit">✓ sr-25131</td><td class="num hit">✓ sr-25131</td></tr><tr class="matrix-row"><td><code>pg-essay-to-audiobook</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num miss">✗ sr-00059</td><td class="num miss">✗ sr-00059</td><td class="num miss">✗ sr-70497</td><td class="num miss">✗ sr-70497</td><td class="num miss">✗ sr-12763</td><td class="num miss">✗ sr-12763</td></tr><tr class="matrix-row"><td><code>powerlifting-coef-calc</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-00242</td><td class="num miss">✗ sr-06225</td><td class="num miss">✗ sr-71137</td><td class="num miss">✗ sr-00242</td><td class="num miss">✗ sr-00242</td><td class="num miss">✗ sr-60556</td></tr><tr class="matrix-row"><td><code>python-scala-translation</code> <span class="mid" style="font-weight:600">4/6</span></td><td>multi</td><td class="gt"><code>6 skills</code></td><td class="num miss">✗ sr-02528</td><td class="num miss">✗ sr-02528</td><td class="num hit">✓ sr-06349</td><td class="num hit">✓ sr-06349</td><td class="num hit">✓ sr-44641</td><td class="num hit">✓ sr-37536</td></tr><tr class="matrix-row"><td><code>quantum-numerical-simulation</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-19795</code></td><td class="num miss">✗ sr-68239</td><td class="num miss">✗ sr-68239</td><td class="num miss">✗ sr-68239</td><td class="num miss">✗ sr-68239</td><td class="num miss">✗ sr-68239</td><td class="num miss">✗ sr-68239</td></tr><tr class="matrix-row"><td><code>r2r-mpc-control</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num miss">✗ sr-25668</td><td class="num miss">✗ sr-25668</td><td class="num miss">✗ sr-25668</td><td class="num miss">✗ sr-25668</td><td class="num miss">✗ sr-25668</td><td class="num miss">✗ sr-25668</td></tr><tr class="matrix-row"><td><code>react-performance-debugging</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-01258</td><td class="num miss">✗ sr-01069</td><td class="num miss">✗ sr-52997</td><td class="num miss">✗ sr-01093</td><td class="num miss">✗ sr-01093</td><td class="num miss">✗ sr-24326</td></tr><tr class="matrix-row"><td><code>scheduling-email-assistant</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-00678</td><td class="num miss">✗ sr-00678</td><td class="num miss">✗ sr-61462</td><td class="num miss">✗ sr-00678</td><td class="num miss">✗ sr-00678</td><td class="num miss">✗ sr-61462</td></tr><tr class="matrix-row"><td><code>sec-financial-report</code> <span class="mid" style="font-weight:600">5/6</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num hit">✓ sr-15114</td><td class="num hit">✓ sr-15114</td><td class="num miss">✗ sr-30046</td><td class="num hit">✓ sr-15114</td><td class="num hit">✓ sr-15114</td><td class="num hit">✓ sr-15114</td></tr><tr class="matrix-row"><td><code>seismic-phase-picking</code> <span class="hit" style="font-weight:600">✓6</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num hit">✓ sr-66696</td><td class="num hit">✓ sr-66696</td><td class="num hit">✓ sr-66696</td><td class="num hit">✓ sr-66696</td><td class="num hit">✓ sr-66696</td><td class="num hit">✓ sr-66696</td></tr><tr class="matrix-row"><td><code>setup-fuzzing-py</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-22095</td><td class="num miss">✗ sr-22095</td><td class="num miss">✗ sr-08573</td><td class="num miss">✗ sr-22095</td><td class="num miss">✗ sr-22095</td><td class="num miss">✗ sr-22095</td></tr><tr class="matrix-row"><td><code>simpo-code-reproduction</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-16096</code></td><td class="num miss">✗ sr-00947</td><td class="num miss">✗ sr-00947</td><td class="num miss">✗ sr-46124</td><td class="num miss">✗ sr-03330</td><td class="num miss">✗ sr-03330</td><td class="num miss">✗ sr-03330</td></tr><tr class="matrix-row"><td><code>software-dependency-audit</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-02326</td><td class="num miss">✗ sr-02326</td><td class="num miss">✗ sr-08418</td><td class="num miss">✗ sr-65588</td><td class="num miss">✗ sr-15105</td><td class="num miss">✗ sr-08418</td></tr><tr class="matrix-row"><td><code>speaker-diarization-subtitles</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num miss">✗ sr-43405</td><td class="num miss">✗ sr-43405</td><td class="num miss">✗ sr-43405</td><td class="num miss">✗ sr-43405</td><td class="num miss">✗ sr-43405</td><td class="num miss">✗ sr-21716</td></tr><tr class="matrix-row"><td><code>spring-boot-jakarta-migration</code> <span class="mid" style="font-weight:600">4/6</span></td><td>multi</td><td class="gt"><code>5 skills</code></td><td class="num miss">✗ sr-09999</td><td class="num miss">✗ sr-01215</td><td class="num hit">✓ sr-53460</td><td class="num hit">✓ sr-53460</td><td class="num hit">✓ sr-53460</td><td class="num hit">✓ sr-53460</td></tr><tr class="matrix-row"><td><code>suricata-custom-exfil</code> <span class="mid" style="font-weight:600">5/6</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-01869</td><td class="num hit">✓ sr-27022</td><td class="num hit">✓ sr-27022</td><td class="num hit">✓ sr-27022</td><td class="num hit">✓ sr-27022</td><td class="num hit">✓ sr-27022</td></tr><tr class="matrix-row"><td><code>syzkaller-ppdev-syzlang</code> <span class="hit" style="font-weight:600">✓6</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num hit">✓ sr-24101</td><td class="num hit">✓ sr-24101</td><td class="num hit">✓ sr-24101</td><td class="num hit">✓ sr-24101</td><td class="num hit">✓ sr-24101</td><td class="num hit">✓ sr-24101</td></tr><tr class="matrix-row"><td><code>taxonomy-tree-merge</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-53450</code></td><td class="num miss">✗ sr-00034</td><td class="num miss">✗ sr-00034</td><td class="num miss">✗ sr-04204</td><td class="num miss">✗ sr-04204</td><td class="num miss">✗ sr-04204</td><td class="num miss">✗ sr-04204</td></tr><tr class="matrix-row"><td><code>threejs-structure-parser</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-01425</td><td class="num miss">✗ sr-01425</td><td class="num miss">✗ sr-77114</td><td class="num miss">✗ sr-16860</td><td class="num miss">✗ sr-16860</td><td class="num miss">✗ sr-16860</td></tr><tr class="matrix-row"><td><code>threejs-to-obj</code> <span class="mid" style="font-weight:600">3/6</span></td><td>multi</td><td class="gt"><code>2 skills</code></td><td class="num miss">✗ sr-16860</td><td class="num miss">✗ sr-16860</td><td class="num miss">✗ sr-16860</td><td class="num hit">✓ sr-55512</td><td class="num hit">✓ sr-55512</td><td class="num hit">✓ sr-55512</td></tr><tr class="matrix-row"><td><code>travel-planning</code> <span class="miss" style="font-weight:600">✗0</span></td><td>multi</td><td class="gt"><code>6 skills</code></td><td class="num miss">✗ sr-25134</td><td class="num miss">✗ sr-33444</td><td class="num miss">✗ sr-77492</td><td class="num miss">✗ sr-22261</td><td class="num miss">✗ sr-33444</td><td class="num miss">✗ sr-36437</td></tr><tr class="matrix-row"><td><code>trend-anomaly-causal-inference</code> <span class="mid" style="font-weight:600">2/6</span></td><td>multi</td><td class="gt"><code>4 skills</code></td><td class="num miss">✗ sr-34986</td><td class="num miss">✗ sr-01369</td><td class="num hit">✓ sr-19677</td><td class="num miss">✗ sr-16741</td><td class="num hit">✓ sr-19677</td><td class="num miss">✗ sr-74674</td></tr><tr class="matrix-row"><td><code>video-filler-word-remover</code> <span class="mid" style="font-weight:600">2/6</span></td><td>multi</td><td class="gt"><code>3 skills</code></td><td class="num miss">✗ sr-02411</td><td class="num miss">✗ sr-16928</td><td class="num miss">✗ sr-32739</td><td class="num hit">✓ sr-07750</td><td class="num miss">✗ sr-39728</td><td class="num hit">✓ sr-07750</td></tr><tr class="matrix-row"><td><code>video-silence-remover</code> <span class="mid" style="font-weight:600">1/6</span></td><td>multi</td><td class="gt"><code>7 skills</code></td><td class="num miss">✗ sr-39728</td><td class="num hit">✓ sr-02397</td><td class="num miss">✗ sr-39728</td><td class="num miss">✗ sr-39728</td><td class="num miss">✗ sr-04793</td><td class="num miss">✗ sr-39728</td></tr><tr class="matrix-row"><td><code>video-tutorial-indexer</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-44881</code></td><td class="num miss">✗ sr-00448</td><td class="num miss">✗ sr-00448</td><td class="num miss">✗ sr-70996</td><td class="num miss">✗ sr-05656</td><td class="num miss">✗ sr-05656</td><td class="num miss">✗ sr-05656</td></tr><tr class="matrix-row"><td><code>virtualhome-agent-planning</code> <span class="hit" style="font-weight:600">✓6</span></td><td>single</td><td class="gt"><code>sr-47544</code></td><td class="num hit">✓ sr-47544</td><td class="num hit">✓ sr-47544</td><td class="num hit">✓ sr-47544</td><td class="num hit">✓ sr-47544</td><td class="num hit">✓ sr-47544</td><td class="num hit">✓ sr-47544</td></tr><tr class="matrix-row"><td><code>xlsx-recover-data</code> <span class="miss" style="font-weight:600">✗0</span></td><td>single</td><td class="gt"><code>sr-08836</code></td><td class="num miss">✗ sr-01021</td><td class="num miss">✗ sr-00242</td><td class="num miss">✗ sr-08448</td><td class="num miss">✗ sr-06225</td><td class="num miss">✗ sr-36375</td><td class="num miss">✗ sr-46321</td></tr></tbody>
+  </table>
+</details>
+
+<h2 id="easy-traces">8. 78K Easy — per-query execution traces</h2>
+<p class="intro">
+  Full per-query tool-call chains for all 75 queries × 6 cells (450 cards) are rendered in a
+  separate file:
+</p>
+<ul>
+  <li><a href="../skillrouter-easy/runs/traces-report.html"><b>traces-report.html</b></a> — browsable HTML (1.7 MB, 75 collapsible queries × 6 cards each)</li>
+  <li><a href="../skillrouter-easy/runs/traces-compact.json"><b>traces-compact.json</b></a> — structured per-query trace data (1.3 MB)</li>
+  <li><a href="../skillrouter-easy/runs/full-run.log"><b>full-run.log</b></a> — execution log (50 KB)</li>
+</ul>
+<p class="intro">
+  Each card shows the agent's tool-call chain (Bash / Skill / etc.) with truncated input/output
+  snippets — the same layout as the reference DCI report's "Per-query execution traces" section.
+</p>
+
+</body></html>
