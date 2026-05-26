@@ -43,7 +43,7 @@ test("metadata route uses aliases and emits field-level evidence", () => {
   assert.equal(result.routeMode, "metadata");
   assert.equal(result.selected?.skill.id, "user:codex:lark-mail");
   assert.equal(result.selected?.confidence, "high");
-  assert.ok(result.selected?.evidence?.some((e) => e.field === "alias" && /飞书邮箱/.test(e.text)));
+  assert.ok(result.selected?.evidence?.some((e) => e.field === "alias" && /飞书邮箱/.test(e.text ?? "")));
 });
 
 test("metadata route does not promote short alias substrings to exact matches", () => {

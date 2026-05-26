@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { boundaryTermsFor, compact, isShortLatinTerm, termsFor } from "./text-match.ts";
+import { boundaryTermsFor, compact, isGenericTerm, isShortLatinTerm, termsFor } from "./text-match.ts";
 import type { Confidence } from "./types.ts";
 import type { Skill } from "./types.ts";
 import { isRoutableDisabledSkill } from "./route.ts";
+import type { MatchEvidence } from "./match-evidence.ts";
 
 export interface CorpusSearchOptions {
   any?: string[];
@@ -44,6 +45,7 @@ export interface CorpusSearchMatch extends CorpusSkillRef {
   reason: string;
   matchedTerms: CorpusQueryExpression;
   snippets: CorpusSnippet[];
+  evidence?: MatchEvidence[];
 }
 
 export interface CorpusInspectResult {
@@ -121,6 +123,7 @@ interface ScoredCandidate {
   matchedAny: string[];
   matchedAll: string[];
   snippets: CorpusSnippet[];
+  evidence: MatchEvidence[];
 }
 
 interface MetadataField {
@@ -494,6 +497,7 @@ function evaluateBm25Document(
       matchedAll: allHits.flatMap((hit, idx) => hit ? [query.all[idx]!] : []),
       matchedAny: anyHits.map((hit) => hit.term),
       snippets: snippetsForHits(hits),
+      evidence: evidenceForHits(hits),
     },
   };
 }
@@ -627,6 +631,7 @@ function evaluateCandidate(
       matchedAll: allHits.flatMap((hit, idx) => hit ? [query.all[idx]!] : []),
       matchedAny: anyHits.map((hit) => hit.term),
       snippets,
+      evidence: evidenceForHits(hits),
     },
   };
 }
@@ -705,6 +710,31 @@ function appendArrayField(fields: MetadataField[], name: string, values: string[
   fields.push({ name, text: values.join(", "), weight });
 }
 
+function evidenceForHits(hits: TermHit[]): MatchEvidence[] {
+  // Keep the strongest contribution per (field, matched-term) pair so we
+  // don't repeat the same evidence row for callers that supplied a term in
+  // both `any` and `all`. The deterministic sort matches `snippetsForHits`:
+  // highest contribution first, then field name for stable tie-break.
+  const best = new Map<string, MatchEvidence>();
+  for (const hit of hits) {
+    const normalized = hit.term.normalize("NFKC").toLowerCase();
+    const key = `${hit.field}\0${normalized}`;
+    const candidate: MatchEvidence = {
+      field: hit.field,
+      matched: hit.term,
+      isGeneric: isGenericTerm(normalized),
+      contribution: Number(hit.score.toFixed(4)),
+      source: "metadata",
+      text: clamp(hit.text),
+    };
+    const existing = best.get(key);
+    if (!existing || candidate.contribution > existing.contribution) best.set(key, candidate);
+  }
+  return [...best.values()].sort(
+    (a, b) => b.contribution - a.contribution || a.field.localeCompare(b.field),
+  );
+}
+
 function snippetsForHits(hits: TermHit[]): CorpusSnippet[] {
   const snippets: CorpusSnippet[] = [];
   const seen = new Set<string>();
@@ -739,6 +769,7 @@ function projectMatch(candidate: ScoredCandidate): CorpusSearchMatch {
     reason: reasonForCandidate(candidate),
     matchedTerms: { any: candidate.matchedAny, all: candidate.matchedAll },
     snippets: candidate.snippets,
+    evidence: candidate.evidence,
   };
 }
 

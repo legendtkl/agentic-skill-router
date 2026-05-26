@@ -4,6 +4,7 @@ import { open as openFile } from "node:fs/promises";
 import { compact, isGenericTerm, termsFor } from "./text-match.ts";
 import type { Confidence, Skill } from "./types.ts";
 import { isRoutableDisabledSkill, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
+import type { MatchEvidence } from "./match-evidence.ts";
 import { skillInstanceKey } from "./state.ts";
 
 export interface DciOptions {
@@ -81,6 +82,7 @@ export interface DciSearchMatch extends DciSkillRef {
   reason: string;
   matchedQuery: string;
   snippets: DciSnippet[];
+  evidence?: MatchEvidence[];
 }
 
 export interface DciSearchResult {
@@ -185,6 +187,7 @@ interface ScoredLoadedSkill extends LoadedSkill {
   phraseMatched: boolean;
   matchedQuery: string;
   snippets: DciSnippet[];
+  evidence: MatchEvidence[];
 }
 
 export const DCI_BUDGET: DciBudget = {
@@ -289,6 +292,7 @@ export async function dciSearchDisabledSkills(
       const phraseMatched = queryPhrase.length >= 4 && haystackPhrase.includes(queryPhrase);
       const score = scoreSearchMatch(hitCount, queryTerms.size, phraseMatched);
       if (score <= 0) continue;
+      const snippets = snippetsForTerms(item.lines, queryTerms, queryPhrase, maxSnippets);
       const candidate: ScoredLoadedSkill = {
         ...item,
         score,
@@ -296,7 +300,18 @@ export async function dciSearchDisabledSkills(
         queryTermCount: queryTerms.size,
         phraseMatched,
         matchedQuery: currentQuery,
-        snippets: snippetsForTerms(item.lines, queryTerms, queryPhrase, maxSnippets),
+        snippets,
+        evidence: evidenceForDciSearch({
+          metadataOnly: Boolean(opts.metadataOnly),
+          queryTerms,
+          queryPhrase,
+          haystackTerms,
+          haystackPhrase,
+          phraseMatched,
+          currentQuery,
+          snippets,
+          score,
+        }),
       };
       if (!best || compareScored(candidate, best) < 0) best = candidate;
     }
@@ -982,6 +997,7 @@ function projectSearchMatch(item: ScoredLoadedSkill): DciSearchMatch {
     reason: reasonForSearch(item),
     matchedQuery: item.matchedQuery,
     snippets: item.snippets,
+    evidence: item.evidence,
   };
 }
 
@@ -1046,6 +1062,64 @@ function reasonForSearch(item: ScoredLoadedSkill): string {
   if (item.queryTermCount > 0) parts.push(`matched ${item.hitCount}/${item.queryTermCount} query terms in skill corpus`);
   if (item.matchedQuery) parts.push(`best query: ${item.matchedQuery}`);
   return parts.join("; ") || "matched skill corpus";
+}
+
+interface DciEvidenceInputs {
+  metadataOnly: boolean;
+  queryTerms: Set<string>;
+  queryPhrase: string;
+  haystackTerms: Set<string>;
+  haystackPhrase: string;
+  phraseMatched: boolean;
+  currentQuery: string;
+  snippets: DciSnippet[];
+  score: number;
+}
+
+/**
+ * Build the shared {@link MatchEvidence} list for a DCI search candidate.
+ *
+ * `source` is driven by the search mode: `metadata-only` runs scan a
+ * synthesized frontmatter-only haystack so all hits are metadata; the
+ * default DCI search reads the SKILL.md body so hits are body evidence.
+ *
+ * `contribution` is intentionally rough — DCI scoring is hit-count + phrase
+ * bonus, not per-term weights, so we split the candidate's local score
+ * across matched terms (with the phrase bonus broken out as its own row
+ * when present). It's still router-local; callers should treat it as a
+ * relative signal within a single DCI match list.
+ */
+function evidenceForDciSearch(inputs: DciEvidenceInputs): MatchEvidence[] {
+  const source: "metadata" | "body" = inputs.metadataOnly ? "metadata" : "body";
+  const field = inputs.metadataOnly ? "description" : "body";
+  const matchedTerms: string[] = [];
+  for (const term of inputs.queryTerms) {
+    if (inputs.haystackTerms.has(term) || inputs.haystackPhrase.includes(term)) {
+      matchedTerms.push(term);
+    }
+  }
+  const phraseBonus = inputs.phraseMatched ? 0.35 : 0;
+  const termBudget = Math.max(0, inputs.score - phraseBonus);
+  const perTerm = matchedTerms.length > 0 ? termBudget / matchedTerms.length : 0;
+  const evidence: MatchEvidence[] = matchedTerms.map((term) => ({
+    field,
+    matched: term,
+    isGeneric: isGenericTerm(term, "dci"),
+    contribution: Number(perTerm.toFixed(4)),
+    source,
+  }));
+  if (inputs.phraseMatched) {
+    evidence.push({
+      field,
+      matched: inputs.currentQuery,
+      isGeneric: false,
+      contribution: Number(phraseBonus.toFixed(4)),
+      source,
+    });
+  }
+  return evidence.sort(
+    (a, b) => b.contribution - a.contribution || a.matched.localeCompare(b.matched),
+  );
 }
 
 function scoreSearchMatch(hitCount: number, queryTermCount: number, phraseMatched: boolean): number {

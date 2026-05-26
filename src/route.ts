@@ -1,6 +1,9 @@
 import { canRouteSkill } from "./skill-policy.ts";
 import { compact, termsFor } from "./text-match.ts";
 import type { Confidence, RouteMode, Skill } from "./types.ts";
+import type { MatchEvidence } from "./match-evidence.ts";
+
+export type { MatchEvidence } from "./match-evidence.ts";
 
 export interface RouteOptions {
   topK?: number;
@@ -13,14 +16,6 @@ export interface SkillRouteMatch {
   reason: string;
   signals: SkillRouteSignals;
   evidence?: MatchEvidence[];
-}
-
-export interface MatchEvidence {
-  field: string;
-  matched: string;
-  weight: number;
-  contribution: number;
-  text: string;
 }
 
 export interface SkillRouteSignals {
