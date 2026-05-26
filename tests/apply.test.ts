@@ -225,6 +225,113 @@ test("reapplyMissing flags conflicted records (both files exist)", async () => {
   }
 });
 
+test("reapplyMissing skips out-of-root symlink targets and emits a copy-pasteable fixCommand for unambiguous ids", async () => {
+  // Issue #124 (P0): `skills status` must not silently re-rename SKILL.md
+  // through an out-of-root symlink. When the id is unambiguous in the
+  // current inventory, the emitted `fixCommand` is safe to copy-paste.
+  const { skill, statePath, cleanup, workdir } = await setup();
+  try {
+    await disableSkill(skill, "manual", { statePath });
+    // Simulate upstream restoring the live SKILL.md.
+    await rename(skill.skillMdPath + ".agentic-skill-router-disabled", skill.skillMdPath);
+
+    // Mark the current inventory entry as an out-of-root mutable symlink.
+    const linkedSkill: Skill = { ...skill, outOfRoot: true };
+    const result = await reapplyMissing({ statePath, skills: [linkedSkill] });
+
+    assert.deepEqual(result.reapplied, [], "must not silently rename out-of-root symlink");
+    assert.equal(result.skipped.length, 1, `expected exactly one skipped entry: ${JSON.stringify(result.skipped)}`);
+    const entry = result.skipped[0]!;
+    assert.equal(entry.id, "user:foo");
+    assert.equal(entry.livePath, skill.skillMdPath);
+    assert.equal(typeof entry.fixCommand, "string");
+    assert.match(
+      entry.fixCommand!,
+      /agentic-skill-router skills disable user:foo .*--allow-symlink-target-mutation/,
+    );
+    assert.equal(entry.manualRepairHint, undefined);
+
+    // Load-bearing: the live file is still live; no silent rename.
+    assert.equal(await fileExists(skill.skillMdPath), true);
+    assert.equal(await fileExists(skill.skillMdPath + ".agentic-skill-router-disabled"), false);
+    void workdir;
+  } finally {
+    await cleanup();
+  }
+});
+
+test("reapplyMissing skips ambiguous-id symlinks with manualRepairHint (no fixCommand)", async () => {
+  // Issue #124 (P1 follow-up): `skills disable <id>` resolves bare positional
+  // ids via `new Map(skills.map((s) => [s.id, s]))`, which collapses
+  // duplicate ids to a single arbitrary instance. When the current inventory
+  // has multiple skills sharing this id, emitting `disable <id>` could
+  // rename the WRONG instance, so `reapplyMissing` must withhold the
+  // copy-pasteable command and surface a path/instanceKey-level hint
+  // instead.
+  const workdir = await mkdtemp(join(tmpdir(), "agentic-skill-router-apply-dup-"));
+  try {
+    // Two on-disk skills under different roots that both produce `user:foo`.
+    const skillDirA = join(workdir, "rootA/skills/foo");
+    const skillDirB = join(workdir, "rootB/skills/foo");
+    await mkdir(skillDirA, { recursive: true });
+    await mkdir(skillDirB, { recursive: true });
+    const skillMdA = join(skillDirA, "SKILL.md");
+    const skillMdB = join(skillDirB, "SKILL.md");
+    await writeFile(skillMdA, "---\nname: foo\ndescription: x\n---\n");
+    await writeFile(skillMdB, "---\nname: foo\ndescription: x\n---\n");
+
+    const statePath = join(workdir, "state.json");
+    const skillA: Skill = {
+      id: "user:foo",
+      name: "foo",
+      description: "x",
+      source: "user",
+      pluginKey: null,
+      skillMdPath: skillMdA,
+      isDisabled: false,
+      isPluginDisabled: false,
+      canDisable: true,
+      conflict: false,
+      outOfRoot: true,
+    };
+    const skillB: Skill = { ...skillA, skillMdPath: skillMdB };
+
+    // Disable A through the supported `allowOutOfRoot` path so the state has
+    // a disable record bound to A's instanceKey. Then restore A's SKILL.md
+    // to simulate an upstream re-create, exactly like the threat scenario.
+    await disableSkill(skillA, "manual", { statePath, allowOutOfRoot: true });
+    await rename(skillMdA + ".agentic-skill-router-disabled", skillMdA);
+
+    // Inventory now has two entries with id="user:foo" (A and B).
+    const result = await reapplyMissing({ statePath, skills: [skillA, skillB] });
+
+    assert.deepEqual(result.reapplied, [], "must not rename through ambiguous symlink");
+    assert.equal(result.skipped.length, 1, `expected one skipped entry: ${JSON.stringify(result.skipped)}`);
+    const entry = result.skipped[0]!;
+    assert.equal(entry.id, "user:foo");
+    assert.equal(entry.fixCommand, null, "ambiguous id must NOT emit a copy-pasteable disable command");
+    assert.equal(typeof entry.manualRepairHint, "string");
+    assert.match(entry.manualRepairHint!, /Multiple skills share id `user:foo`/);
+    // Hint must disambiguate via the specific instanceKey AND a path-level
+    // repair so the user can act on the correct skill without guessing.
+    assert.ok(
+      entry.manualRepairHint!.includes(entry.instanceKey),
+      `hint must mention the specific instanceKey; got: ${entry.manualRepairHint}`,
+    );
+    assert.ok(
+      entry.manualRepairHint!.includes(skillMdA),
+      `hint must surface the live path so the user can rename it manually; got: ${entry.manualRepairHint}`,
+    );
+
+    // No silent rename happened on disk.
+    assert.equal(await fileExists(skillMdA), true);
+    assert.equal(await fileExists(skillMdA + ".agentic-skill-router-disabled"), false);
+    assert.equal(await fileExists(skillMdB), true);
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+});
+
 test("findOrphanMarkers detects disabled SKILL.md without state record", async () => {
   const { workdir, statePath, cleanup } = await setup();
   try {

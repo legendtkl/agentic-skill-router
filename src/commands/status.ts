@@ -59,7 +59,14 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
         ? `${s.livePath} -> ${s.linkedTarget}`
         : s.livePath;
       console.log(`  ${s.id}  (linked target: ${linkedPart})`);
-      console.log(`    fix: ${s.fixCommand}`);
+      if (s.fixCommand) {
+        console.log(`    fix: ${s.fixCommand}`);
+      } else if (s.manualRepairHint) {
+        // Ambiguous id (multiple inventory instances): `skills disable <id>`
+        // would resolve to a single arbitrary instance, so the hint points
+        // the user at the specific instanceKey + path instead.
+        console.log(`    fix: ${s.manualRepairHint}`);
+      }
     }
   }
   if (reapplyResult.orphaned.length > 0) {

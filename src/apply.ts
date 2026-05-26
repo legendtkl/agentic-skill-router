@@ -188,8 +188,20 @@ export interface ReapplySkippedSymlink {
   livePath: string;
   /** realpath of livePath (the actual file outside the host's skills root) */
   linkedTarget: string;
-  /** copy-pasteable command the user can run to opt in */
-  fixCommand: string;
+  /**
+   * Copy-pasteable command the user can run to opt in. `null` when the bare
+   * `id` resolves to multiple inventory instances — `skills disable <id>`
+   * would then collapse to a single arbitrary instance via
+   * `new Map(skills.map((s) => [s.id, s]))` and could rename the wrong one.
+   * Consult `manualRepairHint` instead in that case.
+   */
+  fixCommand: string | null;
+  /**
+   * Set only when `fixCommand` is `null` (ambiguous id). Names the specific
+   * instance and points the user at a path-level repair so they can act on
+   * the correct skill without guessing.
+   */
+  manualRepairHint?: string;
 }
 
 export interface ReapplyResult {
@@ -313,13 +325,34 @@ export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResul
         // skipping and surfacing a fix command for the user to run.
         if (current && isOutOfRootMutableSymlinkSkill(current)) {
           const linkedTarget = (await tryRealpath(paths.livePath)) ?? paths.livePath;
-          skipped.push({
-            id: rec.id,
-            instanceKey: rec.instanceKey,
-            livePath: paths.livePath,
-            linkedTarget,
-            fixCommand: `agentic-skill-router skills disable ${rec.id} --yes --allow-symlink-target-mutation`,
-          });
+          // `skills disable` resolves bare positional ids via a Map keyed on
+          // skill.id, which collapses duplicates to a single arbitrary
+          // instance. Emitting `disable <id>` would then potentially rename
+          // the wrong skill. When the current inventory has >1 instance
+          // sharing this id, surface a manual-repair hint that names the
+          // specific instanceKey instead of a copy-pasteable command.
+          const ambiguous = (idCounts.get(rec.id) ?? 0) > 1;
+          if (ambiguous) {
+            skipped.push({
+              id: rec.id,
+              instanceKey: rec.instanceKey,
+              livePath: paths.livePath,
+              linkedTarget,
+              fixCommand: null,
+              manualRepairHint:
+                `Multiple skills share id \`${rec.id}\`; manually rename ` +
+                `${paths.livePath} -> ${paths.disabledPath} or use the Web UI ` +
+                `to disable the specific instance (instanceKey: ${rec.instanceKey}).`,
+            });
+          } else {
+            skipped.push({
+              id: rec.id,
+              instanceKey: rec.instanceKey,
+              livePath: paths.livePath,
+              linkedTarget,
+              fixCommand: `agentic-skill-router skills disable ${rec.id} --yes --allow-symlink-target-mutation`,
+            });
+          }
         } else {
           await rename(paths.livePath, paths.disabledPath);
           reapplied.push(rec.id);

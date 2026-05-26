@@ -561,16 +561,27 @@ test("skills status never silently re-disables out-of-root symlink targets after
     const status = await runCli(["skills", "status", "--json"], fake.env);
     const parsed = JSON.parse(status.stdout) as {
       reapplied: string[];
-      skipped: Array<{ id: string; livePath: string; linkedTarget: string; fixCommand: string }>;
+      skipped: Array<{
+        id: string;
+        instanceKey: string;
+        livePath: string;
+        linkedTarget: string;
+        fixCommand: string | null;
+        manualRepairHint?: string;
+      }>;
     };
     assert.ok(Array.isArray(parsed.skipped), "status --json must expose a skipped array");
     assert.equal(parsed.reapplied.length, 0, `must not reapply: ${JSON.stringify(parsed.reapplied)}`);
     const skipped = parsed.skipped.find((s) => s.id === "user:codex:linked-skill");
     assert.ok(skipped, `expected skipped entry for linked-skill; got: ${JSON.stringify(parsed.skipped)}`);
+    // Single inventory instance for this id → unambiguous, so a
+    // copy-pasteable fixCommand is emitted and manualRepairHint is absent.
+    assert.equal(typeof skipped!.fixCommand, "string");
     assert.match(
-      skipped!.fixCommand,
+      skipped!.fixCommand!,
       /agentic-skill-router skills disable user:codex:linked-skill .*--allow-symlink-target-mutation/,
     );
+    assert.equal(skipped!.manualRepairHint, undefined);
     // The linkedTarget points at the external SKILL.md, NOT a path inside
     // codexHome — the whole reason we refused to rename.
     assert.ok(
