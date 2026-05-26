@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Server } from "node:http";
 import { mkdir, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { startWebServer } from "../src/commands/web.ts";
 
@@ -521,6 +521,84 @@ test("public-bound mutation requests require a matching Origin header", async ()
             body: JSON.stringify({ scope: "global", instanceKey: target!.instanceKey }),
           });
           assert.equal(goodOrigin.status, 200);
+          await stat(join(fixture.claudeHome, "skills", "global-skill", "SKILL.md.agentic-skill-router-disabled"));
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    (process.stderr as unknown as { write: typeof originalWrite }).write = originalWrite;
+    await fixture.cleanup();
+  }
+});
+
+function firstNonLoopbackIPv4(): string | null {
+  const ifaces = networkInterfaces();
+  for (const list of Object.values(ifaces)) {
+    if (!list) continue;
+    for (const entry of list) {
+      if (entry.family !== "IPv4") continue;
+      if (entry.internal) continue;
+      if (!entry.address) continue;
+      return entry.address;
+    }
+  }
+  return null;
+}
+
+test("wildcard public bind accepts mutations whose Origin matches a real interface IP", async (t) => {
+  const interfaceAddress = firstNonLoopbackIPv4();
+  if (!interfaceAddress) {
+    t.skip("no non-loopback IPv4 interface available; cannot exercise LAN-origin path");
+    return;
+  }
+  const fixture = await makeWebFixture();
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  (process.stderr as unknown as { write: (chunk: string | Uint8Array) => boolean }).write = () => true;
+  try {
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url, basicAuth } = await startWebServer({
+          hostName: "claude-code",
+          port: 0,
+          bind: "0.0.0.0",
+          dangerouslyBindPublic: true,
+        });
+        try {
+          const authHeaders = basicAuthHeader(basicAuth);
+          // Token is fetched from the bound URL (localhost or 0.0.0.0); the
+          // mutation request below targets the real interface IP instead,
+          // simulating a browser on another machine on the LAN.
+          const token = await readMutationToken(url, authHeaders);
+          const port = new URL(url).port;
+          const lanUrl = `http://${interfaceAddress}:${port}`;
+
+          const listRes = await fetch(`${lanUrl}/api/skills?scope=global`, {
+            headers: { ...authHeaders, "x-agentic-skill-router-token": token },
+          });
+          assert.equal(listRes.status, 200);
+          const listData = await listRes.json() as SkillsResponse;
+          const target = listData.skills.find((skill) => skill.id === "user:global-skill");
+          assert.ok(target);
+
+          const lanDisable = await fetch(`${lanUrl}/api/skills/disable`, {
+            method: "POST",
+            headers: {
+              ...authHeaders,
+              ...mutationHeaders(token),
+              origin: lanUrl,
+            },
+            body: JSON.stringify({ scope: "global", instanceKey: target!.instanceKey }),
+          });
+          assert.equal(lanDisable.status, 200);
           await stat(join(fixture.claudeHome, "skills", "global-skill", "SKILL.md.agentic-skill-router-disabled"));
         } finally {
           await closeServer(server);

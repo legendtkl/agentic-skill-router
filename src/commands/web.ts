@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { networkInterfaces } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStrict } from "../args.ts";
@@ -204,12 +205,32 @@ function computeExpectedHosts(bind: string, port: number): Set<string> {
   candidates.add(bind.toLowerCase());
   if (bind === "0.0.0.0" || bind === "::") {
     candidates.add("localhost");
+    // Wildcard binds answer on every local interface, so a browser opened on
+    // another machine will send `Host: <interface-ip>:<port>`. Without these
+    // entries the Origin/Host check would reject every cross-network mutation
+    // and make dangerous public mode effectively read-only.
+    for (const address of localInterfaceAddresses()) {
+      candidates.add(address.toLowerCase());
+    }
   }
   for (const candidate of candidates) {
     const host = candidate.includes(":") && !candidate.startsWith("[") ? `[${candidate}]` : candidate;
     hosts.add(`${host}${portSuffix}`);
   }
   return hosts;
+}
+
+function localInterfaceAddresses(): string[] {
+  const addresses: string[] = [];
+  const ifaces = networkInterfaces();
+  for (const list of Object.values(ifaces)) {
+    if (!list) continue;
+    for (const entry of list) {
+      if (!entry.address) continue;
+      addresses.push(entry.address);
+    }
+  }
+  return addresses;
 }
 
 class PublicBindRefusedError extends Error {
