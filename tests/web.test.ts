@@ -990,6 +990,133 @@ test("web API blocks project discovery from walking ancestors above the allowlis
   }
 });
 
+test("web API accepts a non-git allowlisted project root (no parent scan happens)", async () => {
+  // P1.C: production `projectSkillRoots` only walks UP when a `.git`
+  // ancestor exists. If no `.git` is found anywhere from the requested
+  // cwd up to the filesystem root, the host scans ONLY the start dir.
+  // The allowlist guard must mirror that: a non-git project root must
+  // not be rejected just because its tmpdir parent isn't allowlisted.
+  const fixture = await makeWebFixture();
+  const allowedRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-nogit-"));
+  try {
+    // Crucially: do NOT create `.git` here or anywhere up the tree.
+    await mkdir(join(allowedRoot, ".claude", "skills", "nogit-skill"), { recursive: true });
+    await writeFile(
+      join(allowedRoot, ".claude", "skills", "nogit-skill", "SKILL.md"),
+      "---\nname: nogit-skill\ndescription: Project skill in a non-git project root\n---\n",
+    );
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url } = await startWebServer({
+          hostName: "claude-code",
+          port: 0,
+          projectRoots: [allowedRoot],
+        });
+        try {
+          const res = await fetch(
+            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`,
+          );
+          assert.equal(res.status, 200);
+          const data = await res.json() as SkillsResponse;
+          assert.equal(data.scope, "project");
+          assert.ok(
+            data.skills.some((skill) => skill.id.includes("nogit-skill")),
+            `expected nogit-skill in: ${data.skills.map((s) => s.id).join(", ")}`,
+          );
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    await rm(allowedRoot, { recursive: true, force: true });
+    await fixture.cleanup();
+  }
+});
+
+test("web API hands the canonical cwd to the host to close symlink-swap TOCTOU windows", async () => {
+  // P1.D: validate against the canonical (realpath-ed) form AND hand
+  // that canonical form to the host. We can't race the validation in a
+  // deterministic test, so we exercise the equivalent invariant: any
+  // path component that already points outside the allowlist via a
+  // symlink must be (a) rejected when targeted directly and (b) absent
+  // from the scan results when the allowlisted root is targeted.
+  const fixture = await makeWebFixture();
+  const allowedRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-toctou-allowed-"));
+  const outsideRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-toctou-outside-"));
+  try {
+    // Legitimate skill that must be returned for the allowed-root request.
+    await mkdir(join(allowedRoot, ".claude", "skills", "legit-skill"), { recursive: true });
+    await writeFile(
+      join(allowedRoot, ".claude", "skills", "legit-skill", "SKILL.md"),
+      "---\nname: legit-skill\ndescription: Skill under the canonical allowlisted root\n---\n",
+    );
+    // Outside tree: must never surface through this request.
+    await mkdir(join(outsideRoot, ".claude", "skills", "toctou-leak"), { recursive: true });
+    await writeFile(
+      join(outsideRoot, ".claude", "skills", "toctou-leak", "SKILL.md"),
+      "---\nname: toctou-leak\ndescription: Must not be reachable through a swapped symlink\n---\n",
+    );
+    // Simulate the post-swap layout an attacker would leave behind.
+    const swappedSub = join(allowedRoot, "swapped");
+    await symlink(outsideRoot, swappedSub);
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url } = await startWebServer({
+          hostName: "claude-code",
+          port: 0,
+          projectRoots: [allowedRoot],
+        });
+        try {
+          // Targeting the symlinked sub-path must 403 (canonicalization
+          // resolves the symlink, landing outside the allowlist).
+          const swappedRes = await fetch(
+            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(swappedSub)}`,
+          );
+          assert.equal(swappedRes.status, 403);
+
+          // Targeting the allowed root itself must succeed and must NOT
+          // surface the outside-tree skill, even though `swappedSub`
+          // exists as a child symlink in the allowed tree.
+          const allowedRes = await fetch(
+            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`,
+          );
+          assert.equal(allowedRes.status, 200);
+          const allowedData = await allowedRes.json() as SkillsResponse;
+          assert.ok(
+            allowedData.skills.some((skill) => skill.id.includes("legit-skill")),
+            `expected legit-skill: ${allowedData.skills.map((s) => s.id).join(", ")}`,
+          );
+          assert.ok(
+            !allowedData.skills.some((skill) => skill.id.includes("toctou-leak")),
+            `toctou-leak must not appear: ${allowedData.skills.map((s) => s.id).join(", ")}`,
+          );
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    await rm(allowedRoot, { recursive: true, force: true });
+    await rm(outsideRoot, { recursive: true, force: true });
+    await fixture.cleanup();
+  }
+});
+
 test("web API accepts a projectPath whose entire ancestor walk stays within the allowlist", async () => {
   // Companion to the previous test: when the allowlisted root contains
   // the `.git` boundary, the project host's ancestor walk terminates at

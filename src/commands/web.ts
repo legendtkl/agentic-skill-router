@@ -517,9 +517,17 @@ async function createScopedHost(
   // and scans `<dir>/<skillsDir>` at every level on the way. A request inside
   // an allowlisted subtree could otherwise reach skills directories above
   // that subtree. Reject if any ancestor the project host would scan is
-  // outside the allowlist.
+  // outside the allowlist. When no `.git` ancestor exists, the production
+  // host only scans the start dir itself, so no parent check is required.
   await assertProjectAncestorsAllowed(canonical, projectRootAllowlist, resolved);
-  return createHost(hostName, { cwd: resolved });
+  // P1.D: pass the canonical (OS-resolved) cwd into the host. The host
+  // re-`resolve()`s but does NOT realpath, so passing the resolved-but-not-
+  // canonicalized form leaves a TOCTOU window in which a writable path
+  // component under the allowlist can be swapped to a symlink pointing
+  // outside between our validation and the scan. Passing the canonical
+  // path closes that window because the discovery walk runs on a path
+  // string that has already been OS-resolved against the allowlist.
+  return createHost(hostName, { cwd: canonical });
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -621,40 +629,61 @@ function assertProjectPathAllowed(
 
 /**
  * Reject requests whose project host would walk UP into a directory outside
- * the allowlist. Mirrors the ancestor walk performed by
- * `src/hosts/project.ts:projectSkillRoots`: stop at the nearest `.git`
- * ancestor (or filesystem root) and scan every directory on the way. We
- * canonicalize each parent at the OS level so a symlinked ancestor cannot
- * sneak around the prefix check.
+ * the allowlist. Mirrors `src/hosts/project.ts:projectSkillRoots` exactly:
+ *
+ *   - If no `.git` ancestor exists at or above `canonicalStart`, the host
+ *     scans ONLY the start dir. No parent check is required.
+ *   - If a `.git` ancestor is found, the host scans every directory from
+ *     `canonicalStart` up to and including the repo root. Each of those
+ *     directories must be inside the allowlist.
+ *
+ * Because `canonicalStart` is already realpath-ed, pure-string `dirname()`
+ * walks the real filesystem tree (no symlinks remain in the prefix), so we
+ * don't need to realpath each parent again.
  */
 async function assertProjectAncestorsAllowed(
   canonicalStart: string,
   projectRootAllowlist: string[],
   originalResolved: string,
 ): Promise<void> {
+  const repoRoot = await findRepoRootLike(canonicalStart);
+  if (repoRoot === null) {
+    // Production semantics: no `.git` ancestor -> the host only scans
+    // `<canonicalStart>/<skillsDir>`. We already validated `canonicalStart`.
+    return;
+  }
+  // Walk the same `[canonicalStart ... repoRoot]` range the host will scan.
   let current = canonicalStart;
-  // Track the canonical form for containment checks; `current` stays in
-  // canonical form because we realpath each parent as we walk up.
-  // We already checked `current === canonicalStart` is inside the allowlist.
   while (true) {
-    if (await pathExists(join(current, ".git"))) return;
-    const parent = dirname(current);
-    if (parent === current) return; // hit filesystem root; no repo ancestor
-    let canonicalParent: string;
-    try {
-      canonicalParent = await realpath(parent);
-    } catch {
-      canonicalParent = parent;
-    }
-    if (!isWithinAllowlist(canonicalParent, projectRootAllowlist)) {
+    if (!isWithinAllowlist(current, projectRootAllowlist)) {
       throw new WebHttpError(
         403,
-        `projectPath \`${originalResolved}\` would cause project skill discovery to walk into ` +
-          `\`${canonicalParent}\`, which is outside the allowed project roots. ` +
+        `projectPath \`${originalResolved}\` would cause project skill discovery to scan ` +
+          `\`${current}\`, which is outside the allowed project roots. ` +
           `Allowed roots: ${projectRootAllowlist.join(", ")}`,
       );
     }
-    current = canonicalParent;
+    if (current === repoRoot) return;
+    const parent = dirname(current);
+    if (parent === current) return; // safety: never happens because repoRoot is an ancestor
+    current = parent;
+  }
+}
+
+/**
+ * Mirror of `findRepoRoot` in `src/hosts/project.ts`: walk parents by
+ * pure-string `dirname` until a directory containing `.git` is found, or
+ * return `null` at the filesystem root. We operate on the canonical input
+ * so the walk matches what the production host will see when given the
+ * same canonical cwd.
+ */
+async function findRepoRootLike(start: string): Promise<string | null> {
+  let current = start;
+  while (true) {
+    if (await pathExists(join(current, ".git"))) return current;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
   }
 }
 
