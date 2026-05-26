@@ -167,6 +167,12 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
   const host = createHost(hostName);
   const skills = await host.listSkills();
   const statePath = statePathForHost(host.name);
+  // Snapshot the host's skill roots once per invocation so the state-only
+  // enable branch can re-validate any state-recorded path against current
+  // host policy (issues #100, #125). Inventory-path enable doesn't need
+  // these — it already operates on a Skill with `outOfRoot` precomputed by
+  // the host's scan.
+  const allowedSkillRoots = await host.skillRoots();
   const inventoryByInstanceKey = new Map<string, Skill>();
   for (const s of skills) {
     inventoryByInstanceKey.set(skillInstanceKey(s.id, s.skillMdPath), s);
@@ -249,14 +255,34 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
       //    want the state resolver to produce a clear "unknown skill id"
       //    error. Pass the resolvedKey when known so enableSkillFromState
       //    operates on the canonical identity rather than the raw target.
+      //    Plumb the host's current skill roots AND the symlink-mutation
+      //    flag through so a record whose recorded `skillMdPath` now points
+      //    out-of-root gets the same refusal-with-flag-hint as the inventory
+      //    flow (PR #123, issues #100 & #125), not a silent rename of a
+      //    file outside the host's skills root.
       const lookup = resolvedKey ?? target;
-      const r = await enableSkillFromState(lookup, { statePath, host: host.name });
+      const r = await enableSkillFromState(lookup, {
+        statePath,
+        host: host.name,
+        allowedSkillRoots,
+        allowOutOfRoot: allowSymlinkMutation,
+      });
       results.push({ id: r.id, instanceKey: r.instanceKey, alreadyEnabled: r.alreadyEnabled });
     } catch (err) {
       const message = (err as Error).message;
       if (/unknown skill id/.test(message) || /ambiguous skill id/.test(message)) {
         console.error(message);
         return 2;
+      }
+      // The state-only refusal (out-of-root realpath without
+      // `--allow-symlink-target-mutation`, #100 + #125) already names the
+      // skill id, the linked target, and the required flag — printing
+      // `failed to enable X: refusing to enable X: ...` would just duplicate
+      // the id. Mirror the inventory-path branch which prints the refusal
+      // verbatim and exits 1.
+      if (/^refusing to enable /.test(message)) {
+        console.error(message);
+        return 1;
       }
       console.error(`failed to enable ${target}: ${message}`);
       return 1;

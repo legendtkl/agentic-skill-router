@@ -1,5 +1,5 @@
 import { readdir, realpath, rename, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { DISABLED_SUFFIX } from "./scan.ts";
 import {
   addDisableRecord,
@@ -35,6 +35,19 @@ export interface ApplyDeps {
    * explicitly warned the user.
    */
   allowOutOfRoot?: boolean;
+  /**
+   * Skill roots currently advertised by the active host (typically
+   * `await host.skillRoots()`). When supplied, `enableSkillFromState`
+   * re-validates the state-recorded `skillMdPath` against these roots before
+   * renaming so a tampered or stale state record cannot direct a rename to an
+   * arbitrary filesystem path (#100), and so out-of-root drift discovered
+   * since the disable was recorded gets gated by `allowOutOfRoot` exactly the
+   * way the inventory-path CLI flow already gates it (#125).
+   *
+   * Optional for backward compatibility: callers that don't have a host on
+   * hand (legacy tests, library consumers) skip the gate, just like before.
+   */
+  allowedSkillRoots?: string[];
 }
 
 export async function disableSkill(
@@ -199,10 +212,133 @@ export async function enableSkillFromState(
   return withStateLock(deps.statePath, async () => {
     const state = await loadState(deps.statePath, deps.host);
     const rec = resolveDisableRecord(state, idOrInstanceKey);
-    const { livePath, disabledPath } = pathsForRecord(rec);
-    const liveBefore = await fileExists(livePath);
-    const disabledBefore = await fileExists(disabledPath);
+    const inRoot = pathsForRecord(rec);
+    const inRootLiveBefore = await fileExists(inRoot.livePath);
+    const inRootDisabledBefore = await fileExists(inRoot.disabledPath);
+
+    // P1 follow-up to #100/#125 on top of #97: when a symlink-recorded skill
+    // has its in-root symlink later deleted or broken, both in-root probes
+    // miss even though the actual file the user renamed (the canonical
+    // out-of-root SKILL.md.agentic-skill-router-disabled) is still on disk.
+    // Without the canonical fallback below, we would fall straight through
+    // to `enableSkillPaths`'s "both absent → clean up state" branch, silently
+    // drop the disable record, and strand the canonical disabled marker —
+    // bypassing both the root-gate and #97's canonical-drift guard. When the
+    // record was discovered via a symlink and captured its canonical
+    // realpath (#97 / PR #132), probe the canonical paths too; if either
+    // exists, operate against the canonical pair so the gate runs against an
+    // out-of-root realpath (it IS out-of-root by construction for
+    // `discoveredViaSymlink: true`) and the rename hits the real file.
+    let livePath = inRoot.livePath;
+    let disabledPath = inRoot.disabledPath;
+    let liveBefore = inRootLiveBefore;
+    let disabledBefore = inRootDisabledBefore;
+    if (
+      !inRootLiveBefore &&
+      !inRootDisabledBefore &&
+      rec.discoveredViaSymlink &&
+      rec.canonicalSkillMdPath
+    ) {
+      const canonicalLive = rec.canonicalSkillMdPath.endsWith(DISABLED_SUFFIX)
+        ? rec.canonicalSkillMdPath.slice(0, -DISABLED_SUFFIX.length)
+        : rec.canonicalSkillMdPath;
+      const canonicalDisabled = canonicalLive + DISABLED_SUFFIX;
+      const canonicalLiveExists = await fileExists(canonicalLive);
+      const canonicalDisabledExists = await fileExists(canonicalDisabled);
+      if (canonicalLiveExists || canonicalDisabledExists) {
+        livePath = canonicalLive;
+        disabledPath = canonicalDisabled;
+        liveBefore = canonicalLiveExists;
+        disabledBefore = canonicalDisabledExists;
+      }
+    }
+
+    // Re-validate whichever path we ended up with against the host's current
+    // skill roots BEFORE renaming. The state file is plain JSON and might be
+    // tampered, hand-edited, or stale; without this gate
+    // `enableSkillFromState` would happily rename arbitrary local paths a
+    // record points at (#100) and would also bypass the out-of-root symlink
+    // gate the inventory-path enable flow already enforces (#125). When we
+    // swapped to the canonical paths above, this also covers the broken
+    // in-root symlink case: the canonical path is out-of-root by definition
+    // for a `discoveredViaSymlink` record, so this refuses without the flag.
+    //
+    // The gate must only fire when a rename will actually occur — i.e. when
+    // the disabled marker is present and the live file is absent, which is
+    // exactly the condition `enableSkillPaths` uses to decide whether to
+    // rename below. All other combinations are no-rename paths:
+    //   - live present, disabled absent → "already enabled" cleanup; the
+    //     user enabled the skill out of band, we only drop the stale
+    //     record. Refusing here would strand users with a state record
+    //     they can't clean up without hand-editing JSON (P2 follow-up).
+    //   - both present → `enableSkillPaths` raises SkillConflictError; no
+    //     rename happens and the conflict error is the right surface.
+    //   - both absent → orphan cleanup; nothing on disk to mutate.
+    // Skipping the gate in those cases preserves the #100/#125 guarantee
+    // (no silent renames of out-of-root files) while letting state cleanup
+    // proceed.
+    const willRename = disabledBefore && !liveBefore;
+    if (willRename && deps.allowedSkillRoots && deps.allowedSkillRoots.length > 0) {
+      // The probe is always the disabled marker now: it is the file that
+      // would be renamed. Looking at the live path here would mean probing
+      // a not-yet-existing target, and the disabled marker's realpath
+      // already determines the directory the rename will hit.
+      const probePath = disabledPath;
+      const realTarget = await tryRealpath(probePath);
+      // tryRealpath returning null after the existence check above means
+      // the path stopped existing between the probe and now (race) or it
+      // points through a symlink that itself broke; either way there is
+      // no rename source to validate and `enableSkillPaths` will surface
+      // the right error on its own.
+      if (realTarget !== null) {
+        const rootsResolved = await resolveExistingPaths(deps.allowedSkillRoots);
+        if (!isPathUnderAnyRoot(realTarget, rootsResolved)) {
+          // Out-of-root. `--allow-symlink-target-mutation` is NOT a blanket
+          // bypass — it must only allow records this CLI itself wrote for a
+          // genuine symlink-targeted disable. The state file is plain JSON,
+          // so a tampered record could otherwise point `skillMdPath` at any
+          // file the attacker wants and ride the flag straight to a rename
+          // (#100). Restrict the bypass to:
+          //   (a) post-#97 records that captured `discoveredViaSymlink: true`
+          //       AND a `canonicalSkillMdPath` at disable time (proof the
+          //       disable CLI wrote them through `disableSkill`'s canonical
+          //       capture path), AND
+          //   (b) the canonical realpath today still matches the recorded
+          //       one (no symlink retarget between disable and now — mirror
+          //       the #97 `SkillSymlinkTargetMismatchError` guard that
+          //       `enableSkillPaths` enforces for the inventory path).
+          // Anything else (no flag, legacy record without canonical fields,
+          // canonical drift) refuses with a precise message naming why.
+          if (!deps.allowOutOfRoot) {
+            throw new Error(symlinkMutationRefusalMessage(rec.id, probePath, realTarget));
+          }
+          if (!rec.discoveredViaSymlink || !rec.canonicalSkillMdPath) {
+            throw new Error(unauthenticatedOutOfRootMessage(rec.id, probePath, realTarget));
+          }
+          // Compare canonical realpath today (suffix-stripped to SKILL.md
+          // form) against the recorded canonical, exactly like the existing
+          // #97 guard in `enableSkillPaths`. A mismatch means the symlink
+          // target was retargeted between disable and now and the user
+          // only ever approved a mutation on the originally-disabled file.
+          const currentCanonical = realTarget.endsWith(DISABLED_SUFFIX)
+            ? realTarget.slice(0, -DISABLED_SUFFIX.length)
+            : realTarget;
+          if (currentCanonical !== rec.canonicalSkillMdPath) {
+            throw new SkillSymlinkTargetMismatchError(
+              rec.id,
+              probePath,
+              rec.canonicalSkillMdPath,
+              currentCanonical,
+            );
+          }
+        }
+      }
+    }
     const result = await enableSkillPaths(rec.instanceKey, livePath, disabledPath, deps, state);
+    // `cleanedStateOnly` reports "no on-disk file existed for this record";
+    // honour that across BOTH the in-root and the canonical probe sites so a
+    // record cleaned up via the canonical fallback (or fully orphaned at
+    // both sites) is still correctly classified.
     return {
       ...result,
       cleanedStateOnly: !liveBefore && !disabledBefore,
@@ -210,6 +346,73 @@ export async function enableSkillFromState(
       instanceKey: rec.instanceKey,
     };
   });
+}
+
+/**
+ * Mirror of the inventory-path `symlinkMutationRefusal` error in
+ * `src/commands/apply.ts`. Kept in apply.ts so the state-only enable flow
+ * surfaces an identical refusal message (same flag hint, same linked-target
+ * disclosure) without pulling a CLI module into the runtime layer.
+ */
+function symlinkMutationRefusalMessage(skillId: string, livePath: string, realTarget: string): string {
+  const linkedPart = realTarget !== livePath ? `${livePath} -> ${realTarget}` : livePath;
+  return (
+    `refusing to enable ${skillId}: skill resolves to a symlink target outside this host's skills root ` +
+    `(linked target: ${linkedPart}). ` +
+    `Re-run with --allow-symlink-target-mutation to modify the linked target.`
+  );
+}
+
+/**
+ * Refusal raised when `--allow-symlink-target-mutation` is set but the state
+ * record cannot be authenticated as one this CLI wrote for a genuine symlink
+ * disable (#100 follow-up). Either `discoveredViaSymlink` is unset/false or
+ * `canonicalSkillMdPath` is missing — both are populated by `disableSkill`
+ * for legitimate symlink-targeted disables since #97/PR #132, so their
+ * absence on an out-of-root record means either a tampered/hand-edited
+ * record or a pre-#97 legacy record we can't safely authenticate. Manual
+ * intervention is required rather than honouring the flag blindly.
+ */
+function unauthenticatedOutOfRootMessage(skillId: string, livePath: string, realTarget: string): string {
+  const linkedPart = realTarget !== livePath ? `${livePath} -> ${realTarget}` : livePath;
+  return (
+    `refusing to enable ${skillId}: state record path is out-of-root but cannot prove it ` +
+    `originated from a symlink mutation written by this CLI (canonical fields missing or mismatched). ` +
+    `Linked target: ${linkedPart}. ` +
+    `Manual repair required — re-disable the skill through the CLI so the canonical realpath is recorded, ` +
+    `or remove the stale disable record from state.`
+  );
+}
+
+/**
+ * Resolve each candidate root to its realpath if it exists. Non-existent
+ * roots are silently skipped — the host may advertise project-scope roots
+ * that don't exist in every workspace, and a missing root cannot contain
+ * any path anyway.
+ */
+async function resolveExistingPaths(paths: string[]): Promise<string[]> {
+  const resolved: string[] = [];
+  for (const p of paths) {
+    const real = await tryRealpath(p);
+    if (real !== null) resolved.push(real);
+  }
+  return resolved;
+}
+
+/**
+ * Returns true when `candidate` is the same path as one of `roots` or sits
+ * underneath one of them. All inputs are expected to be absolute realpaths;
+ * comparison is segment-based (so `/a/b` does NOT match `/a/banana`).
+ */
+function isPathUnderAnyRoot(candidate: string, roots: string[]): boolean {
+  const c = resolve(candidate);
+  for (const root of roots) {
+    const r = resolve(root);
+    if (c === r) return true;
+    const prefix = r.endsWith(sep) ? r : r + sep;
+    if (c.startsWith(prefix)) return true;
+  }
+  return false;
 }
 
 function resolveDisableRecord(state: State, idOrInstanceKey: string): DisableRecord {
