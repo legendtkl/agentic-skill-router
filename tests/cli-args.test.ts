@@ -1922,6 +1922,153 @@ test("skills enable refuses with flag when canonical drifted from recorded realp
   }
 });
 
+test("skills enable cleans state-only record for already-enabled out-of-root skill without flag (P2 follow-up)", async () => {
+  // P2 follow-up to the #100/#125 + #97 gate work: the root gate must only
+  // fire when an actual rename will occur. If the live SKILL.md exists at
+  // the recorded path and the disabled marker is absent, the user already
+  // enabled the skill out of band; `enableSkillPaths` would just drop the
+  // stale record with no on-disk mutation. The previous P1 commit
+  // accidentally refused this case for out-of-root paths and left users
+  // unable to clean stale state without hand-editing JSON.
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "already-enabled");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    await writeFile(
+      externalLive,
+      "---\nname: already-enabled\ndescription: user re-enabled out of band\n---\n",
+    );
+    const codexInRootDir = join(fake.codexHome, "skills", "already-enabled-stub");
+    await symlink(externalSkillDir, codexInRootDir);
+
+    // Hand-write a stale state record claiming the skill is disabled, but
+    // on disk the live file is present (no disabled marker). This is the
+    // shape `enableSkillPaths` treats as "alreadyEnabled" — pure state
+    // cleanup, no rename. Include canonical fields so the record is
+    // post-#97-shaped; the test still passes without them, but the
+    // realistic post-disable record carries them.
+    const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const state = {
+      schema: 1,
+      host: "codex",
+      disabledSkills: [
+        {
+          id: "user:codex:already-enabled",
+          skillMdPath: recordedDisabledPath,
+          skillName: "already-enabled",
+          source: "user",
+          pluginKey: null,
+          disabledAt: new Date().toISOString(),
+          reason: "manual",
+          discoveredViaSymlink: true,
+          canonicalSkillMdPath: externalLive,
+        },
+      ],
+    };
+    await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
+
+    // Enable WITHOUT the flag must succeed: no rename, no out-of-root file
+    // mutation, just state cleanup. The pre-fix behavior refused here.
+    const enabled = await runCli(
+      ["skills", "enable", "user:codex:already-enabled", "--json"],
+      fake.env,
+    );
+    assert.equal(
+      enabled.stderr.includes("refusing to enable"),
+      false,
+      `state-cleanup enable must not refuse; got stderr: ${enabled.stderr}`,
+    );
+    const parsed = JSON.parse(enabled.stdout) as Array<{ id: string; alreadyEnabled: boolean }>;
+    assert.equal(parsed[0]?.id, "user:codex:already-enabled");
+    assert.equal(parsed[0]?.alreadyEnabled, true, "must report alreadyEnabled=true");
+
+    // The out-of-root live SKILL.md is untouched (no rename happened).
+    await stat(externalLive);
+    await assertFileAbsent(externalLive + ".agentic-skill-router-disabled");
+    // State record is gone.
+    const stateAfter = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{ id: string }>;
+    };
+    assert.ok(
+      !stateAfter.disabledSkills.some((r) => r.id === "user:codex:already-enabled"),
+      "successful state-cleanup enable should clear the disable record",
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable still refuses out-of-root record when disabled marker actually exists (P2 regression guard)", async () => {
+  // Companion / regression guard for the P2 fix above: the gate-skip is
+  // gated on `disabledBefore && !liveBefore` (a real rename would occur).
+  // When the disabled marker IS on disk out-of-root, the original #100/#125
+  // refusal must still fire without the flag — otherwise we would silently
+  // mutate an out-of-root file. This re-asserts the security guarantee in
+  // exactly the rename-bearing scenario the gate is meant to protect.
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "still-disabled");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalDisabled,
+      "---\nname: still-disabled\ndescription: actually disabled out-of-root\n---\n",
+    );
+    const codexInRootDir = join(fake.codexHome, "skills", "still-disabled-stub");
+    await symlink(externalSkillDir, codexInRootDir);
+
+    const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const state = {
+      schema: 1,
+      host: "codex",
+      disabledSkills: [
+        {
+          id: "user:codex:still-disabled",
+          skillMdPath: recordedDisabledPath,
+          skillName: "still-disabled",
+          source: "user",
+          pluginKey: null,
+          disabledAt: new Date().toISOString(),
+          reason: "manual",
+          discoveredViaSymlink: true,
+          canonicalSkillMdPath: externalLive,
+        },
+      ],
+    };
+    await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
+
+    let refused: unknown;
+    try {
+      await runCli(["skills", "enable", "user:codex:still-disabled"], fake.env);
+    } catch (err) {
+      refused = err;
+    }
+    assert.ok(refused, "rename-bearing out-of-root enable without flag MUST still refuse");
+    assert.equal((refused as { code?: number }).code, 1);
+    const refusedStderr = (refused as { stderr?: string }).stderr ?? "";
+    assert.match(refusedStderr, /refusing to enable user:codex:still-disabled/);
+    assert.match(refusedStderr, /symlink target outside this host's skills root/);
+    assert.match(refusedStderr, /--allow-symlink-target-mutation/);
+    // Load-bearing safety: the out-of-root disabled marker is NOT renamed.
+    await stat(externalDisabled);
+    await assertFileAbsent(externalLive);
+    // State record stays.
+    const stateAfter = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{ id: string }>;
+    };
+    assert.ok(
+      stateAfter.disabledSkills.some((r) => r.id === "user:codex:still-disabled"),
+      "refused enable must not drop the disable record",
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("user error: stderr carries the message, stdout stays empty", async () => {
   const fake = await makeFakeCodexUser();
   try {

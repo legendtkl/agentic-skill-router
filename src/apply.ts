@@ -262,14 +262,34 @@ export async function enableSkillFromState(
     // swapped to the canonical paths above, this also covers the broken
     // in-root symlink case: the canonical path is out-of-root by definition
     // for a `discoveredViaSymlink` record, so this refuses without the flag.
-    if (deps.allowedSkillRoots && deps.allowedSkillRoots.length > 0) {
-      // Prefer the file that actually exists on disk; fall back to the
-      // disabled marker (the canonical resting location for a disable record)
-      // so a missing live file still produces a useful realpath comparison.
-      const probePath = liveBefore ? livePath : disabledPath;
+    //
+    // The gate must only fire when a rename will actually occur — i.e. when
+    // the disabled marker is present and the live file is absent, which is
+    // exactly the condition `enableSkillPaths` uses to decide whether to
+    // rename below. All other combinations are no-rename paths:
+    //   - live present, disabled absent → "already enabled" cleanup; the
+    //     user enabled the skill out of band, we only drop the stale
+    //     record. Refusing here would strand users with a state record
+    //     they can't clean up without hand-editing JSON (P2 follow-up).
+    //   - both present → `enableSkillPaths` raises SkillConflictError; no
+    //     rename happens and the conflict error is the right surface.
+    //   - both absent → orphan cleanup; nothing on disk to mutate.
+    // Skipping the gate in those cases preserves the #100/#125 guarantee
+    // (no silent renames of out-of-root files) while letting state cleanup
+    // proceed.
+    const willRename = disabledBefore && !liveBefore;
+    if (willRename && deps.allowedSkillRoots && deps.allowedSkillRoots.length > 0) {
+      // The probe is always the disabled marker now: it is the file that
+      // would be renamed. Looking at the live path here would mean probing
+      // a not-yet-existing target, and the disabled marker's realpath
+      // already determines the directory the rename will hit.
+      const probePath = disabledPath;
       const realTarget = await tryRealpath(probePath);
-      // If neither file exists, there is nothing to rename and no path to
-      // re-validate; let the downstream state-cleanup branch handle it.
+      // tryRealpath returning null after the existence check above means
+      // the path stopped existing between the probe and now (race) or it
+      // points through a symlink that itself broke; either way there is
+      // no rename source to validate and `enableSkillPaths` will surface
+      // the right error on its own.
       if (realTarget !== null) {
         const rootsResolved = await resolveExistingPaths(deps.allowedSkillRoots);
         if (!isPathUnderAnyRoot(realTarget, rootsResolved)) {
