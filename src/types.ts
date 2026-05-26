@@ -47,6 +47,21 @@ export interface Skill {
    * well-formed skills.
    */
   frontmatterWarnings?: string[];
+  /**
+   * Provenance for skill entries that are not discovered on disk and instead
+   * come from a hand-maintained list (e.g. the Claude Code binary builtin
+   * skills, which expose no queryable inventory). Set only for `source ===
+   * "builtin"` entries so callers can show when the snapshot was last
+   * verified and warn if it has drifted from the host's actual builtins.
+   * Omitted for skills discovered on disk.
+   */
+  builtinListSource?: {
+    kind: "static-snapshot";
+    /** Host version the snapshot was taken against, e.g. "claude-code@2.x". */
+    version: string;
+    /** ISO date (YYYY-MM-DD) the snapshot was last hand-verified. */
+    verifiedAt: string;
+  };
 }
 
 export interface UsageStat {

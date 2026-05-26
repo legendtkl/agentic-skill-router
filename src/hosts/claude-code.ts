@@ -15,7 +15,23 @@ import { collectUsageStats } from "../usage.ts";
  * Skills built into the Claude Code binary itself. We can't reach their
  * SKILL.md files, so they're not disable-able. Listed here so the policy
  * module can mark them as `canDisable: false` and skip them in suggestions.
+ *
+ * Drift policy
+ * ------------
+ * Claude Code does not expose a queryable inventory of its built-in skills,
+ * so this list is a hand-maintained snapshot. {@link BUILTIN_SKILLS_VERSION}
+ * and {@link BUILTIN_SKILLS_VERIFIED_AT} document when it was last checked
+ * and surface in `skills list --json` via the per-skill `builtinListSource`
+ * field. When Claude Code adds or removes builtins, update both constants
+ * together — see `scripts/update-claude-builtin-skills.mjs` for the
+ * maintainer checklist, and the "Claude Code builtin skill list policy"
+ * section of the README.
+ *
+ * Last verified: 2026-05-26 against Claude Code 2.x.
  */
+export const BUILTIN_SKILLS_VERSION = "claude-code@2.x";
+export const BUILTIN_SKILLS_VERIFIED_AT = "2026-05-26";
+
 export const BUILTIN_SKILLS: ReadonlyArray<{ name: string; description: string }> = [
   { name: "init", description: "Initialize a new CLAUDE.md file with codebase documentation" },
   { name: "review", description: "Review a pull request" },
@@ -141,6 +157,11 @@ export class ClaudeCodeHost implements Host {
         isPluginDisabled: false,
         canDisable: false,
         conflict: false,
+        builtinListSource: {
+          kind: "static-snapshot",
+          version: BUILTIN_SKILLS_VERSION,
+          verifiedAt: BUILTIN_SKILLS_VERIFIED_AT,
+        },
       });
     }
 

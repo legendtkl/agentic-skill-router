@@ -260,6 +260,34 @@ Warnings are attached to the skill record as the optional
 authors can spot silently-skipped metadata. Keep all routing metadata at the
 top level (see the `lark-mail` example above) so it parses reliably.
 
+### Claude Code builtin skill list policy
+
+Claude Code ships a handful of skills inside the binary itself (`init`,
+`review`, `claude-api`, etc.) and does not expose a queryable inventory of
+them. `agentic-skill-router` keeps a hand-maintained snapshot in
+[`src/hosts/claude-code.ts`](src/hosts/claude-code.ts) as the
+`BUILTIN_SKILLS` constant, alongside two companion constants documenting
+when the snapshot was last checked:
+
+- `BUILTIN_SKILLS_VERSION` — the Claude Code version the snapshot was
+  verified against.
+- `BUILTIN_SKILLS_VERIFIED_AT` — ISO date (`YYYY-MM-DD`) of that
+  verification.
+
+Both values are surfaced for every builtin entry in `skills list --json`
+under a `builtinListSource` field of the form
+`{ kind: "static-snapshot", version, verifiedAt }`. Consumers that care
+about drift can read those values and warn when they go stale, without
+needing to hard-code Anthropic release dates.
+
+To refresh the snapshot after a Claude Code release adds or removes a
+builtin, follow the checklist in
+[`scripts/update-claude-builtin-skills.mjs`](scripts/update-claude-builtin-skills.mjs):
+edit the array, bump both constants, run `npm run typecheck && npm test`,
+and ship. The script itself only prints the checklist — it does not call
+out to the network or a Claude Code binary, so the runtime stays
+dependency-free.
+
 ## Troubleshooting
 
 See [`docs/troubleshooting.md`](docs/troubleshooting.md) for recovery
