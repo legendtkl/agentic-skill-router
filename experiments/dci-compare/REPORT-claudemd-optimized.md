@@ -1,8 +1,8 @@
 # Disabled-Skill 路由策略实验报告
 
-实验日期: 2026-05-23 至 2026-05-25
-数据: SkillRouter eval-core (arXiv:2603.22455) 裁剪匿名化语料
-范围: Claude Code paired 实验、Codex A-M 策略实验、J/L/M 规模扩展实验、论文 original Hard pool 对齐实验
+实验日期: 2026-05-23 至 2026-05-26
+数据: SkillRouter eval-core (arXiv:2603.22455) 裁剪匿名化语料,以及论文原始 Easy 78,361 池
+范围: Claude Code paired 实验、Codex A-M 策略实验、J/L/M 规模扩展实验、论文 original Hard pool 对齐实验、SkillRouter 75 core × Easy × multi-skill 对齐实验
 
 ---
 
@@ -12,13 +12,13 @@
 
 主要结论如下:
 
-1. **Claude Code 下必须先处理 trigger noise,否则 retriever 对比会失真。** 在无额外提示时,router 变体有大量 cell 跳过 `skill-router-skills` 并直接输出 `xlsx`、`pptx`、`jax` 等不存在的 skill 名。注入 `<HOME>/.claude/CLAUDE.md` 后,排除 D-agentic 修复 rerun 的 7 个可比 router 变体中,trigger rate 从 78.0% 提升到 97.6%,hallucination 从 22.0% 降到 2.4%,accuracy 从 69.0% 提升到 86.9%。
-2. **Claude Code 150-skill 实验中,B-cc 与 C-lite 最高准,J-bounded 是高准确率组里的最低成本 router。** B-cc / C-lite 均为 23/24;D-agentic / E-digest / H-bounded / J-bounded 为 22/24;在达到 22/24 的 router 变体中,J-bounded 成本最低($3.07)且 ctx_end 最低(30.7K)。
-3. **Codex 150-skill 实验呈现不同排序。** 同一 24-query / 150-skill 语料上,Codex native G-native 与 D-agentic 均为 24/24;C-lite / E-digest / H-bounded 为 23/24;J-bounded 仍是低成本点但不是最高准确率点。后续 K-bounded、K-lite fixed、L-agentic、M-bm25 在 150-skill 上也达到 24/24。
-4. **宿主差异显著。** Codex native G-native 为 24/24,Claude Code native G-native 为 15/24。抓包显示二者 skill 元数据呈现方式不同:Codex native 请求内联了更完整的 skill description,Claude Code native 使用更短的 skill listing 和独立 `Skill` tool。
-5. **150 到 1K 扩展仍较稳,但不能外推到 79K Hard。** L-agentic 在 150-skill 为 24/24,在 1K synthetic corpus 上为 23/24,唯一 miss 是 `pptx-reference-formatting`。但 M-bm25 在 original 79,141 Hard pool 的当前 24-query 上为 11/24,在论文 paper-core single 24-query 上为 14/24;J-bounded-v2 在 paper-core single Hard 上 strict 为 11/24,alias-normalized 为 14/24。
-6. **论文对照只能分维度比较,不能严格 apples-to-apples。** SkillRouter 论文公开了 75 core queries 的 `nd` Easy/Hard 指标,也公开了 24 single queries 的 full-text `Single Hit@1`,但没有公开 `Single x nd x Hard-only` 交叉表。本报告的 paper-core single Hard 复跑填补的是这个缺口,方法仍是 agentic router,不是论文的纯 BM25 / embedding baseline。
-7. **A-router 不是可接受默认方案。** Claude Code with-CLAUDE.md 为 13/24,Codex 为 8/24。固定 lexical / 级联 scorer 在长 query 和针对性 distractor 下稳定落后于 LLM-driven keyword extraction。
+1. **78K Easy × 75 core 论文对齐实验中,agentic metadata-only 路由器超过论文最强 nd 基线。** 最佳 codex/J-bounded-v2 Hit@1 = 40.0%,超 Qwen3-Emb-8B nd (30.7%) 达 +9.3pp,并高于 BM25 带 full body (34.7%)。6/6 cell 跑赢 BM25 nd,4/6 超 Qwen3-Emb-0.6B nd。详见 §9。
+2. **宿主/模型选择比变体选择影响更大。** 同一 SKILL.md 模板下 Codex (GPT-5.5) 平均 36.4%,Claude Code (Opus 4.7) 平均 27.1%,差 9.3pp;三变体间最大差距仅 7.3pp。150-skill 实验同样如此:Codex native 24/24,Claude Code native 15/24。
+3. **52% 的 query 构成 metadata-only 结构性天花板。** 75 query 中 39 个全 6 cell 皆 miss,其中 7 个出现跨变体跨宿主一致误选。突破需 body-on-tie。
+4. **150-skill 到 1K 扩展仍较稳,但 79K Hard 显著下降。** L-agentic 150 → 1K 只掉 1 cell,但 M-bm25 在 79K Hard paper-core single 上为 14/24,J-v2 为 11/24 strict。说明 metadata-only 不能作为唯一决策源。
+5. **Claude Code 下 trigger noise 是首要治理项。** 注入 CLAUDE.md 后 trigger 从 78% → 97.6%,accuracy 从 69% → 86.9%。J-bounded 是 22/24 组里最低成本 router ($3.07)。
+
+次要结论:A-router 固定 scorer 不可接受(Claude Code 13/24,Codex 8/24);论文对照只能分维度比(论文未公开 Single×nd×Hard-only 格子);Codex D-agentic/K/L/M 在 150 上均 24/24,排序需更大规模区分。
 
 本报告只评估路由层,不评估匹配 skill 后的下游执行成功率。所有排名都是单次运行的 strict-match routing-only 分数,默认包含 ambiguous 样本。
 
@@ -36,9 +36,19 @@
 
 ## 2. 数据与语料
 
-### 2.1 语料来源
+### 2.1 语料总览
 
-语料来自 SkillRouter `eval-core`:
+本报告涉及三层规模递增的语料,全部来自 SkillRouter `eval-core` (arXiv:2603.22455):
+
+| 层级 | 规模 | 来源 | 使用节 | 安装形态 |
+| --- | ---: | --- | --- | --- |
+| 150-skill 对比 | 150 | 19 gt + 80 targeted distractor + 51 easy noise,确定性抽样 | §6-§7 | 完整 SKILL.md (metadata + body) |
+| 78K Easy pool | 78,361 | `eval_core/easy/*.jsonl.gz` 全量 | §9 | metadata-only (name + description,body 剥离) |
+| 79K Hard pool | 79,141 | `eval_core/hard/*.jsonl.gz` (Easy + 780 LLM distractor) | §8 | metadata-only |
+
+三层语料共享 19 个 ground-truth skill,但 pool 大小和 distractor 构成不同:150-skill 只含 80 个 targeted distractor 和 51 个 easy noise;78K Easy 是论文原始 easy pool 全量;79K Hard 在 Easy 基础上加入 780 个 GPT-4o-mini 蒸馏出的高质量 distractor。
+
+### 2.2 150-skill 对比语料
 
 | 成分 | 数量 | 说明 |
 | --- | ---: | --- |
@@ -49,7 +59,9 @@
 
 首版语料曾保留 `gt-*` / `distractor-*` 目录名前缀,会泄露答案。修复后,所有目录名和 frontmatter `name` 均匿名化为 `skill-001` 到 `skill-150`,并在确定性洗牌后分配。映射只保存在 `corpus-manifest.json`,用于离线分析,不暴露给 agent。
 
-### 2.2 查询集
+78K Easy 和 79K Hard 的安装使用 `sr-XXXXX` 确定性洗牌映射 (seed=20260525);frontmatter `name:` 和 `description:` 保留原始上游字符串(论文 nd 输入需要 name 信号),目录名匿名化为 `sr-XXXXX` 以避免泄露 `gt/` / `distractor/` 前缀。
+
+### 2.3 查询集
 
 24 个 query 直接使用 SkillsBench single-skill 任务的 `instruction_text`。这些 query 是完整任务描述,通常包含文件路径、输出格式和约束,不是为了本实验手写的短关键词查询。完整列表见 `queries.json`。
 
@@ -148,8 +160,8 @@ Codex 版 router 只做宿主路径适配: `.claude/skills` 改为 `.codex/skill
 
 - 150-skill: 匿名化 150-skill 对比语料。
 - 1K synthetic corpus: 150-skill 对比语料 + 850 synthetic noise skill,用于低成本观察索引和 prompt 的扩展趋势。
-- 79,141-candidate Hard pool: SkillRouter eval-core Hard tier。
-- 变体: J-bounded-v2、L-agentic、M-bm25。
+- 79,141-candidate Hard pool: SkillRouter eval-core Hard tier (§8,变体 J-bounded-v2、M-bm25)。
+- 78,361-candidate Easy pool: SkillRouter eval-core Easy tier (§9,变体 K-bounded、J-bounded-v2、M-bm25,75 core queries)。
 
 79K original Hard pool 实验使用 SkillRouter 论文数据集原始 skill IDs 的 opaque 映射。agent 可见的候选 id 是 `sr-*`;metadata 中保留原始 name / description,因此这不是完全匿名化,但不会把 `gt/` 或 `distractor/` 目录前缀暴露为答案线索。
 
@@ -360,12 +372,12 @@ J-bounded-v2 只改 body workflow,frontmatter description 保持不变:
 
 ### 8.4 结果
 
-| 配置 | accuracy | trigger | cost | avg cost/cell | duration | avg ctx_end |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| J-v1 x 150 (Claude Code) | 22/24 | 23/24 | $3.07 | $0.128 | 374s | 30.7K |
-| J-v2 x 150 | 22/24 | 23/24 | $3.95 | $0.164 | 665s | 30.8K |
-| J-v2 x 79K Hard | 12/24 | 23/24 | $5.33 | $0.222 | 1577s | 36.6K |
-| J-v2 x paper-core single Hard (Codex) | 11/24 strict; 14/24 alias-normalized | 24/24 | $12.44 | $0.518 | 3056s | 30.3K |
+| 配置 | host | accuracy | trigger | cost | avg cost/cell | duration | avg ctx_end |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| J-v1 x 150 | Claude Code | 22/24 | 23/24 | $3.07 | $0.128 | 374s | 30.7K |
+| J-v2 x 150 | Claude Code | 22/24 | 23/24 | $3.95 | $0.164 | 665s | 30.8K |
+| J-v2 x 79K Hard | Claude Code | 12/24 | 23/24 | $5.33 | $0.222 | 1577s | 36.6K |
+| J-v2 x paper-core single Hard | Codex | 11/24 strict; 14/24 alias-normalized | 24/24 | $12.44 | $0.518 | 3056s | 30.3K |
 
 解释:
 
@@ -408,25 +420,140 @@ SkillRouter 论文公开的 `nd` 指标使用 name + description only,但分母�
 
 ---
 
-## 9. 关键失败案例
+## 9. SkillRouter 75 core × Easy 78K × multi-skill 扩展
 
-### 9.1 `gh-repo-analytics`
+### 9.1 为什么扩展
+
+§8 的 paper-core single Hard 复跑解决了 single-skill × Hard × metadata-only 这一格,但留下两个未对齐项:
+
+- **查询规模偏小,只覆盖 24 个 single-skill 任务**,论文 default scored eval 是 75 core queries (24 single + 51 multi),§12 #2 明确把"扩展到 75 core 并实现 multi-label Hit@1"列为后续实验。
+- **只跑一个变体一个宿主一个 tier**(M-bm25/J-v2 on Codex on Hard),没有 K/J/M × Claude/Codex × Easy 的横向对比。
+
+本节填补这两项,产物在 `experiments/skillrouter-easy/`。
+
+### 9.2 实验设置
+
+| 项 | 选择 |
+| --- | --- |
+| 语料 | SkillRouter `eval_core/easy/*.jsonl.gz` 全量 78,361 skills |
+| 安装形态 | metadata-only:每个 skill 写为 `<HOME>/.<host>/skills/sr-XXXXX/SKILL.md.agentic-skill-router-disabled`,只含 `name` + `description` frontmatter,body 完全剥离 |
+| 匿名化 | 目录名取确定性洗牌后的 `sr-XXXXX` (seed=20260525);frontmatter `name:` 和 `description:` 保留原始上游字符串(论文 nd 输入需要 name 信号) |
+| 查询集 | `relevance.json` 中 `core_gt_ids` 非空的 75 条 core queries (24 single + 51 multi,论文 Section 2 / Appendix A) |
+| 指标 | Hit@1:任一 `core_gt_ids[*]` 出现在 agent 返回 top-1 即记 1,符合论文 multi-skill Hit@1 定义 |
+| 输出契约 | agent 单行 JSON `{"matched_skill_names":["sr-AAAAA",...,"sr-JJJJJ"]}`,有序 top-10,position 0 计 Hit@1 |
+| 变体 | K-bounded / J-bounded-v2 / M-bm25,fork 自 §3 同名变体,workflow 由"挑 1 个"改为"排 top-10",最大 4 个工具调用 |
+| 宿主 | Claude Code (claude-opus-4-7) 与 Codex (gpt-5.5,reasoning=high),各 3 变体共 6 cell |
+| 总规模 | 6 cell × 75 query = 450 次 agent 调用 |
+
+为了让 K/J 类的 keyword grep 在 78K 文件上仍能 sub-second 完成,安装阶段额外生成 `<skillsRoot>/.flat-metadata.tsv`(78,361 行,17MB):`<sr-id>\t<name>\t<description>`,变体 SKILL.md 直接 grep 该 TSV,替代 78K 文件的 `find … | xargs grep`(后者 24s/次,4 次迭代 = 必超时)。M-bm25 在 setup 阶段预热一次 BM25 index cache。这两项工程优化不改变路由信号(name + description),只把 metadata-only 路由器在 80K 规模下的延迟从分钟级压回秒级。
+
+### 9.3 主结果
+
+| variant | host | Hit@1 | single (n=24) | multi (n=51) | 答题率 | 超时 | wall |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| J-bounded-v2 | codex | **40.0% (30/75)** | 9/24 (37.5%) | 21/51 (41.2%) | 75/75 | 0 | 2532s |
+| M-bm25 | codex | 37.3% (28/75) | 7/24 (29.2%) | 21/51 (41.2%) | 75/75 | 0 | 3444s |
+| M-bm25 | claude | 34.7% (26/75) | 7/24 (29.2%) | 19/51 (37.3%) | 75/75 | 0 | 1329s |
+| K-bounded | codex | 32.0% (24/75) | 5/24 (20.8%) | 19/51 (37.3%) | 74/75 | 1 | 2966s |
+| K-bounded | claude | 25.3% (19/75) | 4/24 (16.7%) | 15/51 (29.4%) | 75/75 | 0 | 1037s |
+| J-bounded-v2 | claude | 21.3% (16/75) | 5/24 (20.8%) | 11/51 (21.6%) | 75/75 | 0 | 1009s |
+
+#### 按变体平均 (across hosts)
+
+| variant | avg Hit@1 | cells |
+|---|---|---|
+| M-bm25 | 36.0% | 2 |
+| J-bounded-v2 | 30.7% | 2 |
+| K-bounded | 28.7% | 2 |
+
+#### 按宿主平均 (across variants)
+
+| host | avg Hit@1 | avg wall | cells |
+|---|---|---|---|
+| Codex | 36.4% | 2981s | 3 |
+| Claude Code | 27.1% | 1125s | 3 |
+
+Codex 系统高出 Claude Code 9.3pp,但 wall 时间 2.6× 长。Claude Code 三个 cell 均在 17-22 min 完成,Codex 需要 42-57 min。更慢的原因可能是 Codex reasoning 更深(GPT-5.5 high effort)或工具执行开销更大;更准可能是模型推理能力本身的差异,而非宿主 prompt 差异(§9 所有 cell 使用同一 SKILL.md 模板,与 §7.3 中 native prompt 差异的解释链不同,详见 §12 #7)。
+
+总耗时 ~57 min,449/450 答出,1 个超时,0 错误。
+
+### 9.4 与论文 Easy 基线对照
+
+| source | method | input | Easy Hit@1 |
+| --- | --- | --- | ---: |
+| Paper Table 9 | BM25 | nd | 0.0% |
+| Paper Table 9 | Qwen3-Emb-0.6B | nd | 22.7% |
+| Paper Table 9 | Qwen3-Emb-8B | nd | 30.7% |
+| Paper Table 9 | BM25 | **full** (含 body) | 34.7% |
+| Paper Table 9 | Qwen3-Emb-0.6B | full | 58.7% |
+| Paper Table 9 | Qwen3-Emb-8B | full | 65.3% |
+| Paper Table 2 | SR-Emb-0.6B | full | 66.7% |
+| Paper Table 2/3 | SR-Emb-0.6B × SR-Rank-0.6B | full (1.2B pipeline) | 76.0% (A-Hit@1, Easy+Hard 均值;Easy-only 未单独公开) |
+| **本节** | **codex / J-bounded-v2** | **nd (agentic loop)** | **40.0%** |
+| **本节** | **codex / M-bm25** | nd (agentic loop) | 37.3% |
+| **本节** | **claude / M-bm25** | nd (agentic loop) | 34.7% |
+
+直接可比的是前三行的 nd 基线。**6 个 cell 全部跑赢 BM25 nd (+21pp 起)**;4/6 cell 超过 Qwen3-Emb-0.6B nd;3/6 cell 超过最强 nd 基线 Qwen3-Emb-8B (30.7%),最佳 codex/J-v2 超出 +9.3pp。同时,最佳 cell (codex/J-v2 40.0%) 在**结构性无 body 输入**的限制下,也高于论文用 BM25 但**带 body** 的 34.7%。值得注意的是 claude/M-bm25 (34.7%) 恰好与论文 BM25-full 持平——metadata-only agentic loop 做到了 BM25 带 full body 的同等水平。这说明 agent loop 对 metadata-only 路由有可量化的提升,主要靠 LLM 的 query rewrite 和多次有界检索补偿了 BM25/embedding 在稀疏 description 上的不足(论文 Easy pool 中 18.7% 的 description 短于 10 词,本节最佳 cell 仍能稳定挑出 gt)。
+
+但同样需要注意:最佳 cell (40.0%) 与论文 full-body 强基线(Qwen3-Emb-8B full 65.3%,SR-pipeline 74-76%)仍有 25-36pp 差距,这部分差距结构上无法通过 metadata-only 路由器补回,与 §8.5 结论一致。
+
+### 9.5 与 §8 paper-core single Hard 复跑的关系
+
+§8.5 的 paper-core single Hard 复跑给出 J-v2 strict 11/24 (alias-normalized 14/24)、M-bm25 14/24。本节是同变体家族在 Easy + 75 core 上的横向扩展,得到三个新信息:
+
+1. **multi-skill 子集表现略高于 single-skill 子集**(M-bm25/codex single 7/24 = 29.2% vs multi 21/51 = 41.2%)。这是 metric 定义带来的:multi-skill query 有多个 gt,任一进 top-1 都计 hit,分子分母比 single 更松。论文 Table 4 也观察到类似 R@10 远高于 single Hit@1 的现象。
+2. **宿主差异在 75 query 上比 24 query 上更稳定。** §8 只能在 Codex 上跑(成本/时间限制),本节首次给出两个宿主同语料同 variant 的并排对比,Codex 平均高出 Claude Code 9.3pp。但 §7.3 的 native prompt capture 解释(skill listing 信息密度)不能直接搬来:§9 用的是 router SKILL.md 而非 native listing,差异更可能来自模型本身(GPT-5.5 vs Opus 4.7 的 metadata rerank 能力),需要进一步抓包确认(见 §12 #7)。
+3. **K-bounded 在 78K 下的"shell glob 撞 ARG_MAX"问题被工程层面解决。** §8.2 列出 v1 在 13K 即崩,本节通过装语料时同时生成 `.flat-metadata.tsv`(K/J 直接 grep 该单文件),把"枚举 78K 文件"从命令层抽走,K-bounded 在 78K 上可以正常完成 4 步 workflow,Codex 取 24/75 = 32.0%,Claude Code 取 19/75 = 25.3%。这不是 SKILL.md prompt 的胜利,只是说明 K-bounded 路由器在"语料形态可配合时"仍可用。
+
+### 9.6 工程优化记录
+
+跑 6 cell × 75 query 过程中修了 5 个问题,均与 prompt / agent 行为无关,与"把 metadata-only 路由器跑到 80K 规模"直接相关。摘要(详细见 `experiments/skillrouter-easy/IMPLEMENTATION_PLAN.md`):
+
+1. **auth 缺失**:tmp HOME 没有 `.credentials.json` / `auth.json`,首次启动报"Not logged in"。修复:setup 阶段把真实 HOME 的对应 auth 文件复制到 tmp HOME。
+2. **K-bounded shell glob 撞 ARG_MAX**:见 §8.2,这里通过 §9.2 的 flat-TSV 索引绕开。
+3. **78K `find | xargs grep` 单次 24s,agent 迭代 4 次必超时**:同上,grep 17MB TSV 文件后 <100ms,提速 ~250×。
+4. **M-bm25 首查冷启动 17s**:setup 阶段预热 BM25 index cache,并将 `AGENTIC_SKILL_ROUTER_CORPUS_CACHE_TTL_MS` 设为 24h。
+5. **Codex shell session 在长 agent loop 中 stdin 关闭、卡在 retry**:配合 #3 把工具调用数压到 4 个以内后基本消失,全 75 query 只剩 1 个超时(`codex/K-bounded` 的 `xlsx-recover-data`,520s 后被 600s 上限 kill)。
+
+### 9.7 错误分布分析
+
+75 个 query 按 6 cell 命中情况分为三层:
+
+| 命中类型 | query 数 | 占比 | 说明 |
+|---|---:|---:|---|
+| 全 6 cell 命中 | 12 | 16.0% | 稳定 easy 样本 |
+| 部分 cell 命中 (mixed) | 24 | 32.0% | 变体/宿主分化区 |
+| 全 6 cell 皆 miss | 39 | 52.0% | metadata-only 天花板 |
+
+**全 miss 的 39 个 query** 是 metadata-only 路由器的结构性天花板:无论变体和宿主如何组合都无法在 top-1 命中 gt。按 tier 分,14/39 是 single-skill (58.3% 的 single query miss),25/39 是 multi-skill (49.0% 的 multi query miss)。其中 7 个 query (18%) 出现**全 6 cell 一致误选同一个 wrong skill** 的强共识现象,例如 `earthquake-plate-calculation` 全部选择 `sr-26212`、`quantum-numerical-simulation` 全部选择 `sr-68239`。这 7 个共识 miss 说明 metadata description 中存在比 gt skill 更高相关度的 distractor,可能是标注争议或 gt description 不够具体。
+
+**24 个 mixed query** 中,15 个至少被两个宿主各命中 1 次,6 个仅被 Codex 命中,3 个仅被 Claude Code 命中。Codex-only 命中数 (6) 是 Claude-only (3) 的 2 倍,进一步支持 Codex 在 metadata rerank 上的系统性优势。从 mixed 分布看:5 个 query 被 5/6 cell 命中(差 1 cell 的边界样本),6 个 query 仅被 1/6 cell 命中(幸运一跳)。
+
+这些分布意味着:想要 Easy 78K metadata-only 的 Hit@1 从 40% 推到 50%+,需要攻克 39 个全-miss query 中的至少 8 个,单纯调优变体参数只能在 24 个 mixed query 上再捞 1-3 个。body-on-tie 或 full-text rerank 是突破 52% 天花板的必要方向。
+
+每个 (query, cell) 的完整工具调用链见 `experiments/skillrouter-easy/runs/traces-report.html`(可折叠浏览)和 `traces-compact.json`(结构化数据)。
+
+---
+
+## 10. 关键失败案例
+
+### 10.1 `gh-repo-analytics`
 
 8 个 Claude router 变体在两条 arm 下均未命中。gt `skill-021` 的 description 是工具中心:gh CLI 用于操作 repo / issue / PR。多个变体选择的 `skill-046` 是任务中心:追踪和可视化 GitHub 贡献、PR、issue resolved over time。query 要求写 December community pulse,统计 PR、issue、top contributor。按 description 语义,`skill-046` 更贴近 query。该样本应标注为 ambiguous,不宜用来单独否定 router 设计。
 
 主表采用 strict gt,且默认包含该 ambiguous 样本。敏感性上,如果仅从 Claude Code router 表中剔除这一条,所有 router 的分母都会变为 23;B-cc / C-lite 将变为 23/23,D / E / H / J 变为 22/23,I-meta 变为 21/23,A-router 变为 13/23。因此 1-cell 排名差异应按“含争议样本的 strict score”解读,不应过度放大。
 
-### 9.2 `shock-analysis-supply`
+### 10.2 `shock-analysis-supply`
 
 gt 为通用 Excel skill `skill-105`。with-CLAUDE.md 强制路由后,部分 metadata-only 变体被更专精的 economics / timeseries skill 吸引;without-arm 中一些零工具直接输出 `skill-105` 反而碰巧命中。读 body 的 B-cc / C-lite 能恢复正确选择。这是 body-on-tie 的典型适用场景。
 
-### 9.3 A-router
+### 10.3 A-router
 
 A-router 直接把长 query 交给固定 scorer。真实 query 中大量步骤说明、路径和格式约束会稀释高信号关键词。相比之下,J / B / C / H 都让 LLM 先做 query rewrite 或 keyword extraction。A-router 后续应改为返回候选证据并交给 LLM rerank,而不是由 CLI 直接 commit。
 
 ---
 
-## 10. 局限性
+## 11. 局限性
 
 1. **每 cell 只跑一次。** 24 query 下 1 cell 即 4.2pp,23/24 与 22/24 不能视为统计显著差异。
 2. **CLAUDE.md 不是 system prompt。** 它是 user-message context block,效果强但仍不能等同于强制 `tool_choice`。
@@ -436,11 +563,13 @@ A-router 直接把长 query 交给固定 scorer。真实 query 中大量步骤�
 6. **数据存在 ambiguous / overloaded 样本。** `gh-repo-analytics` 和 Excel 相关 query 会影响总体排名。
 7. **宿主版本会漂移。** Claude Code / Codex 的 native skill 展示策略可能随版本变化。
 8. **语言覆盖不足。** 24 个 query 均为英文任务描述,未测中文或混合语言请求。
-9. **论文对照口径不完全一致。** 论文未公开 `Single x nd x Hard-only` 指标;本报告的 paper-core single Hard 复跑是补充实验,不是论文 BM25 / embedding pipeline 的复现。
+9. **论文对照口径不完全一致。** 论文未公开 `Single x nd x Hard-only` 指标;本报告的 paper-core single Hard 复跑(§8.5)和 75 core x Easy x multi-skill 复跑(§9)都是补充实验,不是论文 BM25 / embedding pipeline 的复现。最佳 cell 与论文 nd 基线可严格对照,与论文 full-body 强基线只能作为上限参考。
+10. **§9 multi-skill 指标用论文 any-gt Hit@1 定义,不是 strict set match。** multi-skill query 有 2-7 个 gt,任一进 top-1 即记 hit,因此分数会系统性高于 single-skill。若改用 strict-set 或 nDCG@K 评分,排序可能改变。R@10 / FC@10 / nDCG@10 等指标的原始 top-10 输出都保存在 `runs/<host>-<variant>/<query>.jsonl`,可离线重算,本报告未一并跑。
+11. **§9 只跑 Easy tier,未跑 Hard tier。** Hard 在 Easy 78,361 基础上加 780 个 LLM 蒸馏 distractor;论文 Table 9 显示不同方法 Hard 比 Easy 降幅差异较大(BM25 无降幅,Emb-8B 降 10.7pp),因此不能对 agentic router 做简单线性外推。本节最佳 40.0% 是 Easy 数字,Hard 表现需要实跑才能确定。Hard 跑是 §12 的 follow-up。
 
 ---
 
-## 11. 建议
+## 12. 建议
 
 短期工程建议:
 
@@ -453,14 +582,28 @@ A-router 直接把长 query 交给固定 scorer。真实 query 中大量步骤�
 后续实验建议:
 
 1. 对边界 query 做 N=3 或 N=5 重复,给出置信区间。
-2. 扩展到 SkillRouter 75 core queries,实现 multi-label Hit@1;不要用单 expected strict equality 评估 multi-skill query。
-3. 实现 metadata-first + body-on-tie 变体,与 J-v2、L-agentic、M-bm25 对比。
+2. ~~扩展到 SkillRouter 75 core queries,实现 multi-label Hit@1。~~ ✅ 已完成,见 §9(K/J-v2/M × Claude/Codex × Easy 78K × 75 core,最佳 codex/J-v2 40.0%)。下一步是把同一矩阵跑到 Hard 79,141 tier,与论文 Avg = (Easy+Hard)/2 直接可比。
+3. 实现 metadata-first + body-on-tie 变体,与 J-v2、L-agentic、M-bm25 对比。预期能补 §9 与论文 full-body 强基线之间 25-36pp 的差距。
 4. 增加端到端执行验证,至少覆盖 Excel、PDF、PPTX、GitHub analytics 四类。
 5. 将 `gh-repo-analytics` 标注为 ambiguous 或重标 gt,避免把数据争议解释为 retriever 失败。
+6. 从 §9 已保存的 `runs/<host>-<variant>/<query>.jsonl` top-10 输出里离线算 R@10 / FC@10 / nDCG@10 / MRR@10,与论文 Table 4 multi-skill 指标对照。原始数据已就位,无需新跑 agent。
+7. 调查 §9 中 Codex 系统高出 Claude Code ~9pp 的原因。§7.3 给出"native skill listing 信息密度"的解释,但 §9 用的是同一 SKILL.md 模板,所以差异来源更可能是模型差异(GPT-5.5 vs Opus 4.7)而非 host listing,需要 §7.3 那样的抓包确认。
 
 ---
 
-## 12. 文件索引
+## 13. 总结
+
+本报告从 150-skill 对比实验出发,经 1K synthetic → 79K Hard → 78K Easy 75-core 四轮规模递增,系统评估了 metadata-only agentic router 的能力边界。核心 takeaway 三条:
+
+1. **Agentic metadata-only 路由器在 78K Easy pool 上能稳定跑赢传统 BM25/embedding nd 基线。** 最佳 cell (codex/J-v2) 40.0% Hit@1 超过论文最强 nd 基线 Qwen3-Emb-8B (30.7%) 达 +9.3pp,并高于 BM25 带 full body 的 34.7%。这证明 LLM-driven query rewrite + 多步有界检索对稀疏 metadata 有实质性信息提升。
+
+2. **52% 的 query 构成 metadata-only 结构性天花板。** 全 6 cell 皆 miss 的 39/75 query 中,7 个出现跨变体跨宿主一致误选,说明 description 信号本身不足以区分 gt 和高质量 distractor。突破 40% 需要 body-on-tie 或 full-text rerank,这也与 §8 Hard 池结论一致。
+
+3. **宿主/模型选择比变体选择影响更大。** 同一 SKILL.md 模板下,Codex (GPT-5.5) 系统高出 Claude Code (Opus 4.7) 9.3pp (36.4% vs 27.1%);而三个变体间最大差距仅 7.3pp (M-bm25 36.0% vs K-bounded 28.7%)。生产部署应先选对模型,再调 prompt。
+
+---
+
+## 附录 A. 文件索引
 
 | 内容 | 路径 |
 | --- | --- |
@@ -486,3 +629,16 @@ A-router 直接把长 query 交给固定 scorer。真实 query 中大量步骤�
 | J-bounded-v2 | `experiments/scaling-jbounded/variants/J-bounded-v2.SKILL.md` |
 | 150-scale v2 report | `experiments/scaling-jbounded/runs/sweep24-v2-150-cmd/report.md` |
 | 79K-scale v2 report | `experiments/scaling-jbounded/runs/sweep24-v2-full-cmd/report.md` |
+| §9 README + protocol | `experiments/skillrouter-easy/README.md` |
+| §9 implementation plan | `experiments/skillrouter-easy/IMPLEMENTATION_PLAN.md` |
+| §9 install script | `experiments/skillrouter-easy/install-easy-pool.mjs` |
+| §9 variants (Claude/Codex × K/J-v2/M) | `experiments/skillrouter-easy/variants/{claude,codex}/{K-bounded,J-bounded-v2,M-bm25}.SKILL.md` |
+| §9 runner + scorer | `experiments/skillrouter-easy/run.mjs` |
+| §9 report renderer | `experiments/skillrouter-easy/render-report.mjs` |
+| §9 aggregated report | `experiments/skillrouter-easy/runs/report.md` |
+| §9 cross-cell summary | `experiments/skillrouter-easy/runs/all-summary.json` |
+| §9 per-cell summary (metrics + per-query top-10) | `experiments/skillrouter-easy/runs/<host>-<variant>/summary.json` |
+| §9 per-query execution traces (HTML) | `experiments/skillrouter-easy/runs/traces-report.html` |
+| §9 per-query execution traces (JSON) | `experiments/skillrouter-easy/runs/traces-compact.json` |
+| §9 full run log | `experiments/skillrouter-easy/runs/full-run.log` |
+| §9 install manifests | `experiments/skillrouter-easy/runs/install-<host>-<variant>/{manifest.json,queries.json,install.log}` |

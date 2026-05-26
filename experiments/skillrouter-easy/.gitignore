@@ -1,0 +1,14 @@
+# Temporary homes (78K skill installs, ~2.7GB)
+.tmp-homes/
+
+# Install logs (reproducible from scripts)
+runs/install-*/
+
+# Raw per-query JSONL transcripts (full agent conversations, ~58MB)
+# Core data is in summary.json and traces-compact.json
+runs/*-K-bounded/*.jsonl
+runs/*-J-bounded-v2/*.jsonl
+runs/*-M-bm25/*.jsonl
+
+# Override root .gitignore *.log exclusion for the run log
+!runs/full-run.log
