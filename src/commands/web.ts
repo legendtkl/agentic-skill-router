@@ -1,9 +1,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { existsSync } from "node:fs";
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { networkInterfaces } from "node:os";
-import { dirname, join, resolve, sep as pathSep } from "node:path";
+import { basename, dirname, join, resolve, sep as pathSep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStrict } from "../args.ts";
 import { disableSkill, enableSkill } from "../apply.ts";
@@ -507,16 +507,71 @@ async function createScopedHost(
   const trimmed = projectPath.trim();
   if (trimmed === "") throw new WebHttpError(400, "projectPath is required for project scope");
   const resolved = resolve(trimmed);
-  const canonical = await canonicalizePath(resolved);
+  // Canonicalize via the nearest existing ancestor so a missing leaf cannot
+  // hide a symlink jump (e.g. `/allowed/link/missing` where `link -> /outside`
+  // must NOT pass the allowlist check just because realpath of the full path
+  // throws and we fall back to the unresolved input).
+  const canonical = await canonicalizeWithMissingTail(resolved);
   assertProjectPathAllowed(canonical, projectRootAllowlist, resolved);
+  // P1.B: the project host walks UP from cwd to the nearest `.git` ancestor
+  // and scans `<dir>/<skillsDir>` at every level on the way. A request inside
+  // an allowlisted subtree could otherwise reach skills directories above
+  // that subtree. Reject if any ancestor the project host would scan is
+  // outside the allowlist.
+  await assertProjectAncestorsAllowed(canonical, projectRootAllowlist, resolved);
   return createHost(hostName, { cwd: resolved });
 }
 
-async function canonicalizePath(input: string): Promise<string> {
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    if ((err as NodeJS.ErrnoException).code === "ENOTDIR") return false;
+    return false;
+  }
+}
+
+/**
+ * Canonicalize `input` for the allowlist containment check.
+ *
+ * If `input` itself exists, returns `realpath(input)`. Otherwise walks up
+ * parents until one exists, realpaths that ancestor, then re-appends the
+ * missing tail. This prevents a missing-leaf realpath failure from masking
+ * a symlink jump along the requested path: e.g. when `/allowed/link` is a
+ * symlink to `/outside` and the caller asks for `/allowed/link/missing`,
+ * naive realpath throws and a fallback to the unresolved input would
+ * incorrectly pass `startsWith("/allowed/")`.
+ */
+async function canonicalizeWithMissingTail(input: string): Promise<string> {
+  // Fast path: the target exists; realpath gives the full canonical form.
   try {
     return await realpath(input);
   } catch {
-    return input;
+    // Fall through to ancestor walk.
+  }
+  const tail: string[] = [];
+  let current = input;
+  while (true) {
+    const parent = dirname(current);
+    if (parent === current) {
+      // Reached the filesystem root without finding any existing ancestor.
+      // Nothing useful to canonicalize against; return the resolved input so
+      // the allowlist check sees the exact requested path (and rejects it
+      // unless it literally matches an allowlist entry).
+      return input;
+    }
+    tail.unshift(basename(current));
+    if (await pathExists(parent)) {
+      try {
+        const canonicalParent = await realpath(parent);
+        return tail.length === 0 ? canonicalParent : join(canonicalParent, ...tail);
+      } catch {
+        return input;
+      }
+    }
+    current = parent;
   }
 }
 
@@ -528,12 +583,20 @@ async function canonicalizeProjectRoots(roots: string[]): Promise<string[]> {
     const trimmed = entry.trim();
     if (trimmed === "") continue;
     const resolved = resolve(trimmed);
-    const canonical = await canonicalizePath(resolved);
+    const canonical = await canonicalizeWithMissingTail(resolved);
     if (seen.has(canonical)) continue;
     seen.add(canonical);
     out.push(canonical);
   }
   return out;
+}
+
+function isWithinAllowlist(canonical: string, projectRootAllowlist: string[]): boolean {
+  for (const root of projectRootAllowlist) {
+    if (canonical === root) return true;
+    if (canonical.startsWith(root + pathSep)) return true;
+  }
+  return false;
 }
 
 function assertProjectPathAllowed(
@@ -548,15 +611,51 @@ function assertProjectPathAllowed(
         `No project roots are configured; restart the web server with --project-root=<dir> to allow project-scope scans.`,
     );
   }
-  for (const root of projectRootAllowlist) {
-    if (canonical === root) return;
-    if (canonical.startsWith(root + pathSep)) return;
-  }
+  if (isWithinAllowlist(canonical, projectRootAllowlist)) return;
   throw new WebHttpError(
     403,
     `projectPath \`${originalResolved}\` is outside the allowed project roots. ` +
       `Allowed roots: ${projectRootAllowlist.join(", ")}`,
   );
+}
+
+/**
+ * Reject requests whose project host would walk UP into a directory outside
+ * the allowlist. Mirrors the ancestor walk performed by
+ * `src/hosts/project.ts:projectSkillRoots`: stop at the nearest `.git`
+ * ancestor (or filesystem root) and scan every directory on the way. We
+ * canonicalize each parent at the OS level so a symlinked ancestor cannot
+ * sneak around the prefix check.
+ */
+async function assertProjectAncestorsAllowed(
+  canonicalStart: string,
+  projectRootAllowlist: string[],
+  originalResolved: string,
+): Promise<void> {
+  let current = canonicalStart;
+  // Track the canonical form for containment checks; `current` stays in
+  // canonical form because we realpath each parent as we walk up.
+  // We already checked `current === canonicalStart` is inside the allowlist.
+  while (true) {
+    if (await pathExists(join(current, ".git"))) return;
+    const parent = dirname(current);
+    if (parent === current) return; // hit filesystem root; no repo ancestor
+    let canonicalParent: string;
+    try {
+      canonicalParent = await realpath(parent);
+    } catch {
+      canonicalParent = parent;
+    }
+    if (!isWithinAllowlist(canonicalParent, projectRootAllowlist)) {
+      throw new WebHttpError(
+        403,
+        `projectPath \`${originalResolved}\` would cause project skill discovery to walk into ` +
+          `\`${canonicalParent}\`, which is outside the allowed project roots. ` +
+          `Allowed roots: ${projectRootAllowlist.join(", ")}`,
+      );
+    }
+    current = canonicalParent;
+  }
 }
 
 function filterScope(skills: Skill[], scope: WebScope): Skill[] {

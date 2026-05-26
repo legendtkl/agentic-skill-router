@@ -882,3 +882,161 @@ test("web API rejects sibling paths sharing a prefix with an allowlisted root", 
     await fixture.cleanup();
   }
 });
+
+test("web API rejects projectPath whose missing leaf hides a symlink jump outside the allowlist", async () => {
+  // Threat: caller requests `<allowed>/link/missing` where `link` is a
+  // symlink to a directory outside the allowlist. A naive realpath of the
+  // full requested path throws because the leaf is missing; if that throw
+  // falls back to the unresolved input the prefix check still passes, and
+  // the project host then walks the symlink target at the OS level.
+  const fixture = await makeWebFixture();
+  const outsideRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-outside-link-"));
+  const allowedRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-allowed-link-"));
+  try {
+    // Make `allowedRoot` a self-contained project (its own .git) so the
+    // project host's ancestor walk terminates at this directory rather than
+    // continuing into tmpdir.
+    await mkdir(join(allowedRoot, ".git"), { recursive: true });
+    // Drop a sentinel skill INSIDE `outsideRoot` so any leaked scan would
+    // surface a recognizable id if the check fails.
+    await mkdir(join(outsideRoot, ".claude", "skills", "leaked-skill"), { recursive: true });
+    await writeFile(
+      join(outsideRoot, ".claude", "skills", "leaked-skill", "SKILL.md"),
+      "---\nname: leaked-skill\ndescription: Must never be reachable through a symlink jump\n---\n",
+    );
+    // `allowedRoot/link` -> `outsideRoot`. The leaf `missing` does not exist.
+    await symlink(outsideRoot, join(allowedRoot, "link"));
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url } = await startWebServer({
+          hostName: "claude-code",
+          port: 0,
+          projectRoots: [allowedRoot],
+        });
+        try {
+          const requested = join(allowedRoot, "link", "missing");
+          const res = await fetch(
+            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(requested)}`,
+          );
+          assert.equal(res.status, 403);
+          const body = await res.json() as { error: string };
+          assert.match(body.error, /outside the allowed project roots/);
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    await rm(allowedRoot, { recursive: true, force: true });
+    await rm(outsideRoot, { recursive: true, force: true });
+    await fixture.cleanup();
+  }
+});
+
+test("web API blocks project discovery from walking ancestors above the allowlist", async () => {
+  // Threat: allowlist a nested subdir; project skill discovery walks UP
+  // from the requested cwd looking for `.git` and aggregates skills at
+  // every directory level on the way. Without an ancestor cap, requesting
+  // a path inside the nested subdir would surface skills installed at the
+  // repo root, which is outside the allowlist.
+  const fixture = await makeWebFixture();
+  const repoRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-repo-"));
+  try {
+    await mkdir(join(repoRoot, ".git"), { recursive: true });
+    // Higher-up skill (at the repo root, outside the allowlisted subdir).
+    await mkdir(join(repoRoot, ".claude", "skills", "higher-skill"), { recursive: true });
+    await writeFile(
+      join(repoRoot, ".claude", "skills", "higher-skill", "SKILL.md"),
+      "---\nname: higher-skill\ndescription: Must not be reachable from a nested allowlisted path\n---\n",
+    );
+    const allowedSub = join(repoRoot, "sub");
+    await mkdir(allowedSub, { recursive: true });
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url } = await startWebServer({
+          hostName: "claude-code",
+          port: 0,
+          projectRoots: [allowedSub],
+        });
+        try {
+          const res = await fetch(
+            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedSub)}`,
+          );
+          assert.equal(res.status, 403);
+          const body = await res.json() as { error: string };
+          assert.match(body.error, /outside the allowed project roots/);
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+    await fixture.cleanup();
+  }
+});
+
+test("web API accepts a projectPath whose entire ancestor walk stays within the allowlist", async () => {
+  // Companion to the previous test: when the allowlisted root contains
+  // the `.git` boundary, the project host's ancestor walk terminates at
+  // the allowlist entry itself and the request must succeed.
+  const fixture = await makeWebFixture();
+  const repoRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-repo-ok-"));
+  try {
+    await mkdir(join(repoRoot, ".git"), { recursive: true });
+    const nested = join(repoRoot, "sub", "deeper");
+    await mkdir(nested, { recursive: true });
+    await mkdir(join(repoRoot, ".claude", "skills", "top-skill"), { recursive: true });
+    await writeFile(
+      join(repoRoot, ".claude", "skills", "top-skill", "SKILL.md"),
+      "---\nname: top-skill\ndescription: Should be reachable when the repo root itself is allowlisted\n---\n",
+    );
+    await withEnv(
+      {
+        CLAUDE_HOME: fixture.claudeHome,
+        CODEX_HOME: fixture.codexHome,
+        AGENTS_HOME: fixture.agentsHome,
+        CODEX_ADMIN_SKILLS_ROOT: fixture.codexAdminSkillsRoot,
+        AGENTIC_SKILL_ROUTER_STATE_DIR: fixture.stateDir,
+      },
+      async () => {
+        const { server, url } = await startWebServer({
+          hostName: "claude-code",
+          port: 0,
+          projectRoots: [repoRoot],
+        });
+        try {
+          const res = await fetch(
+            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(nested)}`,
+          );
+          assert.equal(res.status, 200);
+          const data = await res.json() as SkillsResponse;
+          assert.equal(data.scope, "project");
+          assert.ok(
+            data.skills.some((skill) => skill.id.includes("top-skill")),
+            `expected top-skill in: ${data.skills.map((s) => s.id).join(", ")}`,
+          );
+        } finally {
+          await closeServer(server);
+        }
+      },
+    );
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+    await fixture.cleanup();
+  }
+});
