@@ -42,33 +42,39 @@ async function makeCorpus(count = 160): Promise<Corpus> {
   for (let i = 0; i < count; i++) {
     const name = `noise-skill-${String(i).padStart(3, "0")}`;
     const domain = ["calendar", "mail", "approval", "task", "drive", "wiki"][i % 6]!;
-    skills.push(await writeCorpusSkill(root, {
-      id: `user:codex:${name}`,
-      name,
-      description: `${domain} helper for routine operations`,
-      body: `This disabled skill is unrelated noise. It mentions ${domain} but not the hidden probe.`,
-      isDisabled: true,
-    }));
+    skills.push(
+      await writeCorpusSkill(root, {
+        id: `user:codex:${name}`,
+        name,
+        description: `${domain} helper for routine operations`,
+        body: `This disabled skill is unrelated noise. It mentions ${domain} but not the hidden probe.`,
+        isDisabled: true,
+      }),
+    );
   }
 
-  skills.push(await writeCorpusSkill(root, {
-    id: "user:codex:body-only-probe",
-    name: "body-only-probe",
-    description: "Generic operational helper",
-    body: [
-      "Use this skill when the request mentions dci-orchid-ledger-repair.",
-      "When loaded, final answer must be exactly dci-orchid-ledger-loaded.",
-    ].join("\n"),
-    isDisabled: true,
-  }));
+  skills.push(
+    await writeCorpusSkill(root, {
+      id: "user:codex:body-only-probe",
+      name: "body-only-probe",
+      description: "Generic operational helper",
+      body: [
+        "Use this skill when the request mentions dci-orchid-ledger-repair.",
+        "When loaded, final answer must be exactly dci-orchid-ledger-loaded.",
+      ].join("\n"),
+      isDisabled: true,
+    }),
+  );
 
-  skills.push(await writeCorpusSkill(root, {
-    id: "user:codex:enabled-probe",
-    name: "enabled-probe",
-    description: "dci orchid ledger enabled helper",
-    body: "Enabled skills must not enter the disabled DCI corpus.",
-    isDisabled: false,
-  }));
+  skills.push(
+    await writeCorpusSkill(root, {
+      id: "user:codex:enabled-probe",
+      name: "enabled-probe",
+      description: "dci orchid ledger enabled helper",
+      body: "Enabled skills must not enter the disabled DCI corpus.",
+      isDisabled: false,
+    }),
+  );
 
   skills.push({
     ...(await writeCorpusSkill(root, {
@@ -114,10 +120,7 @@ async function writeCorpusSkill(
   const dir = join(root, opts.name);
   await mkdir(dir, { recursive: true });
   const skillMdPath = join(dir, `SKILL.md${opts.isDisabled ? ".agentic-skill-router-disabled" : ""}`);
-  await writeFile(
-    skillMdPath,
-    `---\nname: ${opts.name}\ndescription: ${opts.description}\n---\n\n${opts.body}\n`,
-  );
+  await writeFile(skillMdPath, `---\nname: ${opts.name}\ndescription: ${opts.description}\n---\n\n${opts.body}\n`);
   return {
     id: opts.id,
     name: opts.name,
@@ -170,11 +173,11 @@ test("DCI search finds body-only evidence that lexical route cannot select", asy
 test("DCI metadata-only search does not read or match skill body content", async () => {
   const corpus = await makeCorpus();
   try {
-    const bodyOnly = await dciSearchDisabledSkills(
-      corpus.skills,
-      "Please handle dci-orchid-ledger-repair now.",
-      { topK: 5, maxSnippets: 2, metadataOnly: true },
-    );
+    const bodyOnly = await dciSearchDisabledSkills(corpus.skills, "Please handle dci-orchid-ledger-repair now.", {
+      topK: 5,
+      maxSnippets: 2,
+      metadataOnly: true,
+    });
     assert.equal(bodyOnly.metadataOnly, true);
     assert.equal(bodyOnly.action, "no-candidates");
     assert.equal(bodyOnly.budget.maxSkillBytes, 0);
@@ -191,11 +194,11 @@ test("DCI metadata-only search does not read or match skill body content", async
       body: "The body is intentionally irrelevant.",
       isDisabled: true,
     });
-    const metadata = await dciSearchDisabledSkills(
-      [described],
-      "dci magnolia invoice",
-      { topK: 1, maxSnippets: 2, metadataOnly: true },
-    );
+    const metadata = await dciSearchDisabledSkills([described], "dci magnolia invoice", {
+      topK: 1,
+      maxSnippets: 2,
+      metadataOnly: true,
+    });
     assert.equal(metadata.metadataOnly, true);
     assert.equal(metadata.action, "inspect-candidates");
     assert.equal(metadata.budget.maxSkillBytes, 0);
@@ -343,7 +346,8 @@ test("DCI search truncation respects UTF-8 multibyte character boundaries", asyn
     // at offset (maxSkillBytes - 1), so a naive byte-cut decode would emit a
     // U+FFFD replacement character for the dangling lead byte.
     const limit = DCI_BUDGET.maxSkillBytes;
-    const frontmatter = "---\nname: utf8-boundary-probe\ndescription: Chinese disabled helper for boundary truncation\n---\n\n";
+    const frontmatter =
+      "---\nname: utf8-boundary-probe\ndescription: Chinese disabled helper for boundary truncation\n---\n\n";
     const frontmatterBytes = Buffer.byteLength(frontmatter, "utf8");
     // First block of complete Chinese characters that fit before the boundary
     // straddle, leaving room for the straddling character. Each Chinese char
@@ -418,13 +422,15 @@ test("DCI search stops reading when the total corpus byte budget is exhausted", 
   try {
     const skillCount = Math.ceil(DCI_BUDGET.maxCorpusBytes / DCI_BUDGET.maxSkillBytes) + 3;
     for (let i = 0; i < skillCount; i++) {
-      corpus.skills.push(await writeCorpusSkill(corpus.root, {
-        id: `user:codex:corpus-budget-${i}`,
-        name: `corpus-budget-${i}`,
-        description: "Generic disabled helper",
-        body: `${"x".repeat(DCI_BUDGET.maxSkillBytes + 512)}${i === skillCount - 1 ? "\nunseencorpusmarker" : ""}`,
-        isDisabled: true,
-      }));
+      corpus.skills.push(
+        await writeCorpusSkill(corpus.root, {
+          id: `user:codex:corpus-budget-${i}`,
+          name: `corpus-budget-${i}`,
+          description: "Generic disabled helper",
+          body: `${"x".repeat(DCI_BUDGET.maxSkillBytes + 512)}${i === skillCount - 1 ? "\nunseencorpusmarker" : ""}`,
+          isDisabled: true,
+        }),
+      );
     }
 
     const result = await dciSearchDisabledSkills(corpus.skills, "unseencorpusmarker", { topK: 3 });
@@ -442,20 +448,24 @@ test("DCI route checks ambiguity before applying topK", async () => {
   const corpus = await makeCorpus(0);
   try {
     const body = "Use this skill when the request mentions dci-pearl-ledger-repair.";
-    corpus.skills.push(await writeCorpusSkill(corpus.root, {
-      id: "user:codex:alpha-pearl",
-      name: "alpha-pearl",
-      description: "Generic disabled helper",
-      body,
-      isDisabled: true,
-    }));
-    corpus.skills.push(await writeCorpusSkill(corpus.root, {
-      id: "user:codex:beta-pearl",
-      name: "beta-pearl",
-      description: "Generic disabled helper",
-      body,
-      isDisabled: true,
-    }));
+    corpus.skills.push(
+      await writeCorpusSkill(corpus.root, {
+        id: "user:codex:alpha-pearl",
+        name: "alpha-pearl",
+        description: "Generic disabled helper",
+        body,
+        isDisabled: true,
+      }),
+    );
+    corpus.skills.push(
+      await writeCorpusSkill(corpus.root, {
+        id: "user:codex:beta-pearl",
+        name: "beta-pearl",
+        description: "Generic disabled helper",
+        body,
+        isDisabled: true,
+      }),
+    );
 
     const result = await dciRouteDisabledSkills(corpus.skills, "please handle dci-pearl-ledger-repair", { topK: 1 });
     assert.equal(result.matches.length, 1);
@@ -490,11 +500,10 @@ test("DCI snippet scoring prefers strong evidence over earlier generic-only matc
       isDisabled: true,
     });
 
-    const result = await dciSearchDisabledSkills(
-      [skill],
-      "dci-snippet-score-zephyr-marker helper workflow",
-      { topK: 1, maxSnippets: 2 },
-    );
+    const result = await dciSearchDisabledSkills([skill], "dci-snippet-score-zephyr-marker helper workflow", {
+      topK: 1,
+      maxSnippets: 2,
+    });
     assert.equal(result.matches.length, 1);
     const snippets = result.matches[0]!.snippets;
     assert.equal(snippets.length, 2);
@@ -545,11 +554,7 @@ test("DCI candidate score down-weights generic-only queries below medium confide
       isDisabled: true,
     });
 
-    const result = await dciSearchDisabledSkills(
-      [skill],
-      "the and for",
-      { topK: 1 },
-    );
+    const result = await dciSearchDisabledSkills([skill], "the and for", { topK: 1 });
     assert.equal(result.matches.length, 1);
     const score = result.matches[0]!.score;
     // Weighted denominator = 3 * 0.15 = 0.45; weighted hit on "the" alone
@@ -583,16 +588,8 @@ test("DCI candidate score ranks distinctive matches above generic-only matches o
       isDisabled: true,
     });
 
-    const distinctive = await dciSearchDisabledSkills(
-      [skill],
-      "kubernetes deployment",
-      { topK: 1 },
-    );
-    const generic = await dciSearchDisabledSkills(
-      [skill],
-      "the and for",
-      { topK: 1 },
-    );
+    const distinctive = await dciSearchDisabledSkills([skill], "kubernetes deployment", { topK: 1 });
+    const generic = await dciSearchDisabledSkills([skill], "the and for", { topK: 1 });
     assert.equal(distinctive.matches.length, 1);
     assert.equal(generic.matches.length, 1);
     assert.ok(
@@ -655,13 +652,7 @@ test("DCI regex validator rejects nested-quantifier ReDoS shapes", () => {
   // heuristic. The first set is from the original issue; the second set is
   // from the codex follow-up that broke the narrow first-pass heuristic.
   const original = ["(a+)+$", "(.*)*", "(.+)+", "(\\d+)+$", "(ab+)+x"];
-  const codexFollowUp = [
-    "(a+){2,}$",
-    "([a-z]+){2,}$",
-    "(a{1,})+$",
-    "(a?)+$",
-    "^(a|aa)+$",
-  ];
+  const codexFollowUp = ["(a+){2,}$", "([a-z]+){2,}$", "(a{1,})+$", "(a?)+$", "^(a|aa)+$"];
   for (const pattern of [...original, ...codexFollowUp]) {
     assert.throws(
       () => validateRegexPattern(pattern),
@@ -749,7 +740,7 @@ test("DCI regex validator does not flag normal patterns with a few quantified at
     "[a-z][0-9][a-z]",
     "a*b*c*d*",
     "\\d\\d\\d\\d\\d", // five unquantified atoms — must not trigger
-    "a*a*a*a*",        // exactly at the streak cap — still allowed
+    "a*a*a*a*", // exactly at the streak cap — still allowed
   ]) {
     assert.doesNotThrow(() => validateRegexPattern(pattern), `expected ${pattern} to pass`);
   }
@@ -762,9 +753,9 @@ test("DCI regex validator rejects excessive top-level dot-wildcards (Rule 6)", (
   // More than DCI_REGEX_MAX_DOT_WILDCARDS unbounded dot-wildcards is rejected.
   const tooMany = DCI_REGEX_MAX_DOT_WILDCARDS + 1;
   const badPatterns = [
-    ".*a.*a.*a.*a.*c",                         // 4 .* interleaved → caught
-    ".+".repeat(tooMany) + "x",               // chain of .+ → caught
-    ".*foo.*bar.*baz.*qux",                    // 4 .* → caught
+    ".*a.*a.*a.*a.*c", // 4 .* interleaved → caught
+    ".+".repeat(tooMany) + "x", // chain of .+ → caught
+    ".*foo.*bar.*baz.*qux", // 4 .* → caught
     // Mixed unbounded + literal sandwich
     [...Array(tooMany)].map(() => ".*x").join("") + "c",
   ];
@@ -778,19 +769,16 @@ test("DCI regex validator rejects excessive top-level dot-wildcards (Rule 6)", (
 
   // ≤ DCI_REGEX_MAX_DOT_WILDCARDS unbounded dot-wildcards must pass.
   const goodPatterns = [
-    ".*keyword.*",                             // 2 .*  — very common
-    ".*foo.*bar",                              // 2 .*
-    ".*foo.*bar.*baz",                         // 3 .* — at the limit
-    ".+foo.+bar",                              // 2 .+
+    ".*keyword.*", // 2 .*  — very common
+    ".*foo.*bar", // 2 .*
+    ".*foo.*bar.*baz", // 3 .* — at the limit
+    ".+foo.+bar", // 2 .+
     // Bounded .? does NOT count toward the dot-wildcard limit.
-    ".?a.?a.?a.?a.?c",                        // 5 .? — bounded, allowed
-    "a.?b.?c.?d.?e.?f",                       // 6 .? — bounded, allowed
+    ".?a.?a.?a.?a.?c", // 5 .? — bounded, allowed
+    "a.?b.?c.?d.?e.?f", // 6 .? — bounded, allowed
   ];
   for (const pattern of goodPatterns) {
-    assert.doesNotThrow(
-      () => validateRegexPattern(pattern),
-      `expected "${pattern}" to pass the dot-wildcard rule`,
-    );
+    assert.doesNotThrow(() => validateRegexPattern(pattern), `expected "${pattern}" to pass the dot-wildcard rule`);
   }
 });
 
@@ -801,15 +789,9 @@ test("DCI grep rejects the codex consecutive-overlap pattern at the API in under
   try {
     const pattern = "a*".repeat(24) + "b";
     const startedAt = Date.now();
-    await assert.rejects(
-      () => dciGrepDisabledSkills(corpus.skills, pattern, { regex: true }),
-      DciRegexComplexityError,
-    );
+    await assert.rejects(() => dciGrepDisabledSkills(corpus.skills, pattern, { regex: true }), DciRegexComplexityError);
     const elapsed = Date.now() - startedAt;
-    assert.ok(
-      elapsed < 50,
-      `expected API to reject codex overlap pattern in <50ms, took ${elapsed}ms`,
-    );
+    assert.ok(elapsed < 50, `expected API to reject codex overlap pattern in <50ms, took ${elapsed}ms`);
   } finally {
     await corpus.cleanup();
   }
@@ -845,13 +827,7 @@ test("DCI grep surfaces complexity errors through DciRegexComplexityError, not c
 test("DCI grep rejects every codex-named pathological pattern via the API in under 100ms", async () => {
   const corpus = await makeCorpus(0);
   try {
-    const patterns = [
-      "(a+){2,}$",
-      "([a-z]+){2,}$",
-      "(a{1,})+$",
-      "(a?)+$",
-      "^(a|aa)+$",
-    ];
+    const patterns = ["(a+){2,}$", "([a-z]+){2,}$", "(a{1,})+$", "(a?)+$", "^(a|aa)+$"];
     for (const pattern of patterns) {
       const startedAt = Date.now();
       await assert.rejects(
@@ -860,10 +836,7 @@ test("DCI grep rejects every codex-named pathological pattern via the API in und
         `expected ${pattern} to be rejected at the API boundary`,
       );
       const elapsed = Date.now() - startedAt;
-      assert.ok(
-        elapsed < 100,
-        `expected ${pattern} to reject quickly without hanging, took ${elapsed}ms`,
-      );
+      assert.ok(elapsed < 100, `expected ${pattern} to reject quickly without hanging, took ${elapsed}ms`);
     }
   } finally {
     await corpus.cleanup();
@@ -901,10 +874,7 @@ test("DCI grep per-line wall-clock deadline catches a pattern that slips the heu
     });
 
     const startedAt = Date.now();
-    await assert.rejects(
-      () => dciGrepDisabledSkills([skill], slowPattern, { regex: true }),
-      DciRegexTimeoutError,
-    );
+    await assert.rejects(() => dciGrepDisabledSkills([skill], slowPattern, { regex: true }), DciRegexTimeoutError);
     const elapsed = Date.now() - startedAt;
     // The deadline is post-hoc: the engine completes one catastrophic call
     // before we abort. The 15s upper bound accommodates up to ~20× hardware
@@ -969,8 +939,14 @@ test("DCI inspect and read reject non-routable skills", async () => {
     assert.equal(inspected.action, "inspect-skill");
     assert.match(inspected.skillMdPath, /SKILL\.md\.agentic-skill-router-disabled$/);
 
-    await assert.rejects(() => dciReadSkill(corpus.skills, "user:codex:enabled-probe"), /not a routable disabled skill/);
-    assert.throws(() => dciInspectSkill(corpus.skills, "plugin:browser@local:browser"), /not a routable disabled skill/);
+    await assert.rejects(
+      () => dciReadSkill(corpus.skills, "user:codex:enabled-probe"),
+      /not a routable disabled skill/,
+    );
+    assert.throws(
+      () => dciInspectSkill(corpus.skills, "plugin:browser@local:browser"),
+      /not a routable disabled skill/,
+    );
   } finally {
     await corpus.cleanup();
   }
@@ -1066,12 +1042,9 @@ test("DCI find stops at the byte budget and reports truncation for matches past 
     });
     corpus.skills.push(big);
 
-    const found = await dciFindInSkill(
-      corpus.skills,
-      "user:codex:find-budget-probe",
-      "zephyrfindmarker",
-      { maxSnippets: 1 },
-    );
+    const found = await dciFindInSkill(corpus.skills, "user:codex:find-budget-probe", "zephyrfindmarker", {
+      maxSnippets: 1,
+    });
     assert.equal(found.snippets.length, 0, "match past the byte cap must not be returned");
     assert.equal(found.action, "no-matches");
     assert.equal(found.truncated, true);
@@ -1128,12 +1101,7 @@ test("DCI find caps a single pathologically long line inside the chunk handler",
     corpus.skills.push(skill);
 
     const start = Date.now();
-    const found = await dciFindInSkill(
-      corpus.skills,
-      "user:codex:long-line-cap-probe",
-      marker,
-      { maxSnippets: 1 },
-    );
+    const found = await dciFindInSkill(corpus.skills, "user:codex:long-line-cap-probe", marker, { maxSnippets: 1 });
     const elapsed = Date.now() - start;
 
     // Strict-cap semantic: marker past the cap means no snippet, truncated.
@@ -1200,7 +1168,13 @@ test("DCI multi-select records a bounded set of disabled skills", async () => {
     assert.equal(selected.selected[0]?.id, "user:codex:body-only-probe");
 
     assert.throws(
-      () => dciSelectSkills(corpus.skills, search.matches.slice(0, 4).map((m) => m.ref), "medium", "too many"),
+      () =>
+        dciSelectSkills(
+          corpus.skills,
+          search.matches.slice(0, 4).map((m) => m.ref),
+          "medium",
+          "too many",
+        ),
       /too many DCI selections/,
     );
   } finally {
@@ -1264,20 +1238,26 @@ test("DCI multi-select dedups by instance key so duplicate-id skills both appear
 test("auto route upgrades a suspicious lexical winner to DCI evidence", async () => {
   const corpus = await makeCorpus(0);
   try {
-    corpus.skills.push(await writeCorpusSkill(corpus.root, {
-      id: "user:codex:bytedance-devflow",
-      name: "bytedance-devflow",
-      description: "面向 DevFlow 任务创建/查看/关闭、Meego 绑定、资源查询、服务部署/删除部署/开启 debug，以及 TCC key 查询/创建/修改/删除的统一入口。当用户提到 DevFlow、服务信息、部署情况、泳道信息、服务MR信息、服务部署、在 DevFlow 上开启或重启 debug、Meego 关联任务查询、将 Meego 绑定到 DevFlow task 或 TCC 配置管理时使用。",
-      body: "DevFlow task and service deployment entrypoint.",
-      isDisabled: true,
-    }));
-    corpus.skills.push(await writeCorpusSkill(corpus.root, {
-      id: "user:codex:bytedance-env",
-      name: "bytedance-env",
-      description: "Operate ENV platform via bytedcli: list/search env, baseline create flow, deploy TCE/TCC, manage devices, deploy bytefaas (ByteCloud FaaS) services to PPE swimlanes, and inspect tickets.",
-      body: "Use for ENV platform baseline create flow, bytefaas FaaS deployment to PPE swimlane, ticket inspection, 把 bytefaas/FaaS 服务部署到 PPE swimlane 并检查 ticket.",
-      isDisabled: true,
-    }));
+    corpus.skills.push(
+      await writeCorpusSkill(corpus.root, {
+        id: "user:codex:bytedance-devflow",
+        name: "bytedance-devflow",
+        description:
+          "面向 DevFlow 任务创建/查看/关闭、Meego 绑定、资源查询、服务部署/删除部署/开启 debug，以及 TCC key 查询/创建/修改/删除的统一入口。当用户提到 DevFlow、服务信息、部署情况、泳道信息、服务MR信息、服务部署、在 DevFlow 上开启或重启 debug、Meego 关联任务查询、将 Meego 绑定到 DevFlow task 或 TCC 配置管理时使用。",
+        body: "DevFlow task and service deployment entrypoint.",
+        isDisabled: true,
+      }),
+    );
+    corpus.skills.push(
+      await writeCorpusSkill(corpus.root, {
+        id: "user:codex:bytedance-env",
+        name: "bytedance-env",
+        description:
+          "Operate ENV platform via bytedcli: list/search env, baseline create flow, deploy TCE/TCC, manage devices, deploy bytefaas (ByteCloud FaaS) services to PPE swimlanes, and inspect tickets.",
+        body: "Use for ENV platform baseline create flow, bytefaas FaaS deployment to PPE swimlane, ticket inspection, 把 bytefaas/FaaS 服务部署到 PPE swimlane 并检查 ticket.",
+        isDisabled: true,
+      }),
+    );
 
     const query = "用 ENV platform 做 baseline create flow，把 bytefaas/FaaS 服务部署到 PPE swimlane 并检查 ticket";
     const lexical = routeDisabledSkills(corpus.skills, query, { topK: 3 });
@@ -1300,20 +1280,26 @@ test("auto route upgrades a suspicious lexical winner to DCI evidence", async ()
 test("auto route upgrades umbrella skills to DCI evidence", async () => {
   const corpus = await makeCorpus(0);
   try {
-    corpus.skills.push(await writeCorpusSkill(corpus.root, {
-      id: "user:codex:bytedcli",
-      name: "bytedcli",
-      description: "Unified skill for the bytedcli command surface. Covers auth/tokens, TCE, TCC, ENV, TOS, RDS, Hive, Dorado, ES, Cache, BMQ, Log, APM, and many internal platforms.",
-      body: "Generic bytedcli umbrella command surface.",
-      isDisabled: true,
-    }));
-    corpus.skills.push(await writeCorpusSkill(corpus.root, {
-      id: "user:codex:bytedance-auth",
-      name: "bytedance-auth",
-      description: "Operate bytedcli authentication flows. Use when user asks to login/logout, check auth status, fetch user info, prepare SSO JWT, or prepare ByteCloud Auth tokens.",
-      body: "Use for bytedcli auth login logout status user info SSO JWT ByteCloud Auth token workflows.",
-      isDisabled: true,
-    }));
+    corpus.skills.push(
+      await writeCorpusSkill(corpus.root, {
+        id: "user:codex:bytedcli",
+        name: "bytedcli",
+        description:
+          "Unified skill for the bytedcli command surface. Covers auth/tokens, TCE, TCC, ENV, TOS, RDS, Hive, Dorado, ES, Cache, BMQ, Log, APM, and many internal platforms.",
+        body: "Generic bytedcli umbrella command surface.",
+        isDisabled: true,
+      }),
+    );
+    corpus.skills.push(
+      await writeCorpusSkill(corpus.root, {
+        id: "user:codex:bytedance-auth",
+        name: "bytedance-auth",
+        description:
+          "Operate bytedcli authentication flows. Use when user asks to login/logout, check auth status, fetch user info, prepare SSO JWT, or prepare ByteCloud Auth tokens.",
+        body: "Use for bytedcli auth login logout status user info SSO JWT ByteCloud Auth token workflows.",
+        isDisabled: true,
+      }),
+    );
 
     const query = "操作 bytedcli auth：login/logout/status，获取当前 user info，准备 SSO JWT 或 ByteCloud Auth token";
     const lexical = routeDisabledSkills(corpus.skills, query, { topK: 3 });
@@ -1437,13 +1423,7 @@ test("CLI: skills dci grep --regex with a safe pattern still routes (regression)
 test("CLI: skills dci grep --regex rejects every codex-named pathological pattern with exit 2", async () => {
   const fake = await makeDciCliEnv();
   try {
-    const patterns = [
-      "(a+){2,}$",
-      "([a-z]+){2,}$",
-      "(a{1,})+$",
-      "(a?)+$",
-      "^(a|aa)+$",
-    ];
+    const patterns = ["(a+){2,}$", "([a-z]+){2,}$", "(a{1,})+$", "(a?)+$", "^(a|aa)+$"];
     for (const pattern of patterns) {
       const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", pattern], fake.env);
       assert.equal(r.code, 2, `expected exit 2 for ${pattern}, got ${r.code}; stderr=${r.stderr}`);
@@ -1487,10 +1467,7 @@ test("CLI: skills dci grep --regex deadline catches a heuristic-bypassing slow p
     // rule but still trip the per-line deadline.
     const slowPattern = "a?b?".repeat(N) + "ab".repeat(N) + "c";
     const startedAt = Date.now();
-    const r = await runDciCli(
-      ["skills", "dci", "grep", "--regex", "--pattern", slowPattern, "--json"],
-      fake.env,
-    );
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", slowPattern, "--json"], fake.env);
     const elapsed = Date.now() - startedAt;
     assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
     assert.match(r.stderr, /deadline|>.*ms on a single line/);

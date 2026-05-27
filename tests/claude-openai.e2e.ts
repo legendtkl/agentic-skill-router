@@ -166,176 +166,174 @@ interface StatusJson {
   routed: Array<{ id: string; routeCount: number; lastQuery: string }>;
 }
 
-test(
-  "[agentic-skill-router-cli] Claude Code OpenAI skills e2e installs curated skills, disables a subset, and routes 20 queries",
-  async () => {
-    assert.ok(CLAUDE_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.includes(OPENAI_SKILLS_REPO)));
-    assert.ok(CLAUDE_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.startsWith("HOME=")));
-    assert.equal(ROUTE_CASES.length, 20);
+test("[agentic-skill-router-cli] Claude Code OpenAI skills e2e installs curated skills, disables a subset, and routes 20 queries", async () => {
+  assert.ok(CLAUDE_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.includes(OPENAI_SKILLS_REPO)));
+  assert.ok(CLAUDE_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.startsWith("HOME=")));
+  assert.equal(ROUTE_CASES.length, 20);
 
-    const fresh = await makeFreshClaudeEnvironment();
-    try {
-      assert.equal(fresh.env.CLAUDE_HOME, undefined);
-      assert.equal(fresh.env.AGENTIC_SKILL_ROUTER_HOST, undefined);
-      await installSkillRouterForClaude(fresh.env);
-      const installedOpenAiSkillCount = await installOpenAiCuratedSkillsFromGithub(
-        fresh.workdir,
-        fresh.claudeHome,
-        fresh.env,
+  const fresh = await makeFreshClaudeEnvironment();
+  try {
+    assert.equal(fresh.env.CLAUDE_HOME, undefined);
+    assert.equal(fresh.env.AGENTIC_SKILL_ROUTER_HOST, undefined);
+    await installSkillRouterForClaude(fresh.env);
+    const installedOpenAiSkillCount = await installOpenAiCuratedSkillsFromGithub(
+      fresh.workdir,
+      fresh.claudeHome,
+      fresh.env,
+    );
+    assert.equal(installedOpenAiSkillCount, EXPECTED_OPENAI_CURATED_SKILL_COUNT);
+
+    const routerBin = await installedClaudeRouterBin(fresh.claudeHome);
+    assert.equal(await fileExists(routerBin), true);
+    const settings = JSON.parse(await readFile(join(fresh.claudeHome, "settings.json"), "utf8")) as {
+      enabledPlugins?: Record<string, boolean>;
+    };
+    assert.equal(settings.enabledPlugins?.["agentic-skill-router@local"], true);
+
+    const listedEnvelope = await runRouterJson<{ skills: SkillListItem[] }>(
+      routerBin,
+      ["skills", "list", "--json"],
+      fresh.env,
+    );
+    const listed = listedEnvelope.skills;
+    const claudeOpenAiSkills = listed.filter((item) => {
+      if (item.pluginKey !== null) return false;
+      // Accept only simple user:<name> ids; reject project:claude:* and
+      // any other multi-segment forms that don't represent ~/.claude/skills.
+      return item.id.startsWith("user:") && item.id.split(":").length === 2;
+    });
+    assert.equal(claudeOpenAiSkills.length, installedOpenAiSkillCount);
+    assert.equal(claudeOpenAiSkills.length, EXPECTED_OPENAI_CURATED_SKILL_COUNT);
+    for (const skill of DISABLED_OPENAI_SKILLS) {
+      assert.ok(
+        listed.some((item) => item.id === `user:${skill}`),
+        `expected ${skill} to be installed`,
       );
-      assert.equal(installedOpenAiSkillCount, EXPECTED_OPENAI_CURATED_SKILL_COUNT);
+    }
+    assert.ok(!listed.some((item) => item.id === "user:skill-installer"));
+    assert.ok(listed.some((item) => item.id === "plugin:agentic-skill-router@local:agentic-skill-router-skills"));
 
-      const routerBin = await installedClaudeRouterBin(fresh.claudeHome);
-      assert.equal(await fileExists(routerBin), true);
-      const settings = JSON.parse(await readFile(join(fresh.claudeHome, "settings.json"), "utf8")) as {
-        enabledPlugins?: Record<string, boolean>;
-      };
-      assert.equal(settings.enabledPlugins?.["agentic-skill-router@local"], true);
+    await runRouter(
+      routerBin,
+      [
+        "skills",
+        "disable",
+        ...DISABLED_OPENAI_SKILLS.map((skill) => `user:${skill}`),
+        "--yes",
+        "--reason=claude-openai-e2e",
+        "--json",
+      ],
+      fresh.env,
+    );
+    for (const skill of DISABLED_OPENAI_SKILLS) {
+      const skillDir = join(fresh.claudeHome, "skills", skill);
+      assert.equal(await fileExists(join(skillDir, "SKILL.md")), false);
+      assert.equal(await fileExists(join(skillDir, "SKILL.md.agentic-skill-router-disabled")), true);
+    }
 
-      const listedEnvelope = await runRouterJson<{ skills: SkillListItem[] }>(routerBin, ["skills", "list", "--json"], fresh.env);
-      const listed = listedEnvelope.skills;
-      const claudeOpenAiSkills = listed.filter((item) => {
-        if (item.pluginKey !== null) return false;
-        // Accept only simple user:<name> ids; reject project:claude:* and
-        // any other multi-segment forms that don't represent ~/.claude/skills.
-        return item.id.startsWith("user:") && item.id.split(":").length === 2;
-      });
-      assert.equal(claudeOpenAiSkills.length, installedOpenAiSkillCount);
-      assert.equal(claudeOpenAiSkills.length, EXPECTED_OPENAI_CURATED_SKILL_COUNT);
-      for (const skill of DISABLED_OPENAI_SKILLS) {
-        assert.ok(listed.some((item) => item.id === `user:${skill}`), `expected ${skill} to be installed`);
-      }
-      assert.ok(!listed.some((item) => item.id === "user:skill-installer"));
-      assert.ok(listed.some((item) => item.id === "plugin:agentic-skill-router@local:agentic-skill-router-skills"));
+    const status = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
+    assert.equal(status.disabledCount, DISABLED_OPENAI_SKILLS.length);
+    assert.deepEqual(
+      status.disabled.map((record) => record.id).sort(),
+      DISABLED_OPENAI_SKILLS.map((skill) => `user:${skill}`).sort(),
+    );
 
-      await runRouter(
+    for (const routeCase of ROUTE_CASES) {
+      const expected = `user:${routeCase.skill}`;
+      const routed = await runRouterJson<RouteJson>(
         routerBin,
-        [
-          "skills",
-          "disable",
-          ...DISABLED_OPENAI_SKILLS.map((skill) => `user:${skill}`),
-          "--yes",
-          "--reason=claude-openai-e2e",
-          "--json",
-        ],
+        ["skills", "route", "--query", routeCase.query, "--json"],
         fresh.env,
       );
-      for (const skill of DISABLED_OPENAI_SKILLS) {
-        const skillDir = join(fresh.claudeHome, "skills", skill);
-        assert.equal(await fileExists(join(skillDir, "SKILL.md")), false);
-        assert.equal(await fileExists(join(skillDir, "SKILL.md.agentic-skill-router-disabled")), true);
-      }
-
-      const status = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
-      assert.equal(status.disabledCount, DISABLED_OPENAI_SKILLS.length);
-      assert.deepEqual(
-        status.disabled.map((record) => record.id).sort(),
-        DISABLED_OPENAI_SKILLS.map((skill) => `user:${skill}`).sort(),
-      );
-
-      for (const routeCase of ROUTE_CASES) {
-        const expected = `user:${routeCase.skill}`;
-        const routed = await runRouterJson<RouteJson>(
-          routerBin,
-          ["skills", "route", "--query", routeCase.query, "--json"],
-          fresh.env,
-        );
-        assert.equal(routed.action, "read-skill-file");
-        assert.equal(routed.recorded, true);
-        assert.equal(routed.selected?.id, expected);
-        assert.match(routed.selected?.skillMdPath ?? "", /SKILL\.md\.agentic-skill-router-disabled$/);
-        assert.ok(routed.matches.some((match) => match.id === expected));
-      }
-
-      const finalStatus = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
-      for (const routeCase of ROUTE_CASES) {
-        const record = finalStatus.routed.find((item) => item.id === `user:${routeCase.skill}`);
-        assert.equal(record?.routeCount, 1);
-        assert.equal(record?.lastQuery, routeCase.query);
-      }
-    } finally {
-      await fresh.cleanup();
-    }
-  },
-);
-
-test(
-  "[claude-cli] Claude Code CLI agent e2e routes disabled skills and reads their matched skill files",
-  async (t) => {
-    const claudeBin = await findExecutable("claude");
-    if (!claudeBin) {
-      t.skip("claude executable not found on PATH");
-      return;
+      assert.equal(routed.action, "read-skill-file");
+      assert.equal(routed.recorded, true);
+      assert.equal(routed.selected?.id, expected);
+      assert.match(routed.selected?.skillMdPath ?? "", /SKILL\.md\.agentic-skill-router-disabled$/);
+      assert.ok(routed.matches.some((match) => match.id === expected));
     }
 
-    const authPath = await localClaudeAuthPath();
-    if (!authPath) {
-      t.skip("local Claude .credentials.json not found");
-      return;
+    const finalStatus = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
+    for (const routeCase of ROUTE_CASES) {
+      const record = finalStatus.routed.find((item) => item.id === `user:${routeCase.skill}`);
+      assert.equal(record?.routeCount, 1);
+      assert.equal(record?.lastQuery, routeCase.query);
     }
+  } finally {
+    await fresh.cleanup();
+  }
+});
 
-    const fresh = await makeFreshClaudeEnvironment();
-    try {
-      await copyFile(authPath, join(fresh.claudeHome, ".credentials.json"));
-      await installSkillRouterForClaude(fresh.env);
-      await appendClaudeRouterWorkflowSentinel(fresh.claudeHome);
-      assert.equal(
-        await installOpenAiCuratedSkillsFromGithub(fresh.workdir, fresh.claudeHome, fresh.env),
-        EXPECTED_OPENAI_CURATED_SKILL_COUNT,
-      );
-      await appendClaudeE2eSentinels(fresh.claudeHome);
+test("[claude-cli] Claude Code CLI agent e2e routes disabled skills and reads their matched skill files", async (t) => {
+  const claudeBin = await findExecutable("claude");
+  if (!claudeBin) {
+    t.skip("claude executable not found on PATH");
+    return;
+  }
 
-      const routerBin = await installedClaudeRouterBin(fresh.claudeHome);
-      await runRouter(
-        routerBin,
-        [
-          "skills",
-          "disable",
-          ...DISABLED_OPENAI_SKILLS.map((skill) => `user:${skill}`),
-          "--yes",
-          "--reason=claude-agent-openai-e2e",
-          "--json",
-        ],
-        fresh.env,
-      );
+  const authPath = await localClaudeAuthPath();
+  if (!authPath) {
+    t.skip("local Claude .credentials.json not found");
+    return;
+  }
 
-      const probePath = await writeClaudeAgentProbe(fresh.projectCwd);
-      const prompt = [
-        "Run the agentic-skill-router Claude Code integration check.",
-        "Read the installed agentic-skill-router-skills SKILL.md, and keep the value from the line named",
-        `"Claude workflow sentinel".`,
-        "Run this exact local probe command, passing the workflow sentinel value as the single argument:",
-        `node ${JSON.stringify(probePath)} "<workflow-sentinel-value>"`,
-        "The probe calls agentic-skill-router for 20 disabled OpenAI skill queries, reads each returned selected.skillMdPath, and extracts the Claude E2E sentinel line.",
-        "Return only minified JSON in this exact shape: {\"workflowSentinel\":\"...\",\"probe\":<probe stdout JSON>}.",
-        "Do not infer or fabricate sentinel values.",
-      ].join("\n");
+  const fresh = await makeFreshClaudeEnvironment();
+  try {
+    await copyFile(authPath, join(fresh.claudeHome, ".credentials.json"));
+    await installSkillRouterForClaude(fresh.env);
+    await appendClaudeRouterWorkflowSentinel(fresh.claudeHome);
+    assert.equal(
+      await installOpenAiCuratedSkillsFromGithub(fresh.workdir, fresh.claudeHome, fresh.env),
+      EXPECTED_OPENAI_CURATED_SKILL_COUNT,
+    );
+    await appendClaudeE2eSentinels(fresh.claudeHome);
 
-      const claudeResult = await spawnFileNoStdin(
-        claudeBin,
-        [
-          "-p",
-          prompt,
-          "--permission-mode",
-          "bypassPermissions",
-        ],
-        {
-          cwd: fresh.projectCwd,
-          env: fresh.env,
-          maxBuffer: 50 * 1024 * 1024,
-          timeout: CLAUDE_AGENT_TIMEOUT_MS,
-        },
-      );
+    const routerBin = await installedClaudeRouterBin(fresh.claudeHome);
+    await runRouter(
+      routerBin,
+      [
+        "skills",
+        "disable",
+        ...DISABLED_OPENAI_SKILLS.map((skill) => `user:${skill}`),
+        "--yes",
+        "--reason=claude-agent-openai-e2e",
+        "--json",
+      ],
+      fresh.env,
+    );
 
-      const parsed = parseClaudeSentinelResponse(claudeResult.stdout);
-      assert.equal(parsed.workflowSentinel, CLAUDE_WORKFLOW_SENTINEL);
-      assert.deepEqual(parsed.probe.sentinels, ROUTE_CASES.map((routeCase) => routeCase.sentinel));
-      assert.deepEqual(parsed.probe.selectedIds, ROUTE_CASES.map((routeCase) => `user:${routeCase.skill}`));
-    } finally {
-      await fresh.cleanup();
-    }
-  },
-);
+    const probePath = await writeClaudeAgentProbe(fresh.projectCwd);
+    const prompt = [
+      "Run the agentic-skill-router Claude Code integration check.",
+      "Read the installed agentic-skill-router-skills SKILL.md, and keep the value from the line named",
+      `"Claude workflow sentinel".`,
+      "Run this exact local probe command, passing the workflow sentinel value as the single argument:",
+      `node ${JSON.stringify(probePath)} "<workflow-sentinel-value>"`,
+      "The probe calls agentic-skill-router for 20 disabled OpenAI skill queries, reads each returned selected.skillMdPath, and extracts the Claude E2E sentinel line.",
+      'Return only minified JSON in this exact shape: {"workflowSentinel":"...","probe":<probe stdout JSON>}.',
+      "Do not infer or fabricate sentinel values.",
+    ].join("\n");
+
+    const claudeResult = await spawnFileNoStdin(claudeBin, ["-p", prompt, "--permission-mode", "bypassPermissions"], {
+      cwd: fresh.projectCwd,
+      env: fresh.env,
+      maxBuffer: 50 * 1024 * 1024,
+      timeout: CLAUDE_AGENT_TIMEOUT_MS,
+    });
+
+    const parsed = parseClaudeSentinelResponse(claudeResult.stdout);
+    assert.equal(parsed.workflowSentinel, CLAUDE_WORKFLOW_SENTINEL);
+    assert.deepEqual(
+      parsed.probe.sentinels,
+      ROUTE_CASES.map((routeCase) => routeCase.sentinel),
+    );
+    assert.deepEqual(
+      parsed.probe.selectedIds,
+      ROUTE_CASES.map((routeCase) => `user:${routeCase.skill}`),
+    );
+  } finally {
+    await fresh.cleanup();
+  }
+});
 
 async function makeFreshClaudeEnvironment(): Promise<FreshClaudeEnvironment> {
   const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-claude-openai-e2e-"));
@@ -456,7 +454,11 @@ if (!workflowSkill.includes(\`Claude workflow sentinel: \${expectedWorkflowSenti
   throw new Error("workflow sentinel argument did not match installed agentic-skill-router-skills SKILL.md");
 }
 
-const queries = ${JSON.stringify(ROUTE_CASES.map((routeCase) => routeCase.query), null, 2)};
+const queries = ${JSON.stringify(
+    ROUTE_CASES.map((routeCase) => routeCase.query),
+    null,
+    2,
+  )};
 const sentinels = [];
 const selectedIds = [];
 
@@ -534,13 +536,28 @@ async function localClaudeAuthPath(): Promise<string | null> {
 }
 
 async function installedClaudeRouterBin(claudeHome: string): Promise<string> {
-  const manifestRaw = await readFile(join(REPO_ROOT, "plugins", "claude-code", ".claude-plugin", "plugin.json"), "utf8");
+  const manifestRaw = await readFile(
+    join(REPO_ROOT, "plugins", "claude-code", ".claude-plugin", "plugin.json"),
+    "utf8",
+  );
   const manifest = JSON.parse(manifestRaw) as { version: string };
-  return join(claudeHome, "plugins", "cache", "local", "agentic-skill-router", manifest.version, "bin", "agentic-skill-router");
+  return join(
+    claudeHome,
+    "plugins",
+    "cache",
+    "local",
+    "agentic-skill-router",
+    manifest.version,
+    "bin",
+    "agentic-skill-router",
+  );
 }
 
 async function installedClaudeRouterSkillPath(claudeHome: string): Promise<string> {
-  const manifestRaw = await readFile(join(REPO_ROOT, "plugins", "claude-code", ".claude-plugin", "plugin.json"), "utf8");
+  const manifestRaw = await readFile(
+    join(REPO_ROOT, "plugins", "claude-code", ".claude-plugin", "plugin.json"),
+    "utf8",
+  );
   const manifest = JSON.parse(manifestRaw) as { version: string };
   return join(
     claudeHome,
@@ -555,7 +572,11 @@ async function installedClaudeRouterSkillPath(claudeHome: string): Promise<strin
   );
 }
 
-async function runRouter(bin: string, args: string[], env: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string }> {
+async function runRouter(
+  bin: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ stdout: string; stderr: string }> {
   const result = await execFileAsync(bin, args, { env, maxBuffer: MAX_BUFFER });
   return { stdout: result.stdout, stderr: result.stderr };
 }
@@ -566,7 +587,9 @@ async function runRouterJson<T>(bin: string, args: string[], env: NodeJS.Process
     return JSON.parse(stdout) as T;
   } catch (err) {
     const tail = stdout.slice(-500);
-    throw new Error(`failed to parse agentic-skill-router JSON output (${stdout.length} chars): ${(err as Error).message}\n${tail}`);
+    throw new Error(
+      `failed to parse agentic-skill-router JSON output (${stdout.length} chars): ${(err as Error).message}\n${tail}`,
+    );
   }
 }
 

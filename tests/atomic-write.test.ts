@@ -53,10 +53,7 @@ test("concurrent writes within the same millisecond use distinct temp paths", as
     try {
       const a = join(dir, "a.json");
       const b = join(dir, "b.json");
-      await Promise.all([
-        atomicWriteJson(a, { which: "a" }),
-        atomicWriteJson(b, { which: "b" }),
-      ]);
+      await Promise.all([atomicWriteJson(a, { which: "a" }), atomicWriteJson(b, { which: "b" })]);
       const ra = JSON.parse(await readFile(a, "utf8")) as { which: string };
       const rb = JSON.parse(await readFile(b, "utf8")) as { which: string };
       assert.equal(ra.which, "a");
@@ -79,10 +76,7 @@ test("two same-target writers serialize without leaving partial state", async ()
     // same target. One of the two writes must win and the file must be valid
     // JSON matching one of the inputs.
     const target = join(dir, "race.json");
-    await Promise.all([
-      atomicWriteJson(target, { winner: "first" }),
-      atomicWriteJson(target, { winner: "second" }),
-    ]);
+    await Promise.all([atomicWriteJson(target, { winner: "first" }), atomicWriteJson(target, { winner: "second" })]);
     const parsed = JSON.parse(await readFile(target, "utf8")) as { winner: string };
     assert.ok(parsed.winner === "first" || parsed.winner === "second");
 

@@ -52,73 +52,66 @@ const FIXTURE_SKILL_DESCRIPTION =
 const FIXTURE_QUERY =
   "Generate a printable tax invoice receipt PDF for this customer order with line items and totals.";
 
-test(
-  "[agentic-skill-router-cli] offline e2e installs the Codex plugin, disables a fixture skill, and routes back to it",
-  async () => {
-    const fresh = await makeFreshHome();
-    try {
-      // Sanity: nothing in the env should pre-bias host discovery.
-      assert.equal(fresh.env.CODEX_HOME, undefined);
-      assert.equal(fresh.env.AGENTS_HOME, undefined);
-      assert.equal(fresh.env.CLAUDE_HOME, undefined);
-      assert.equal(fresh.env.AGENTIC_SKILL_ROUTER_HOST, undefined);
+test("[agentic-skill-router-cli] offline e2e installs the Codex plugin, disables a fixture skill, and routes back to it", async () => {
+  const fresh = await makeFreshHome();
+  try {
+    // Sanity: nothing in the env should pre-bias host discovery.
+    assert.equal(fresh.env.CODEX_HOME, undefined);
+    assert.equal(fresh.env.AGENTS_HOME, undefined);
+    assert.equal(fresh.env.CLAUDE_HOME, undefined);
+    assert.equal(fresh.env.AGENTIC_SKILL_ROUTER_HOST, undefined);
 
-      await installCodexPlugin(fresh.env);
+    await installCodexPlugin(fresh.env);
 
-      const skillDir = join(fresh.codexHome, "skills", FIXTURE_SKILL_NAME);
-      await mkdir(skillDir, { recursive: true });
-      await writeFile(
-        join(skillDir, "SKILL.md"),
-        [
-          "---",
-          `name: ${FIXTURE_SKILL_NAME}`,
-          `description: ${FIXTURE_SKILL_DESCRIPTION}`,
-          "---",
-          "",
-          "Body of the offline fixture skill.",
-          "",
-        ].join("\n"),
-      );
+    const skillDir = join(fresh.codexHome, "skills", FIXTURE_SKILL_NAME);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, "SKILL.md"),
+      [
+        "---",
+        `name: ${FIXTURE_SKILL_NAME}`,
+        `description: ${FIXTURE_SKILL_DESCRIPTION}`,
+        "---",
+        "",
+        "Body of the offline fixture skill.",
+        "",
+      ].join("\n"),
+    );
 
-      const routerBin = await installedCodexRouterBin(fresh.codexHome);
-      assert.equal(await fileExists(routerBin), true);
+    const routerBin = await installedCodexRouterBin(fresh.codexHome);
+    assert.equal(await fileExists(routerBin), true);
 
-      // Confirm the manifest enabled the plugin under [plugins."agentic-skill-router@local"].
-      const config = await readFile(join(fresh.codexHome, "config.toml"), "utf8");
-      assert.match(config, /\[plugins\."agentic-skill-router@local"\]\nenabled = true/);
+    // Confirm the manifest enabled the plugin under [plugins."agentic-skill-router@local"].
+    const config = await readFile(join(fresh.codexHome, "config.toml"), "utf8");
+    assert.match(config, /\[plugins\."agentic-skill-router@local"\]\nenabled = true/);
 
-      // The installed CLI must auto-detect the Codex host from the plugin bundle.
-      const listed = await runRouterJson<{ skills: SkillListItem[] }>(routerBin, ["skills", "list", "--json"], fresh.env);
-      const fixtureId = `user:codex:${FIXTURE_SKILL_NAME}`;
-      assert.ok(
-        listed.skills.some((item) => item.id === fixtureId),
-        `expected ${fixtureId} in skills list`,
-      );
+    // The installed CLI must auto-detect the Codex host from the plugin bundle.
+    const listed = await runRouterJson<{ skills: SkillListItem[] }>(routerBin, ["skills", "list", "--json"], fresh.env);
+    const fixtureId = `user:codex:${FIXTURE_SKILL_NAME}`;
+    assert.ok(
+      listed.skills.some((item) => item.id === fixtureId),
+      `expected ${fixtureId} in skills list`,
+    );
 
-      await runRouter(
-        routerBin,
-        ["skills", "disable", fixtureId, "--yes", "--reason=offline-e2e", "--json"],
-        fresh.env,
-      );
+    await runRouter(routerBin, ["skills", "disable", fixtureId, "--yes", "--reason=offline-e2e", "--json"], fresh.env);
 
-      assert.equal(await fileExists(join(skillDir, "SKILL.md")), false);
-      assert.equal(await fileExists(join(skillDir, "SKILL.md.agentic-skill-router-disabled")), true);
+    assert.equal(await fileExists(join(skillDir, "SKILL.md")), false);
+    assert.equal(await fileExists(join(skillDir, "SKILL.md.agentic-skill-router-disabled")), true);
 
-      const routed = await runRouterJson<RouteJson>(
-        routerBin,
-        ["skills", "route", "--query", FIXTURE_QUERY, "--json"],
-        fresh.env,
-      );
-      assert.equal(routed.action, "read-skill-file");
-      assert.equal(routed.recorded, true);
-      assert.equal(routed.selected?.id, fixtureId);
-      assert.match(routed.selected?.skillMdPath ?? "", /SKILL\.md\.agentic-skill-router-disabled$/);
-      assert.ok(routed.matches.some((match) => match.id === fixtureId));
-    } finally {
-      await fresh.cleanup();
-    }
-  },
-);
+    const routed = await runRouterJson<RouteJson>(
+      routerBin,
+      ["skills", "route", "--query", FIXTURE_QUERY, "--json"],
+      fresh.env,
+    );
+    assert.equal(routed.action, "read-skill-file");
+    assert.equal(routed.recorded, true);
+    assert.equal(routed.selected?.id, fixtureId);
+    assert.match(routed.selected?.skillMdPath ?? "", /SKILL\.md\.agentic-skill-router-disabled$/);
+    assert.ok(routed.matches.some((match) => match.id === fixtureId));
+  } finally {
+    await fresh.cleanup();
+  }
+});
 
 async function makeFreshHome(): Promise<FreshHome> {
   const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-offline-e2e-"));
@@ -163,7 +156,16 @@ async function installCodexPlugin(env: NodeJS.ProcessEnv): Promise<void> {
 async function installedCodexRouterBin(codexHome: string): Promise<string> {
   const manifestRaw = await readFile(join(REPO_ROOT, "plugins", "codex", ".codex-plugin", "plugin.json"), "utf8");
   const manifest = JSON.parse(manifestRaw) as { version: string };
-  return join(codexHome, "plugins", "cache", "local", "agentic-skill-router", manifest.version, "bin", "agentic-skill-router");
+  return join(
+    codexHome,
+    "plugins",
+    "cache",
+    "local",
+    "agentic-skill-router",
+    manifest.version,
+    "bin",
+    "agentic-skill-router",
+  );
 }
 
 async function runRouter(

@@ -3,12 +3,7 @@ import { join } from "node:path";
 import type { Host, HostUsageOptions } from "./base.ts";
 import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageDiagnostics, UsageStat } from "../types.ts";
-import {
-  readClaudeSettings,
-  readInstalledPlugins,
-  readSkillFrontmatterDetailed,
-  walkSkillsDir,
-} from "../scan.ts";
+import { readClaudeSettings, readInstalledPlugins, readSkillFrontmatterDetailed, walkSkillsDir } from "../scan.ts";
 import { collectUsageStatsDetailed } from "../usage.ts";
 
 /**
@@ -70,37 +65,16 @@ export class ClaudeCodeHost implements Host {
 
     // 1. User-level skills (npx skills add ... -g): ~/.claude/skills/
     const userSkillsRoot = join(this.claudeHome, "skills");
-    const userSkills = await walkSkillsDir(userSkillsRoot, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
-      const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
-      return {
-        id: `user:${skillName}`,
-        name: fm.name || skillName,
-        description: fm.description,
-        metadata: fm,
-        source: "user",
-        pluginKey: null,
-        skillMdPath,
-        isDisabled,
-        isPluginDisabled: false,
-        canDisable: !outOfRoot,
-        conflict,
-        outOfRoot,
-        ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
-      };
-    });
-    out.push(...userSkills);
-
-    // 2. Project-level skills from CWD up to the repository root:
-    // <repo>/.claude/skills and nested <repo>/<subdir>/.claude/skills.
-    for (const projectRoot of await projectSkillRoots(this.cwd, ".claude/skills")) {
-      const projectSkills = await walkSkillsDir(projectRoot.root, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
+    const userSkills = await walkSkillsDir(
+      userSkillsRoot,
+      async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
         const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
         return {
-          id: `project:claude:${projectRoot.relativeDir}:${skillName}`,
+          id: `user:${skillName}`,
           name: fm.name || skillName,
           description: fm.description,
           metadata: fm,
-          source: "project",
+          source: "user",
           pluginKey: null,
           skillMdPath,
           isDisabled,
@@ -110,7 +84,34 @@ export class ClaudeCodeHost implements Host {
           outOfRoot,
           ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
         };
-      });
+      },
+    );
+    out.push(...userSkills);
+
+    // 2. Project-level skills from CWD up to the repository root:
+    // <repo>/.claude/skills and nested <repo>/<subdir>/.claude/skills.
+    for (const projectRoot of await projectSkillRoots(this.cwd, ".claude/skills")) {
+      const projectSkills = await walkSkillsDir(
+        projectRoot.root,
+        async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
+          const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
+          return {
+            id: `project:claude:${projectRoot.relativeDir}:${skillName}`,
+            name: fm.name || skillName,
+            description: fm.description,
+            metadata: fm,
+            source: "project",
+            pluginKey: null,
+            skillMdPath,
+            isDisabled,
+            isPluginDisabled: false,
+            canDisable: !outOfRoot,
+            conflict,
+            outOfRoot,
+            ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
+          };
+        },
+      );
       out.push(...projectSkills);
     }
 
@@ -123,24 +124,27 @@ export class ClaudeCodeHost implements Host {
     for (const plugin of installed) {
       const isPluginDisabled = enabledPlugins[plugin.pluginKey] === false;
       const skillsRoot = join(plugin.installPath, "skills");
-      const pluginSkills = await walkSkillsDir(skillsRoot, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
-        const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
-        return {
-          id: `plugin:${plugin.pluginKey}:${skillName}`,
-          name: fm.name || skillName,
-          description: fm.description,
-          metadata: fm,
-          source: "plugin",
-          pluginKey: plugin.pluginKey,
-          skillMdPath,
-          isDisabled,
-          isPluginDisabled,
-          canDisable: !outOfRoot,
-          conflict,
-          outOfRoot,
-          ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
-        };
-      });
+      const pluginSkills = await walkSkillsDir(
+        skillsRoot,
+        async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
+          const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
+          return {
+            id: `plugin:${plugin.pluginKey}:${skillName}`,
+            name: fm.name || skillName,
+            description: fm.description,
+            metadata: fm,
+            source: "plugin",
+            pluginKey: plugin.pluginKey,
+            skillMdPath,
+            isDisabled,
+            isPluginDisabled,
+            canDisable: !outOfRoot,
+            conflict,
+            outOfRoot,
+            ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
+          };
+        },
+      );
       out.push(...pluginSkills);
     }
 
@@ -190,5 +194,4 @@ export class ClaudeCodeHost implements Host {
     for (const plugin of installed) roots.push(join(plugin.installPath, "skills"));
     return roots;
   }
-
 }

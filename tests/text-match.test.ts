@@ -1,13 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  boundaryTermsFor,
-  compact,
-  isCjk,
-  isGenericTerm,
-  isShortLatinTerm,
-  termsFor,
-} from "../src/text-match.ts";
+import { boundaryTermsFor, compact, isCjk, isGenericTerm, isShortLatinTerm, termsFor } from "../src/text-match.ts";
 
 test("termsFor extracts Latin word tokens with case folding", () => {
   const terms = termsFor("Send Mail Daily");

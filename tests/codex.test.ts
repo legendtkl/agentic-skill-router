@@ -38,7 +38,11 @@ async function makeFakeCodexUser(): Promise<{
   await mkdir(join(projectRoot, ".git"), { recursive: true });
   await mkdir(cwd, { recursive: true });
   await writeSkill(join(projectRoot, ".agents", "skills", "project-root"), "project-root", "Project root skill");
-  await writeSkill(join(projectRoot, "packages", ".agents", "skills", "project-package"), "project-package", "Project package skill");
+  await writeSkill(
+    join(projectRoot, "packages", ".agents", "skills", "project-package"),
+    "project-package",
+    "Project package skill",
+  );
   await writeSkill(join(adminSkillsRoot, "admin-policy"), "admin-policy", "Admin-managed Codex policy");
 
   const pluginRoot = join(codexHome, "plugins", "cache", "openai-curated", "gmail", "3c463363");
@@ -82,9 +86,7 @@ async function makeFakeCodexUser(): Promise<{
         payload: {
           type: "message",
           role: "assistant",
-          content: [
-            { type: "output_text", text: "Using <command-name>ckm:brand</command-name>." },
-          ],
+          content: [{ type: "output_text", text: "Using <command-name>ckm:brand</command-name>." }],
         },
       }),
       JSON.stringify({
@@ -93,9 +95,7 @@ async function makeFakeCodexUser(): Promise<{
         payload: {
           type: "message",
           role: "assistant",
-          content: [
-            { type: "output_text", text: "Using <command-name>gmail:gmail</command-name>." },
-          ],
+          content: [{ type: "output_text", text: "Using <command-name>gmail:gmail</command-name>." }],
         },
       }),
     ].join("\n") + "\n",
@@ -112,9 +112,18 @@ async function makeFakeCodexUser(): Promise<{
   };
 }
 
-async function writeSkill(skillDir: string, name: string, description: string, body = "", disabled = false): Promise<void> {
+async function writeSkill(
+  skillDir: string,
+  name: string,
+  description: string,
+  body = "",
+  disabled = false,
+): Promise<void> {
   await mkdir(skillDir, { recursive: true });
-  await writeFile(join(skillDir, `SKILL.md${disabled ? ".agentic-skill-router-disabled" : ""}`), `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`);
+  await writeFile(
+    join(skillDir, `SKILL.md${disabled ? ".agentic-skill-router-disabled" : ""}`),
+    `---\nname: ${name}\ndescription: ${description}\n---\n\n${body}\n`,
+  );
 }
 
 async function writeCodexPluginInstall(
@@ -124,15 +133,16 @@ async function writeCodexPluginInstall(
   await mkdir(join(installPath, ".codex-plugin"), { recursive: true });
   const manifest: { name: string; version?: string; skills: string } = { name: opts.name, skills: "./skills/" };
   if (opts.version !== undefined) manifest.version = opts.version;
-  await writeFile(
-    join(installPath, ".codex-plugin", "plugin.json"),
-    JSON.stringify(manifest),
-  );
+  await writeFile(join(installPath, ".codex-plugin", "plugin.json"), JSON.stringify(manifest));
   await writeSkill(join(installPath, "skills", opts.skillName), opts.skillName, opts.skillDescription);
 }
 
 async function fileExists(path: string): Promise<boolean> {
-  try { return (await stat(path)).isFile(); } catch { return false; }
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 test("CodexHost enumerates codex, agents, system, and plugin skills", async () => {
@@ -287,24 +297,36 @@ test("CodexHost flags out-of-root symlink skills as canDisable=false across user
     // renamed by agentic-skill-router when reached through an in-root symlink.
     const externUserDir = join(outside, "ext-user");
     await mkdir(externUserDir, { recursive: true });
-    await writeFile(join(externUserDir, "SKILL.md"), "---\nname: ext-user\ndescription: outside codex user root\n---\n");
+    await writeFile(
+      join(externUserDir, "SKILL.md"),
+      "---\nname: ext-user\ndescription: outside codex user root\n---\n",
+    );
     await symlink(externUserDir, join(fake.codexHome, "skills", "ext-user-link"));
 
     const externAgentsDir = join(outside, "ext-agents");
     await mkdir(externAgentsDir, { recursive: true });
-    await writeFile(join(externAgentsDir, "SKILL.md"), "---\nname: ext-agents\ndescription: outside agents root\n---\n");
+    await writeFile(
+      join(externAgentsDir, "SKILL.md"),
+      "---\nname: ext-agents\ndescription: outside agents root\n---\n",
+    );
     await symlink(externAgentsDir, join(fake.agentsHome, "skills", "ext-agents-link"));
 
     const externProjectDir = join(outside, "ext-project");
     await mkdir(externProjectDir, { recursive: true });
-    await writeFile(join(externProjectDir, "SKILL.md"), "---\nname: ext-project\ndescription: outside project root\n---\n");
+    await writeFile(
+      join(externProjectDir, "SKILL.md"),
+      "---\nname: ext-project\ndescription: outside project root\n---\n",
+    );
     const projectAgentsSkills = join(fake.root, "project", ".agents", "skills");
     await mkdir(projectAgentsSkills, { recursive: true });
     await symlink(externProjectDir, join(projectAgentsSkills, "ext-project-link"));
 
     const externPluginDir = join(outside, "ext-plugin");
     await mkdir(externPluginDir, { recursive: true });
-    await writeFile(join(externPluginDir, "SKILL.md"), "---\nname: ext-plugin\ndescription: outside plugin root\n---\n");
+    await writeFile(
+      join(externPluginDir, "SKILL.md"),
+      "---\nname: ext-plugin\ndescription: outside plugin root\n---\n",
+    );
     const pluginSkillsRoot = join(fake.codexHome, "plugins", "cache", "openai-curated", "gmail", "3c463363", "skills");
     await symlink(externPluginDir, join(pluginSkillsRoot, "ext-plugin-link"));
 
@@ -356,37 +378,56 @@ test("CLI e2e disables, reports, and enables a Codex skill", async () => {
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
     const list = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "list", "--json"], { env });
-    const listed = (JSON.parse(list.stdout) as {
-      skills: Array<{
-        id: string;
-        canDisable: boolean;
-        description: string;
-        lastUsed: string | null;
-      }>;
-    }).skills;
+    const listed = (
+      JSON.parse(list.stdout) as {
+        skills: Array<{
+          id: string;
+          canDisable: boolean;
+          description: string;
+          lastUsed: string | null;
+        }>;
+      }
+    ).skills;
     assert.ok(listed.some((s) => s.id === "user:codex:brand" && s.lastUsed === "2026-04-20T09:00:00.000Z"));
     assert.ok(listed.some((s) => s.id === "project:codex:.:project-root" && s.description === "Project root skill"));
     assert.ok(
-      listed.some((s) => s.id === "project:codex:packages:project-package" && s.description === "Project package skill"),
+      listed.some(
+        (s) => s.id === "project:codex:packages:project-package" && s.description === "Project package skill",
+      ),
     );
     assert.ok(listed.some((s) => s.id === "builtin:codex-admin:admin-policy" && s.canDisable === false));
 
-    const suggest = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "suggest", "--unused-for=365d", "--json"], { env });
+    const suggest = await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "suggest", "--unused-for=365d", "--json"],
+      { env },
+    );
     const suggestions = (JSON.parse(suggest.stdout) as { suggestions: Array<{ id: string }> }).suggestions;
     assert.ok(suggestions.some((s) => s.id === "user:codex:unused-local"));
     assert.ok(!suggestions.some((s) => s.id === "builtin:codex-system:openai-docs"));
     assert.ok(!suggestions.some((s) => s.id === "plugin:browser-use@openai-bundled:browser"));
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"], { env });
+    await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"],
+      { env },
+    );
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), false);
-    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.agentic-skill-router-disabled")), true);
+    assert.equal(
+      await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.agentic-skill-router-disabled")),
+      true,
+    );
 
-    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], { env });
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], {
+      env,
+    });
     const parsedStatus = JSON.parse(status.stdout) as { disabledCount: number; disabled: Array<{ id: string }> };
     assert.equal(parsedStatus.disabledCount, 1);
     assert.equal(parsedStatus.disabled[0]!.id, "user:codex:unused-local");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local"], { env });
+    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local"], {
+      env,
+    });
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
   } finally {
     await fake.cleanup();
@@ -443,11 +484,9 @@ test("CLI enable refuses to silently pick when two disabled instances share an i
 
     let err: unknown;
     try {
-      await execFileAsync(
-        process.execPath,
-        ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local"],
-        { env },
-      );
+      await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "enable", "user:codex:unused-local"], {
+        env,
+      });
     } catch (e) {
       err = e;
     }
@@ -470,10 +509,7 @@ test("CLI enable refuses to silently pick when two disabled instances share an i
       await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.agentic-skill-router-disabled")),
       true,
     );
-    assert.equal(
-      await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")),
-      false,
-    );
+    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), false);
   } finally {
     await fake.cleanup();
   }
@@ -534,10 +570,7 @@ test("CLI enable by instanceKey resolves the correct disabled instance", async (
     assert.equal(result[0]!.instanceKey, realKey);
     assert.equal(result[0]!.alreadyEnabled, false);
 
-    assert.equal(
-      await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")),
-      true,
-    );
+    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
     const after = JSON.parse(await readFile(statePath, "utf8")) as {
       disabledSkills: Array<{ instanceKey: string }>;
     };
@@ -630,7 +663,10 @@ test("CLI rejects removed --host flag anywhere in the command", async () => {
       },
     );
     assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md")), true);
-    assert.equal(await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.agentic-skill-router-disabled")), false);
+    assert.equal(
+      await fileExists(join(fake.codexHome, "skills", "unused-local", "SKILL.md.agentic-skill-router-disabled")),
+      false,
+    );
   } finally {
     await fake.cleanup();
   }
@@ -654,7 +690,9 @@ test("CLI disable of specific ids requires --yes and does not rename", async () 
 
     let err: unknown;
     try {
-      await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local"], { env });
+      await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local"], {
+        env,
+      });
     } catch (caught) {
       err = caught;
     }
@@ -684,18 +722,22 @@ test("CLI refuses to disable Codex admin skills", async () => {
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
     await assert.rejects(
-      () => execFileAsync(
-        process.execPath,
-        ["--import", "tsx", cli, "skills", "disable", "builtin:codex-admin:admin-policy", "--yes"],
-        { env },
-      ),
+      () =>
+        execFileAsync(
+          process.execPath,
+          ["--import", "tsx", cli, "skills", "disable", "builtin:codex-admin:admin-policy", "--yes"],
+          { env },
+        ),
       (err: unknown) => {
         assert.match((err as { stderr?: string }).stderr ?? "", /Cannot disable builtin skill/);
         return true;
       },
     );
     assert.equal(await fileExists(join(fake.adminSkillsRoot, "admin-policy", "SKILL.md")), true);
-    assert.equal(await fileExists(join(fake.adminSkillsRoot, "admin-policy", "SKILL.md.agentic-skill-router-disabled")), false);
+    assert.equal(
+      await fileExists(join(fake.adminSkillsRoot, "admin-policy", "SKILL.md.agentic-skill-router-disabled")),
+      false,
+    );
   } finally {
     await fake.cleanup();
   }
@@ -712,13 +754,7 @@ test("CLI status scans Codex project and admin roots for orphan disabled markers
       "",
       true,
     );
-    await writeSkill(
-      join(fake.adminSkillsRoot, "orphan-admin"),
-      "orphan-admin",
-      "Admin orphan marker",
-      "",
-      true,
-    );
+    await writeSkill(join(fake.adminSkillsRoot, "orphan-admin"), "orphan-admin", "Admin orphan marker", "", true);
 
     const env = {
       ...process.env,
@@ -731,13 +767,19 @@ test("CLI status scans Codex project and admin roots for orphan disabled markers
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], { env });
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], {
+      env,
+    });
     const parsedStatus = JSON.parse(status.stdout) as { orphanMarkers: string[] };
     assert.ok(
-      parsedStatus.orphanMarkers.some((p) => p.endsWith("project/.agents/skills/orphan-project/SKILL.md.agentic-skill-router-disabled")),
+      parsedStatus.orphanMarkers.some((p) =>
+        p.endsWith("project/.agents/skills/orphan-project/SKILL.md.agentic-skill-router-disabled"),
+      ),
     );
     assert.ok(
-      parsedStatus.orphanMarkers.some((p) => p.endsWith("etc/codex/skills/orphan-admin/SKILL.md.agentic-skill-router-disabled")),
+      parsedStatus.orphanMarkers.some((p) =>
+        p.endsWith("etc/codex/skills/orphan-admin/SKILL.md.agentic-skill-router-disabled"),
+      ),
     );
   } finally {
     await fake.cleanup();
@@ -758,7 +800,11 @@ test("CLI enable cleans disabled state even when skill files disappeared", async
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"], { env });
+    await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "disable", "user:codex:unused-local", "--yes"],
+      { env },
+    );
     await rm(join(fake.codexHome, "skills", "unused-local", "SKILL.md.agentic-skill-router-disabled"));
 
     const enabled = await execFileAsync(
@@ -769,14 +815,15 @@ test("CLI enable cleans disabled state even when skill files disappeared", async
     const parsed = JSON.parse(enabled.stdout) as Array<{ id: string }>;
     assert.equal(parsed[0]?.id, "user:codex:unused-local");
 
-    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], { env });
+    const status = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "status", "--json"], {
+      env,
+    });
     const parsedStatus = JSON.parse(status.stdout) as { disabledCount: number };
     assert.equal(parsedStatus.disabledCount, 0);
   } finally {
     await fake.cleanup();
   }
 });
-
 
 test("CLI e2e routes to a disabled Codex skill and records routed usage", async () => {
   const fake = await makeFakeCodexUser();
@@ -792,20 +839,15 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail", "--yes"], { env });
+    await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail", "--yes"],
+      { env },
+    );
 
     const route = await execFileAsync(
       process.execPath,
-      [
-        "--import",
-        "tsx",
-        cli,
-        "skills",
-        "route",
-        "--query",
-        "draft a Lark mail reply",
-        "--json",
-      ],
+      ["--import", "tsx", cli, "skills", "route", "--query", "draft a Lark mail reply", "--json"],
       { env },
     );
     const parsed = JSON.parse(route.stdout) as {
@@ -821,7 +863,9 @@ test("CLI e2e routes to a disabled Codex skill and records routed usage", async 
     assert.ok(Array.isArray((parsed.selected as { evidence?: unknown[] } | null)?.evidence));
 
     const rawState = await readFile(join(fake.stateDir, "state-codex.json"), "utf8");
-    const state = JSON.parse(rawState) as { routedSkills: Array<{ id: string; routeCount: number; lastQuery: string }> };
+    const state = JSON.parse(rawState) as {
+      routedSkills: Array<{ id: string; routeCount: number; lastQuery: string }>;
+    };
     assert.equal(state.routedSkills[0]!.id, "user:agents:lark-mail");
     assert.equal(state.routedSkills[0]!.routeCount, 1);
     assert.equal(state.routedSkills[0]!.lastQuery, "draft a Lark mail reply");
@@ -844,19 +888,14 @@ test("CLI JSON route reports weak matches without failing or read actions", asyn
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail", "--yes"], { env });
+    await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail", "--yes"],
+      { env },
+    );
     const route = await execFileAsync(
       process.execPath,
-      [
-        "--import",
-        "tsx",
-        cli,
-        "skills",
-        "route",
-        "--query",
-        "task calendar approval mail",
-        "--json",
-      ],
+      ["--import", "tsx", cli, "skills", "route", "--query", "task calendar approval mail", "--json"],
       { env },
     );
     const parsed = JSON.parse(route.stdout) as {
@@ -889,22 +928,17 @@ test("CLI route still returns a selected skill when routed usage cannot be recor
     };
     const cli = join(REPO_ROOT, "src", "cli.ts");
 
-    await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail", "--yes"], { env });
+    await execFileAsync(
+      process.execPath,
+      ["--import", "tsx", cli, "skills", "disable", "user:agents:lark-mail", "--yes"],
+      { env },
+    );
     const badStateDir = join(fake.root, "state-dir-is-a-file");
     await writeFile(badStateDir, "not a directory");
 
     const route = await execFileAsync(
       process.execPath,
-      [
-        "--import",
-        "tsx",
-        cli,
-        "skills",
-        "route",
-        "--query",
-        "draft a Lark mail reply",
-        "--json",
-      ],
+      ["--import", "tsx", cli, "skills", "route", "--query", "draft a Lark mail reply", "--json"],
       { env: { ...env, AGENTIC_SKILL_ROUTER_STATE_DIR: badStateDir } },
     );
     const parsed = JSON.parse(route.stdout) as {
@@ -1119,7 +1153,10 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
       matches: Array<{ ref: string; id: string; snippets: Array<{ line: number; text: string }> }>;
     };
     assert.equal(parsedSearch.action, "inspect-or-read-candidates");
-    assert.deepEqual(parsedSearch.queries, ["generic disabled invoice helper", "please handle dci-amber-invoice-cascade"]);
+    assert.deepEqual(parsedSearch.queries, [
+      "generic disabled invoice helper",
+      "please handle dci-amber-invoice-cascade",
+    ]);
     assert.ok(parsedSearch.corpus.scanned >= 121);
     assert.equal(parsedSearch.matches[0]?.id, "user:codex:dci-body-probe");
     assert.match(parsedSearch.matches[0]?.ref ?? "", /^dci-[a-f0-9]{10}$/);
@@ -1128,17 +1165,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
 
     const literalGrep = await execFileAsync(
       process.execPath,
-      [
-        "--import",
-        "tsx",
-        cli,
-        "skills",
-        "dci",
-        "grep",
-        "--pattern",
-        "dci-.*-cascade",
-        "--json",
-      ],
+      ["--import", "tsx", cli, "skills", "dci", "grep", "--pattern", "dci-.*-cascade", "--json"],
       { env },
     );
     const parsedLiteralGrep = JSON.parse(literalGrep.stdout) as { mode: string; matches: unknown[] };
@@ -1147,18 +1174,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
 
     const regexGrep = await execFileAsync(
       process.execPath,
-      [
-        "--import",
-        "tsx",
-        cli,
-        "skills",
-        "dci",
-        "grep",
-        "--pattern",
-        "dci-.*-cascade",
-        "--regex",
-        "--json",
-      ],
+      ["--import", "tsx", cli, "skills", "dci", "grep", "--pattern", "dci-.*-cascade", "--regex", "--json"],
       { env },
     );
     const parsedRegexGrep = JSON.parse(regexGrep.stdout) as { mode: string; matches: Array<{ id: string }> };
@@ -1167,18 +1183,7 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
 
     const find = await execFileAsync(
       process.execPath,
-      [
-        "--import",
-        "tsx",
-        cli,
-        "skills",
-        "dci",
-        "find",
-        bodyProbeRef,
-        "--pattern",
-        "final answer",
-        "--json",
-      ],
+      ["--import", "tsx", cli, "skills", "dci", "find", bodyProbeRef, "--pattern", "final answer", "--json"],
       { env },
     );
     const parsedFind = JSON.parse(find.stdout) as { id: string; snippets: Array<{ line: number; text: string }> };
@@ -1249,7 +1254,9 @@ test("CLI e2e DCI searches, reads, and selects a disabled Codex skill from a lar
     assert.match(parsedSelect.skillMdPath, /SKILL\.md\.agentic-skill-router-disabled$/);
 
     const rawState = await readFile(join(fake.stateDir, "state-codex.json"), "utf8");
-    const state = JSON.parse(rawState) as { routedSkills: Array<{ id: string; routeCount: number; lastQuery: string }> };
+    const state = JSON.parse(rawState) as {
+      routedSkills: Array<{ id: string; routeCount: number; lastQuery: string }>;
+    };
     assert.equal(state.routedSkills[0]!.id, "user:codex:dci-body-probe");
     assert.equal(state.routedSkills[0]!.routeCount, 1);
   } finally {

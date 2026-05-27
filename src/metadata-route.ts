@@ -116,10 +116,12 @@ export function routeDisabledSkillsMetadata(
 }
 
 export function hasDistinctiveMetadataEvidence(match: SkillRouteMatch): boolean {
-  return match.signals.matchedName ||
+  return (
+    match.signals.matchedName ||
     match.signals.matchedPhrase ||
     match.signals.cueHitCount >= 2 ||
-    (match.evidence?.some((e) => e.field === "tool") && match.evidence?.some((e) => e.field === "intent")) === true;
+    (match.evidence?.some((e) => e.field === "tool") && match.evidence?.some((e) => e.field === "intent")) === true
+  );
 }
 
 export function isMetadataUmbrellaSkill(skill: Skill): boolean {
@@ -205,9 +207,8 @@ function scoreIndexedSkill(candidate: IndexedSkill, query: QueryPlan, idf: Map<s
 
   for (const item of candidate.fields) {
     const exactFieldEqualsQuery = item.compact !== "" && query.compact === item.compact;
-    const partialFieldAppearsInQuery = !exactFieldEqualsQuery &&
-      query.compact.length >= 4 &&
-      fieldAppearsInQuery(item, query);
+    const partialFieldAppearsInQuery =
+      !exactFieldEqualsQuery && query.compact.length >= 4 && fieldAppearsInQuery(item, query);
     if (exactFieldEqualsQuery || partialFieldAppearsInQuery) {
       const contribution = item.field === "name" ? 4.0 : item.field === "alias" ? 3.5 : item.weight * 0.8;
       rawScore += contribution;
@@ -253,12 +254,7 @@ function scoreIndexedSkill(candidate: IndexedSkill, query: QueryPlan, idf: Map<s
   if (exactNameMatched) score = Math.max(score, 0.9);
   if (exactAliasMatched) score = Math.max(score, 0.85);
   if (containedAliasMatched) score = Math.max(score, 0.75);
-  if (
-    matchedDistinctiveTerms.size < 2 &&
-    !exactNameMatched &&
-    !exactAliasMatched &&
-    !containedAliasMatched
-  ) {
+  if (matchedDistinctiveTerms.size < 2 && !exactNameMatched && !exactAliasMatched && !containedAliasMatched) {
     score = Math.min(score, 0.54);
   }
   if (matchedDistinctiveTerms.size === 0 && !matchedName && !matchedAlias) score = Math.min(score, 0.34);
@@ -308,8 +304,9 @@ function fieldAppearsInQuery(item: MetadataField, query: QueryPlan): boolean {
   if (item.compact.length < 5) return query.boundaryTerms.has(item.compact);
 
   const parts = latinBoundaryParts(item.text);
-  return query.boundaryTerms.has(item.compact) ||
-    (parts.length > 0 && parts.every((part) => query.boundaryTerms.has(part)));
+  return (
+    query.boundaryTerms.has(item.compact) || (parts.length > 0 && parts.every((part) => query.boundaryTerms.has(part)))
+  );
 }
 
 function evidenceFor(item: MetadataField, matched: string, contribution: number): MatchEvidence {
@@ -350,7 +347,8 @@ function toRouteMatch(item: ScoredMetadataSkill): SkillRouteMatch {
       candidateTokenCount: item.evidence.length,
       cueHitCount: item.matchedDistinctiveTerms.size,
       matchedName: item.exactNameMatched || item.exactAliasMatched,
-      matchedPhrase: item.containedNameMatched ||
+      matchedPhrase:
+        item.containedNameMatched ||
         item.containedAliasMatched ||
         item.evidence.some((e) => e.matched.length >= 8 && compact(e.text ?? "").includes(compact(e.matched))),
     },
@@ -374,9 +372,7 @@ function selectMetadataMatch(matches: SkillRouteMatch[]): SkillRouteMatch | null
 }
 
 function reasonFor(item: ScoredMetadataSkill): string {
-  const parts = [
-    `matched ${item.matchedDistinctiveTerms.size} distinctive metadata term(s)`,
-  ];
+  const parts = [`matched ${item.matchedDistinctiveTerms.size} distinctive metadata term(s)`];
   if (item.matchedGenericTerms.size > 0) parts.push(`matched ${item.matchedGenericTerms.size} generic term(s)`);
   if (item.containedNameMatched) parts.push("matched name phrase");
   if (item.containedAliasMatched) parts.push("matched alias phrase");

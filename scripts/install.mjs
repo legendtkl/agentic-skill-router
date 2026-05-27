@@ -38,7 +38,8 @@ const version = pluginManifest.version;
 const claudeHome = process.env["CLAUDE_HOME"] || join(homedir(), ".claude");
 const cacheRoot = join(claudeHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME);
 const installPath = join(cacheRoot, version);
-const runtimeCacheRoot = process.env["AGENTIC_SKILL_ROUTER_RUNTIME_ROOT"] || join(homedir(), ".agentic-skill-router", "runtime");
+const runtimeCacheRoot =
+  process.env["AGENTIC_SKILL_ROUTER_RUNTIME_ROOT"] || join(homedir(), ".agentic-skill-router", "runtime");
 const runtimePath = join(runtimeCacheRoot, version);
 const runtimeBin = join(runtimePath, "bin", "agentic-skill-router");
 const installedJsonPath = join(claudeHome, "plugins/installed_plugins.json");
@@ -78,14 +79,14 @@ async function registerPlugin() {
   try {
     parsed = JSON.parse(await readFile(installedJsonPath, "utf8"));
   } catch (err) {
-    if (err && /** @type {NodeJS.ErrnoException} */(err).code === "ENOENT") {
+    if (err && /** @type {NodeJS.ErrnoException} */ (err).code === "ENOENT") {
       parsed = { version: 2, plugins: {} };
     } else throw err;
   }
   if (!isPlainObject(parsed)) {
     throw new Error(
       `${installedJsonPath} root is not a JSON object (got ${Array.isArray(parsed) ? "array" : typeof parsed}). ` +
-      `Refusing to overwrite. Inspect or rename the file before retrying.`,
+        `Refusing to overwrite. Inspect or rename the file before retrying.`,
     );
   }
   if (!isPlainObject(parsed.plugins)) parsed.plugins = {};
@@ -107,12 +108,12 @@ async function enablePlugin() {
   try {
     settings = JSON.parse(await readFile(settingsPath, "utf8"));
   } catch (err) {
-    if (err && /** @type {NodeJS.ErrnoException} */(err).code !== "ENOENT") throw err;
+    if (err && /** @type {NodeJS.ErrnoException} */ (err).code !== "ENOENT") throw err;
   }
   if (!isPlainObject(settings)) {
     throw new Error(
       `${settingsPath} root is not a JSON object (got ${Array.isArray(settings) ? "array" : typeof settings}). ` +
-      `Refusing to overwrite.`,
+        `Refusing to overwrite.`,
     );
   }
   if (!isPlainObject(settings.enabledPlugins)) settings.enabledPlugins = {};

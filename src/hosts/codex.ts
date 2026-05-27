@@ -4,12 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import type { Host, HostUsageOptions } from "./base.ts";
 import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageDiagnostics, UsageStat } from "../types.ts";
-import {
-  compareVersions,
-  readCodexPluginSettings,
-  readSkillFrontmatterDetailed,
-  walkSkillsDir,
-} from "../scan.ts";
+import { compareVersions, readCodexPluginSettings, readSkillFrontmatterDetailed, walkSkillsDir } from "../scan.ts";
 import { collectUsageStatsDetailed } from "../usage.ts";
 
 export interface CodexHostOptions {
@@ -54,61 +49,74 @@ export class CodexHost implements Host {
   async listSkills(): Promise<Skill[]> {
     const out: Skill[] = [];
 
-    out.push(...await this.listRootSkills({
-      root: join(this.codexHome, "skills"),
-      idPrefix: "user:codex",
-      source: "user",
-      canDisable: true,
-    }));
-    out.push(...await this.listRootSkills({
-      root: join(this.agentsHome, "skills"),
-      idPrefix: "user:agents",
-      source: "user",
-      canDisable: true,
-    }));
-    out.push(...await this.listRootSkills({
-      root: join(this.codexHome, "skills", ".system"),
-      idPrefix: "builtin:codex-system",
-      source: "builtin",
-      canDisable: false,
-    }));
-    out.push(...await this.listRootSkills({
-      root: this.adminSkillsRoot,
-      idPrefix: "builtin:codex-admin",
-      source: "builtin",
-      canDisable: false,
-    }));
+    out.push(
+      ...(await this.listRootSkills({
+        root: join(this.codexHome, "skills"),
+        idPrefix: "user:codex",
+        source: "user",
+        canDisable: true,
+      })),
+    );
+    out.push(
+      ...(await this.listRootSkills({
+        root: join(this.agentsHome, "skills"),
+        idPrefix: "user:agents",
+        source: "user",
+        canDisable: true,
+      })),
+    );
+    out.push(
+      ...(await this.listRootSkills({
+        root: join(this.codexHome, "skills", ".system"),
+        idPrefix: "builtin:codex-system",
+        source: "builtin",
+        canDisable: false,
+      })),
+    );
+    out.push(
+      ...(await this.listRootSkills({
+        root: this.adminSkillsRoot,
+        idPrefix: "builtin:codex-admin",
+        source: "builtin",
+        canDisable: false,
+      })),
+    );
 
     for (const projectRoot of await projectSkillRoots(this.cwd, ".agents/skills")) {
-      out.push(...await this.listRootSkills({
-        root: projectRoot.root,
-        idPrefix: `project:codex:${projectRoot.relativeDir}`,
-        source: "project",
-        canDisable: true,
-      }));
+      out.push(
+        ...(await this.listRootSkills({
+          root: projectRoot.root,
+          idPrefix: `project:codex:${projectRoot.relativeDir}`,
+          source: "project",
+          canDisable: true,
+        })),
+      );
     }
 
     const enabledPlugins = (await readCodexPluginSettings(join(this.codexHome, "config.toml"))).enabledPlugins ?? {};
     for (const plugin of await this.installedPlugins()) {
       const isPluginDisabled = enabledPlugins[plugin.pluginKey] === false;
-      const pluginSkills = await walkSkillsDir(plugin.skillsRoot, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
-        const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
-        return {
-          id: `plugin:${plugin.pluginKey}:${skillName}`,
-          name: fm.name || skillName,
-          description: fm.description,
-          metadata: fm,
-          source: "plugin",
-          pluginKey: plugin.pluginKey,
-          skillMdPath,
-          isDisabled,
-          isPluginDisabled,
-          canDisable: !outOfRoot,
-          conflict,
-          outOfRoot,
-          ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
-        };
-      });
+      const pluginSkills = await walkSkillsDir(
+        plugin.skillsRoot,
+        async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
+          const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
+          return {
+            id: `plugin:${plugin.pluginKey}:${skillName}`,
+            name: fm.name || skillName,
+            description: fm.description,
+            metadata: fm,
+            source: "plugin",
+            pluginKey: plugin.pluginKey,
+            skillMdPath,
+            isDisabled,
+            isPluginDisabled,
+            canDisable: !outOfRoot,
+            conflict,
+            outOfRoot,
+            ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
+          };
+        },
+      );
       out.push(...pluginSkills);
     }
 
@@ -201,15 +209,11 @@ export class CodexHost implements Host {
           const manifestPath = join(installPath, ".codex-plugin", "plugin.json");
           const manifest = await readCodexPluginManifest(manifestPath);
           if (!manifest) continue;
-          const pluginName = typeof manifest.name === "string" && manifest.name !== ""
-            ? manifest.name
-            : pluginDir.name;
-          const version = typeof manifest.version === "string" && manifest.version !== ""
-            ? manifest.version
-            : versionDir.name;
-          const skillsRel = typeof manifest.skills === "string" && manifest.skills !== ""
-            ? manifest.skills
-            : "./skills";
+          const pluginName = typeof manifest.name === "string" && manifest.name !== "" ? manifest.name : pluginDir.name;
+          const version =
+            typeof manifest.version === "string" && manifest.version !== "" ? manifest.version : versionDir.name;
+          const skillsRel =
+            typeof manifest.skills === "string" && manifest.skills !== "" ? manifest.skills : "./skills";
           const install = {
             pluginKey: `${pluginName}@${marketplace.name}`,
             installPath,

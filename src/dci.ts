@@ -263,7 +263,10 @@ export async function dciSearchDisabledSkills(
   query: string | string[],
   opts: DciOptions = {},
 ): Promise<DciSearchResult> {
-  const queries = normalizeQueries(query, normalizePositiveInt(opts.maxQueries, DCI_BUDGET.maxQueries, DCI_BUDGET.maxQueries));
+  const queries = normalizeQueries(
+    query,
+    normalizePositiveInt(opts.maxQueries, DCI_BUDGET.maxQueries, DCI_BUDGET.maxQueries),
+  );
   const trimmedQuery = queries.join("\n");
   const candidates = routableDisabledSkills(skills);
   if (queries.length === 0) {
@@ -336,9 +339,8 @@ export async function dciSearchDisabledSkills(
     query: trimmedQuery,
     queries,
     metadataOnly: Boolean(opts.metadataOnly),
-    action: matches.length > 0
-      ? (opts.metadataOnly ? "inspect-candidates" : "inspect-or-read-candidates")
-      : "no-candidates",
+    action:
+      matches.length > 0 ? (opts.metadataOnly ? "inspect-candidates" : "inspect-or-read-candidates") : "no-candidates",
     budget: searchBudget(Boolean(opts.metadataOnly)),
     corpus: corpusSummary(candidates.length, scored.length, loaded),
     warnings: loaded.warnings,
@@ -498,7 +500,7 @@ export async function dciOpenSkillWindow(
 
   const safeAnchor = Math.min(anchorLine, Math.max(1, totalLines));
   let startLine = Math.max(1, safeAnchor - before);
-  let endLine = Math.min(totalLines, startLine + window - 1);
+  const endLine = Math.min(totalLines, startLine + window - 1);
   startLine = Math.max(1, endLine - window + 1);
 
   const collected: string[] = [];
@@ -544,11 +546,7 @@ export function dciInspectSkill(skills: Skill[], idOrRef: string): DciInspectRes
  * mid-character truncation) and sliced to at most `maxChars` characters
  * for backward-compatible content shape.
  */
-export async function dciReadSkill(
-  skills: Skill[],
-  idOrRef: string,
-  opts: DciOptions = {},
-): Promise<DciReadResult> {
+export async function dciReadSkill(skills: Skill[], idOrRef: string, opts: DciOptions = {}): Promise<DciReadResult> {
   const skill = findRoutableSkillOrThrow(skills, idOrRef);
   const maxChars = normalizePositiveInt(opts.maxChars, DEFAULT_MAX_READ_CHARS, MAX_READ_CHARS);
   const read = await readSkillWithBudget(skill.skillMdPath, maxChars);
@@ -658,13 +656,13 @@ function loadSkillMetadata(skills: Skill[]): LoadedSkillSet {
 function searchBudget(metadataOnly: boolean): DciBudget {
   return metadataOnly
     ? {
-      ...DCI_BUDGET,
-      maxSkillBytes: 0,
-      maxCorpusBytes: 0,
-      maxFindsOrOpens: 0,
-      maxFullReads: 0,
-      maxOpenChars: 0,
-    }
+        ...DCI_BUDGET,
+        maxSkillBytes: 0,
+        maxCorpusBytes: 0,
+        maxFindsOrOpens: 0,
+        maxFullReads: 0,
+        maxOpenChars: 0,
+      }
     : DCI_BUDGET;
 }
 
@@ -729,11 +727,7 @@ async function loadSkills(skills: Skill[]): Promise<LoadedSkillSet> {
 }
 
 function skillMetadataText(skill: Skill): string {
-  return [
-    skill.id,
-    skill.name,
-    skill.description,
-  ].join("\n");
+  return [skill.id, skill.name, skill.description].join("\n");
 }
 
 /**
@@ -763,9 +757,8 @@ async function readSkillWithBudget(
     const truncated = stats.size > maxChars;
     // When the buffer ends inside a multibyte UTF-8 sequence, walk back to
     // the last complete boundary before decoding.
-    const decodeEnd = bytesRead > maxChars
-      ? utf8SafeEnd(buffer, maxChars)
-      : (truncated ? utf8SafeEnd(buffer, bytesRead) : bytesRead);
+    const decodeEnd =
+      bytesRead > maxChars ? utf8SafeEnd(buffer, maxChars) : truncated ? utf8SafeEnd(buffer, bytesRead) : bytesRead;
     const decoded = buffer.subarray(0, decodeEnd).toString("utf8");
     const content = decoded.length > maxChars ? decoded.slice(0, maxChars) : decoded;
     return { content, bytesRead, truncated };
@@ -867,9 +860,7 @@ async function streamSkillLines(
           break;
         }
         const segment = usable.subarray(cursor, newlineIdx);
-        const line = pending.length === 0
-          ? segment
-          : Buffer.concat([pending, segment]);
+        const line = pending.length === 0 ? segment : Buffer.concat([pending, segment]);
         pending = Buffer.alloc(0);
         if (!emitLine(line)) {
           stop = true;
@@ -911,9 +902,7 @@ async function readSkillPrefix(
     const stats = await handle.stat();
     const bytesToRead = Math.min(limitBytes, stats.size);
     const buffer = Buffer.allocUnsafe(bytesToRead);
-    const result = bytesToRead > 0
-      ? await handle.read(buffer, 0, bytesToRead, 0)
-      : { bytesRead: 0 };
+    const result = bytesToRead > 0 ? await handle.read(buffer, 0, bytesToRead, 0) : { bytesRead: 0 };
     const bytesRead = result.bytesRead;
     const truncated = stats.size > bytesRead;
     // When the file is truncated mid-character, walk back to the last
@@ -1069,7 +1058,8 @@ function refForSkill(skill: Skill): string {
 function reasonForSearch(item: ScoredLoadedSkill): string {
   const parts: string[] = [];
   if (item.phraseMatched) parts.push("matched query phrase in skill corpus");
-  if (item.queryTermCount > 0) parts.push(`matched ${item.hitCount}/${item.queryTermCount} query terms in skill corpus`);
+  if (item.queryTermCount > 0)
+    parts.push(`matched ${item.hitCount}/${item.queryTermCount} query terms in skill corpus`);
   if (item.matchedQuery) parts.push(`best query: ${item.matchedQuery}`);
   return parts.join("; ") || "matched skill corpus";
 }
@@ -1127,9 +1117,7 @@ function evidenceForDciSearch(inputs: DciEvidenceInputs): MatchEvidence[] {
       source,
     });
   }
-  return evidence.sort(
-    (a, b) => b.contribution - a.contribution || a.matched.localeCompare(b.matched),
-  );
+  return evidence.sort((a, b) => b.contribution - a.contribution || a.matched.localeCompare(b.matched));
 }
 
 /**
@@ -1593,13 +1581,20 @@ function enumerateQuantifiedAtoms(pattern: string): QuantifiedAtom[] {
       let inCharClass = false;
       while (j < pattern.length && depth > 0) {
         const c = pattern[j]!;
-        if (c === "\\") { j += 2; continue; }
+        if (c === "\\") {
+          j += 2;
+          continue;
+        }
         if (inCharClass) {
           if (c === "]") inCharClass = false;
           j++;
           continue;
         }
-        if (c === "[") { inCharClass = true; j++; continue; }
+        if (c === "[") {
+          inCharClass = true;
+          j++;
+          continue;
+        }
         if (c === "(") depth++;
         else if (c === ")") depth--;
         j++;
@@ -1624,7 +1619,10 @@ function enumerateQuantifiedAtoms(pattern: string): QuantifiedAtom[] {
 
     // Parse one atom + optional quantifier.
     const atom = readAtom(pattern, i);
-    if (!atom) { i++; continue; }
+    if (!atom) {
+      i++;
+      continue;
+    }
     const quantifier = parseQuantifierAt(pattern, atom.end);
     const consumed = atom.end + (quantifier?.consumed ?? 0);
     if (quantifier) {
@@ -1661,8 +1659,14 @@ function readAtom(pattern: string, start: number): ReadAtom | null {
     let j = start + 1;
     while (j < pattern.length) {
       const c = pattern[j]!;
-      if (c === "\\") { j += 2; continue; }
-      if (c === "]") { j++; break; }
+      if (c === "\\") {
+        j += 2;
+        continue;
+      }
+      if (c === "]") {
+        j++;
+        break;
+      }
       j++;
     }
     return { signature: pattern.slice(start, j), end: j };
@@ -1809,8 +1813,7 @@ export function validateRegexPattern(pattern: string): void {
     // unquantified group: we still drop into the alternation check, but a
     // single-shot bound is not by itself a ReDoS lever.
     const isOpenRepetition = quantifier.upper === null;
-    const isLargeBoundedRepetition =
-      quantifier.upper !== null && quantifier.upper > DCI_REGEX_MAX_GROUP_BOUND;
+    const isLargeBoundedRepetition = quantifier.upper !== null && quantifier.upper > DCI_REGEX_MAX_GROUP_BOUND;
     const isRepetition = isOpenRepetition || isLargeBoundedRepetition;
 
     if (isRepetition) {
@@ -1864,7 +1867,7 @@ function createGrepMatcher(pattern: string, mode: "literal" | "regex"): (line: s
   // calling the engine entirely. This bounds aggregate damage from any
   // pathological pattern that slips past the static heuristic.
   let timedOut = false;
-  let timeoutPattern = pattern;
+  const timeoutPattern = pattern;
   return (line) => {
     if (timedOut) {
       throw new DciRegexTimeoutError(

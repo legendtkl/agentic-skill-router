@@ -58,7 +58,7 @@ export function extractManagedMarker(content) {
   // marker, drop it too so the body looks like the pre-marker file we
   // originally hashed (which ended in "\n").
   const idx = content.indexOf(markerLine);
-  let before = content.slice(0, idx);
+  const before = content.slice(0, idx);
   let after = content.slice(idx + markerLine.length);
   if (after.startsWith("\n")) after = after.slice(1);
 

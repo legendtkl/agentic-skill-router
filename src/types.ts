@@ -164,10 +164,10 @@ export class SkillSymlinkTargetMismatchError extends Error {
   constructor(skillId: string, skillMdPath: string, recordedCanonical: string, currentCanonical: string) {
     super(
       `Refusing to modify skill "${skillId}": the symlink at ${skillMdPath} now ` +
-      `resolves to ${currentCanonical}, but the disable record was captured for ` +
-      `${recordedCanonical}. Manual repair required — restore the symlink to its ` +
-      `original target, or remove the stale disable record from state and re-disable ` +
-      `the new target explicitly if that is the intended skill.`,
+        `resolves to ${currentCanonical}, but the disable record was captured for ` +
+        `${recordedCanonical}. Manual repair required — restore the symlink to its ` +
+        `original target, or remove the stale disable record from state and re-disable ` +
+        `the new target explicitly if that is the intended skill.`,
     );
     this.name = "SkillSymlinkTargetMismatchError";
     this.recordedCanonical = recordedCanonical;
@@ -278,9 +278,9 @@ export class SkillConflictError extends Error {
   constructor(skillId: string, livePath: string) {
     super(
       `Skill "${skillId}" is in a split-brain state: both ${livePath} and ` +
-      `${livePath}.agentic-skill-router-disabled exist. Manually delete one (typically ` +
-      `the .agentic-skill-router-disabled file if you want the skill enabled, or the ` +
-      `live SKILL.md if you want it disabled) and retry.`,
+        `${livePath}.agentic-skill-router-disabled exist. Manually delete one (typically ` +
+        `the .agentic-skill-router-disabled file if you want the skill enabled, or the ` +
+        `live SKILL.md if you want it disabled) and retry.`,
     );
     this.name = "SkillConflictError";
   }
@@ -297,10 +297,10 @@ export class SkillOutOfRootError extends Error {
   constructor(skillId: string, skillMdPath: string) {
     super(
       `Refusing to modify skill "${skillId}": its SKILL.md (${skillMdPath}) ` +
-      `resolves outside the skills root that discovered it. Skills that live ` +
-      `via a symlink whose target is outside the skills root are visible but ` +
-      `cannot be disabled or enabled by agentic-skill-router. Move the skill into a ` +
-      `skills root (or replace the symlink with a real directory) and retry.`,
+        `resolves outside the skills root that discovered it. Skills that live ` +
+        `via a symlink whose target is outside the skills root are visible but ` +
+        `cannot be disabled or enabled by agentic-skill-router. Move the skill into a ` +
+        `skills root (or replace the symlink with a real directory) and retry.`,
     );
     this.name = "SkillOutOfRootError";
   }

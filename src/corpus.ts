@@ -144,10 +144,7 @@ const MAX_LIMIT = 100;
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
 
-export function searchSkillCorpus(
-  skills: Skill[],
-  opts: CorpusSearchOptions = {},
-): CorpusSearchResult {
+export function searchSkillCorpus(skills: Skill[], opts: CorpusSearchOptions = {}): CorpusSearchResult {
   const candidates = skills.filter(isRoutableDisabledSkill);
   const query = normalizeExpression(opts);
   const limit = normalizeLimit(opts.limit);
@@ -174,9 +171,8 @@ export function buildSkillCorpusBm25Index(skills: Skill[]): CorpusBm25Index {
   const documents = candidates.map(prepareBm25IndexDocument);
   const documentFrequency = bm25IndexDocumentFrequency(documents);
   const postings = bm25Postings(documents);
-  const averageDocLength = documents.length === 0
-    ? 1
-    : documents.reduce((sum, doc) => sum + doc.docLength, 0) / documents.length;
+  const averageDocLength =
+    documents.length === 0 ? 1 : documents.reduce((sum, doc) => sum + doc.docLength, 0) / documents.length;
   return {
     version: 1,
     mode: "disabled-skill-metadata-bm25",
@@ -188,10 +184,7 @@ export function buildSkillCorpusBm25Index(skills: Skill[]): CorpusBm25Index {
   };
 }
 
-export function searchSkillCorpusBm25Index(
-  index: CorpusBm25Index,
-  opts: CorpusSearchOptions = {},
-): CorpusSearchResult {
+export function searchSkillCorpusBm25Index(index: CorpusBm25Index, opts: CorpusSearchOptions = {}): CorpusSearchResult {
   const query = normalizeExpression(opts);
   const limit = normalizeLimit(opts.limit);
   if (query.any.length === 0 && query.all.length === 0) {
@@ -240,11 +233,12 @@ function searchSkillCorpusWeighted(
 
   const matches = top.sort(compareScored).map(projectMatch);
   return {
-    action: matches.length === 0
-      ? "no-candidates"
-      : totalMatches > matches.length
-        ? "narrow-or-broaden"
-        : "inspect-candidates",
+    action:
+      matches.length === 0
+        ? "no-candidates"
+        : totalMatches > matches.length
+          ? "narrow-or-broaden"
+          : "inspect-candidates",
     mode: "disabled-skill-metadata",
     ranker: "weighted",
     query,
@@ -260,16 +254,11 @@ function searchSkillCorpusWeighted(
   };
 }
 
-function searchSkillCorpusBm25(
-  candidates: Skill[],
-  query: CorpusQueryExpression,
-  limit: number,
-): CorpusSearchResult {
+function searchSkillCorpusBm25(candidates: Skill[], query: CorpusQueryExpression, limit: number): CorpusSearchResult {
   const documents = candidates.map(prepareBm25IndexDocument);
   const documentFrequency = bm25IndexDocumentFrequency(documents);
-  const averageDocLength = documents.length === 0
-    ? 1
-    : documents.reduce((sum, doc) => sum + doc.docLength, 0) / documents.length;
+  const averageDocLength =
+    documents.length === 0 ? 1 : documents.reduce((sum, doc) => sum + doc.docLength, 0) / documents.length;
   return searchSkillCorpusBm25Documents(
     documents,
     query,
@@ -291,7 +280,9 @@ function searchSkillCorpusBm25Documents(
   scanned: number,
 ): CorpusSearchResult {
   const queryTokens = bm25QueryTokens(query);
-  const candidateIndexes = postings ? bm25CandidateIndexes(postings, query, documents.length) : allDocumentIndexes(documents.length);
+  const candidateIndexes = postings
+    ? bm25CandidateIndexes(postings, query, documents.length)
+    : allDocumentIndexes(documents.length);
   const top: ScoredCandidate[] = [];
   let totalMatches = 0;
   const diagnostics = emptyDiagnostics();
@@ -299,7 +290,14 @@ function searchSkillCorpusBm25Documents(
   for (const docIndex of candidateIndexes) {
     const doc = documents[docIndex];
     if (!doc) continue;
-    const evaluated = evaluateBm25Document(doc, query, documentFrequency, averageDocLength, documents.length, queryTokens);
+    const evaluated = evaluateBm25Document(
+      doc,
+      query,
+      documentFrequency,
+      averageDocLength,
+      documents.length,
+      queryTokens,
+    );
     if (evaluated.allMatched) diagnostics.skillsMatchingAllTerms++;
     if (evaluated.anyMatched) diagnostics.skillsMatchingAnyTerms++;
     if (!evaluated.allMatched && evaluated.anyMatched) diagnostics.filteredByAllTerms++;
@@ -312,11 +310,12 @@ function searchSkillCorpusBm25Documents(
 
   const matches = top.sort(compareScored).map(projectMatch);
   return {
-    action: matches.length === 0
-      ? "no-candidates"
-      : totalMatches > matches.length
-        ? "narrow-or-broaden"
-        : "inspect-candidates",
+    action:
+      matches.length === 0
+        ? "no-candidates"
+        : totalMatches > matches.length
+          ? "narrow-or-broaden"
+          : "inspect-candidates",
     mode: "disabled-skill-metadata",
     ranker: "bm25",
     query,
@@ -481,7 +480,9 @@ function evaluateBm25Document(
 ): { allMatched: boolean; anyMatched: boolean; scored: ScoredCandidate | null } {
   const allHits = query.all.map((term) => scoreIndexTerm(doc.fields, term));
   const allMatched = allHits.every(Boolean);
-  const anyHits = query.any.map((term) => scoreIndexTerm(doc.fields, term)).filter((hit): hit is TermHit => Boolean(hit));
+  const anyHits = query.any
+    .map((term) => scoreIndexTerm(doc.fields, term))
+    .filter((hit): hit is TermHit => Boolean(hit));
   const anyMatched = query.any.length === 0 || anyHits.length > 0;
 
   if (!allMatched || !anyMatched) return { allMatched, anyMatched, scored: null };
@@ -494,7 +495,7 @@ function evaluateBm25Document(
     scored: {
       skill: doc.skill,
       score,
-      matchedAll: allHits.flatMap((hit, idx) => hit ? [query.all[idx]!] : []),
+      matchedAll: allHits.flatMap((hit, idx) => (hit ? [query.all[idx]!] : [])),
       matchedAny: anyHits.map((hit) => hit.term),
       snippets: snippetsForHits(hits),
       evidence: evidenceForHits(hits),
@@ -628,7 +629,7 @@ function evaluateCandidate(
     scored: {
       skill,
       score,
-      matchedAll: allHits.flatMap((hit, idx) => hit ? [query.all[idx]!] : []),
+      matchedAll: allHits.flatMap((hit, idx) => (hit ? [query.all[idx]!] : [])),
       matchedAny: anyHits.map((hit) => hit.term),
       snippets,
       evidence: evidenceForHits(hits),
@@ -730,9 +731,7 @@ function evidenceForHits(hits: TermHit[]): MatchEvidence[] {
     const existing = best.get(key);
     if (!existing || candidate.contribution > existing.contribution) best.set(key, candidate);
   }
-  return [...best.values()].sort(
-    (a, b) => b.contribution - a.contribution || a.field.localeCompare(b.field),
-  );
+  return [...best.values()].sort((a, b) => b.contribution - a.contribution || a.field.localeCompare(b.field));
 }
 
 function snippetsForHits(hits: TermHit[]): CorpusSnippet[] {
@@ -757,7 +756,7 @@ function insertTop(top: ScoredCandidate[], candidate: ScoredCandidate, limit: nu
 function compareScored(a: ScoredCandidate, b: ScoredCandidate): number {
   const scoreDelta = b.score - a.score;
   if (scoreDelta !== 0) return scoreDelta;
-  const hitDelta = (b.matchedAll.length + b.matchedAny.length) - (a.matchedAll.length + a.matchedAny.length);
+  const hitDelta = b.matchedAll.length + b.matchedAny.length - (a.matchedAll.length + a.matchedAny.length);
   if (hitDelta !== 0) return hitDelta;
   return shortIdForSkill(a.skill).localeCompare(shortIdForSkill(b.skill));
 }
@@ -804,11 +803,12 @@ function findRoutableSkill(skills: Skill[], idOrName: string): Skill {
   const needle = idOrName.trim();
   if (!needle) throw new Error("empty skill id or name");
   const candidates = skills.filter(isRoutableDisabledSkill);
-  const matches = candidates.filter((skill) =>
-    skill.id === needle ||
-    skill.name === needle ||
-    shortIdForSkill(skill) === needle ||
-    refForSkill(skill) === needle
+  const matches = candidates.filter(
+    (skill) =>
+      skill.id === needle ||
+      skill.name === needle ||
+      shortIdForSkill(skill) === needle ||
+      refForSkill(skill) === needle,
   );
   if (matches.length === 0) throw new Error(`unknown disabled skill id/name/ref: ${idOrName}`);
   if (matches.length > 1) throw new Error(`ambiguous disabled skill id/name/ref: ${idOrName}`);

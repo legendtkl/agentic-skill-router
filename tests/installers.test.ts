@@ -64,10 +64,7 @@ async function readJson(path: string): Promise<unknown> {
 
 async function writeProbeSkill(skillDir: string, name: string, description: string): Promise<void> {
   await mkdir(skillDir, { recursive: true });
-  await writeFile(
-    join(skillDir, "SKILL.md"),
-    `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n`,
-  );
+  await writeFile(join(skillDir, "SKILL.md"), `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n`);
 }
 
 test("[claude] install creates plugin cache, manifest, bin wrapper, and registers in settings", async () => {
@@ -87,7 +84,11 @@ test("[claude] install creates plugin cache, manifest, bin wrapper, and register
     // Plugin cache files
     assert.ok(await pathExists(join(installPath, ".claude-plugin", "plugin.json")), "plugin manifest copied");
     assert.ok(await pathExists(join(installPath, "bin", "agentic-skill-router")), "host bin wrapper copied");
-    assert.equal(await pathExists(join(installPath, "lib", "agentic-skill-router.mjs")), false, "plugin cache does not duplicate runtime lib");
+    assert.equal(
+      await pathExists(join(installPath, "lib", "agentic-skill-router.mjs")),
+      false,
+      "plugin cache does not duplicate runtime lib",
+    );
     assert.ok(
       await pathExists(join(installPath, "skills", "agentic-skill-router-skills", "SKILL.md")),
       "router skill copied",
@@ -102,19 +103,22 @@ test("[claude] install creates plugin cache, manifest, bin wrapper, and register
     assert.match(wrapper, /AGENTIC_SKILL_ROUTER_HOST='claude-code'/);
     assert.match(wrapper, /AGENTIC_SKILL_ROUTER_ASSET_ROOT=/);
 
-    await writeProbeSkill(
-      join(claudeHome, "skills", "wrapper-probe"),
-      "wrapper-probe",
-      "Claude wrapper host probe",
-    );
+    await writeProbeSkill(join(claudeHome, "skills", "wrapper-probe"), "wrapper-probe", "Claude wrapper host probe");
     const { stdout: listStdout } = await execFileAsync(wrapperPath, ["skills", "list", "--json"], {
       cwd: REPO_ROOT,
       env: sandboxEnv(root, { AGENTIC_SKILL_ROUTER_HOST: "codex" }),
       maxBuffer: MAX_BUFFER,
     });
     const listed = (JSON.parse(listStdout) as { skills: Array<{ id: string }> }).skills;
-    assert.ok(listed.some((item) => item.id === "user:wrapper-probe"), "wrapper selects Claude host");
-    assert.equal(listed.some((item) => item.id === "user:codex:wrapper-probe"), false, "wrapper overrides caller host env");
+    assert.ok(
+      listed.some((item) => item.id === "user:wrapper-probe"),
+      "wrapper selects Claude host",
+    );
+    assert.equal(
+      listed.some((item) => item.id === "user:codex:wrapper-probe"),
+      false,
+      "wrapper overrides caller host env",
+    );
 
     const initProject = join(root, "init-project");
     const { stdout: initStdout } = await execFileAsync(
@@ -292,7 +296,11 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
     // Plugin cache files
     assert.ok(await pathExists(join(installPath, ".codex-plugin", "plugin.json")), "plugin manifest copied");
     assert.ok(await pathExists(join(installPath, "bin", "agentic-skill-router")), "host bin wrapper copied");
-    assert.equal(await pathExists(join(installPath, "lib", "agentic-skill-router.mjs")), false, "plugin cache does not duplicate runtime lib");
+    assert.equal(
+      await pathExists(join(installPath, "lib", "agentic-skill-router.mjs")),
+      false,
+      "plugin cache does not duplicate runtime lib",
+    );
     assert.ok(
       await pathExists(join(installPath, "skills", "agentic-skill-router-skills", "SKILL.md")),
       "router skill copied",
@@ -317,8 +325,15 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
       maxBuffer: MAX_BUFFER,
     });
     const listed = (JSON.parse(listStdout) as { skills: Array<{ id: string }> }).skills;
-    assert.ok(listed.some((item) => item.id === "user:agents:wrapper-probe"), "wrapper selects Codex host");
-    assert.equal(listed.some((item) => item.id === "user:wrapper-probe"), false, "wrapper overrides caller host env");
+    assert.ok(
+      listed.some((item) => item.id === "user:agents:wrapper-probe"),
+      "wrapper selects Codex host",
+    );
+    assert.equal(
+      listed.some((item) => item.id === "user:wrapper-probe"),
+      false,
+      "wrapper overrides caller host env",
+    );
 
     const initProject = join(root, "init-project");
     const { stdout: initStdout } = await execFileAsync(
@@ -362,13 +377,7 @@ test("[codex] install is idempotent: re-running keeps a single enabled stanza an
     await mkdir(codexHome, { recursive: true });
     await writeFile(
       join(codexHome, "config.toml"),
-      [
-        "model = \"gpt-5\"",
-        "",
-        "[plugins.\"other@local\"]",
-        "enabled = true",
-        "",
-      ].join("\n"),
+      ['model = "gpt-5"', "", '[plugins."other@local"]', "enabled = true", ""].join("\n"),
     );
 
     for (let i = 0; i < 2; i++) {
@@ -383,24 +392,22 @@ test("[codex] install is idempotent: re-running keeps a single enabled stanza an
 
     // Exactly one stanza for our plugin (no duplicate sections).
     const ourHeaderMatches = config.match(/\[plugins\."agentic-skill-router@local"\]/g) ?? [];
-    assert.equal(ourHeaderMatches.length, 1, "single [plugins.\"agentic-skill-router@local\"] section after re-install");
+    assert.equal(ourHeaderMatches.length, 1, 'single [plugins."agentic-skill-router@local"] section after re-install');
 
     // Exactly one enabled line inside our plugin's stanza.
-    const ourSection = config
-      .split(/\r?\n/)
-      .reduce<string[]>((acc, line, idx, arr) => {
-        if (line.trim() === '[plugins."agentic-skill-router@local"]') {
-          let end = arr.length;
-          for (let j = idx + 1; j < arr.length; j++) {
-            if (/^\s*\[/.test(arr[j] ?? "")) {
-              end = j;
-              break;
-            }
+    const ourSection = config.split(/\r?\n/).reduce<string[]>((acc, line, idx, arr) => {
+      if (line.trim() === '[plugins."agentic-skill-router@local"]') {
+        let end = arr.length;
+        for (let j = idx + 1; j < arr.length; j++) {
+          if (/^\s*\[/.test(arr[j] ?? "")) {
+            end = j;
+            break;
           }
-          acc.push(...arr.slice(idx, end));
         }
-        return acc;
-      }, []);
+        acc.push(...arr.slice(idx, end));
+      }
+      return acc;
+    }, []);
     const enabledLines = ourSection.filter((line) => /^\s*enabled\s*=/.test(line));
     assert.equal(enabledLines.length, 1, "single enabled = line in our stanza");
     assert.match(enabledLines[0] ?? "", /enabled = true/);
@@ -504,7 +511,11 @@ test("[codex] uninstall is a no-op when no install exists (no config.toml create
     assert.equal(await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")), false);
     // And uninstall must not spuriously create config.toml (e.g. by writing a
     // disabled plugin stanza on an empty setup).
-    assert.equal(await pathExists(join(codexHome, "config.toml")), false, "config.toml must not be created on no-op uninstall");
+    assert.equal(
+      await pathExists(join(codexHome, "config.toml")),
+      false,
+      "config.toml must not be created on no-op uninstall",
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -523,7 +534,11 @@ test("[claude] uninstall is a no-op when no install exists", async () => {
     // Uninstall must not crash, and must not spuriously create config files
     // (e.g. by writing a disabled plugin stanza into settings.json or the
     // installed_plugins.json registry on an empty setup).
-    assert.equal(await pathExists(join(claudeHome, "settings.json")), false, "settings.json must not be created on no-op uninstall");
+    assert.equal(
+      await pathExists(join(claudeHome, "settings.json")),
+      false,
+      "settings.json must not be created on no-op uninstall",
+    );
     assert.equal(
       await pathExists(join(claudeHome, "plugins", "installed_plugins.json")),
       false,

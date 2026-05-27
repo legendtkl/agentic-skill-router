@@ -21,38 +21,23 @@ test("stripTomlComment strips a trailing inline comment and surrounding ws", () 
   assert.equal(stripTomlComment('name = "x"# tight'), 'name = "x"');
 });
 
-test('stripTomlComment treats `#` inside double-quoted strings as a literal char', () => {
+test("stripTomlComment treats `#` inside double-quoted strings as a literal char", () => {
   assert.equal(stripTomlComment('name = "skill#1"'), 'name = "skill#1"');
-  assert.equal(
-    stripTomlComment('name = "skill#1" # real comment'),
-    'name = "skill#1"',
-  );
+  assert.equal(stripTomlComment('name = "skill#1" # real comment'), 'name = "skill#1"');
   // Multiple `#` inside one string must all stay.
-  assert.equal(
-    stripTomlComment('hash = "a#b#c"'),
-    'hash = "a#b#c"',
-  );
+  assert.equal(stripTomlComment('hash = "a#b#c"'), 'hash = "a#b#c"');
 });
 
-test('stripTomlComment treats `#` inside single-quoted (literal) strings as a literal char', () => {
+test("stripTomlComment treats `#` inside single-quoted (literal) strings as a literal char", () => {
   assert.equal(stripTomlComment("name = 'x#y'"), "name = 'x#y'");
-  assert.equal(
-    stripTomlComment("name = 'x#y' # real comment"),
-    "name = 'x#y'",
-  );
+  assert.equal(stripTomlComment("name = 'x#y' # real comment"), "name = 'x#y'");
 });
 
 test("stripTomlComment respects backslash-escaped quote inside basic strings", () => {
   // The escaped \" must not close the string, so the trailing # stays inside.
-  assert.equal(
-    stripTomlComment('name = "a\\"b#c"'),
-    'name = "a\\"b#c"',
-  );
+  assert.equal(stripTomlComment('name = "a\\"b#c"'), 'name = "a\\"b#c"');
   // Same line with an actual comment after the real closing quote.
-  assert.equal(
-    stripTomlComment('name = "a\\"b#c" # tail'),
-    'name = "a\\"b#c"',
-  );
+  assert.equal(stripTomlComment('name = "a\\"b#c" # tail'), 'name = "a\\"b#c"');
 });
 
 test("stripTomlComment does NOT honor escapes inside literal (single-quoted) strings", () => {
@@ -63,42 +48,21 @@ test("stripTomlComment does NOT honor escapes inside literal (single-quoted) str
 });
 
 test("stripTomlComment handles triple-quoted basic strings", () => {
-  assert.equal(
-    stripTomlComment('blob = """a#b"""'),
-    'blob = """a#b"""',
-  );
-  assert.equal(
-    stripTomlComment('blob = """a#b""" # tail'),
-    'blob = """a#b"""',
-  );
+  assert.equal(stripTomlComment('blob = """a#b"""'), 'blob = """a#b"""');
+  assert.equal(stripTomlComment('blob = """a#b""" # tail'), 'blob = """a#b"""');
 });
 
 test("stripTomlComment handles triple-quoted literal strings", () => {
-  assert.equal(
-    stripTomlComment("blob = '''a#b'''"),
-    "blob = '''a#b'''",
-  );
-  assert.equal(
-    stripTomlComment("blob = '''a#b''' # tail"),
-    "blob = '''a#b'''",
-  );
+  assert.equal(stripTomlComment("blob = '''a#b'''"), "blob = '''a#b'''");
+  assert.equal(stripTomlComment("blob = '''a#b''' # tail"), "blob = '''a#b'''");
 });
 
 test("stripTomlComment keeps section headers with `#` inside quoted names", () => {
-  assert.equal(
-    stripTomlComment('[plugins."weird#name"]'),
-    '[plugins."weird#name"]',
-  );
-  assert.equal(
-    stripTomlComment('[plugins."weird#name"] # comment'),
-    '[plugins."weird#name"]',
-  );
+  assert.equal(stripTomlComment('[plugins."weird#name"]'), '[plugins."weird#name"]');
+  assert.equal(stripTomlComment('[plugins."weird#name"] # comment'), '[plugins."weird#name"]');
 });
 
-async function withCodexConfig<T>(
-  contents: string,
-  fn: (path: string) => Promise<T>,
-): Promise<T> {
+async function withCodexConfig<T>(contents: string, fn: (path: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-toml-"));
   try {
     await mkdir(dir, { recursive: true });
@@ -134,12 +98,7 @@ test("readCodexPluginSettings ignores `#` inside string values when matching `en
   // `enabled` is the only key we read, but make sure an unrelated key with a
   // `#` in its value does not corrupt the section-following `enabled` line.
   await withCodexConfig(
-    [
-      '[plugins."gmail@openai-curated"]',
-      'name = "gmail#alpha"',
-      "enabled = true",
-      "",
-    ].join("\n"),
+    ['[plugins."gmail@openai-curated"]', 'name = "gmail#alpha"', "enabled = true", ""].join("\n"),
     async (path) => {
       const settings = await readCodexPluginSettings(path);
       assert.deepEqual(settings.enabledPlugins, {

@@ -96,11 +96,7 @@ const AMBIGUOUS_SELECTION_MARGIN = 0.08;
 const SINGLE_TERM_PARTIAL_MATCH_CAP = 0.34;
 const SELECTABLE_CONFIDENCES: ReadonlySet<Confidence> = new Set(["high", "medium"]);
 
-export function routeDisabledSkills(
-  skills: Skill[],
-  query: string,
-  opts: RouteOptions = {},
-): SkillRouteResult {
+export function routeDisabledSkills(skills: Skill[], query: string, opts: RouteOptions = {}): SkillRouteResult {
   const trimmedQuery = query.trim();
   if (trimmedQuery === "") {
     return { query: trimmedQuery, mode: "disabled-only", routeMode: "lexical", selected: null, matches: [] };
@@ -135,15 +131,15 @@ export function routeDisabledSkills(
       }
     }
 
-    const matchedName = queryPhrase !== "" &&
+    const matchedName =
+      queryPhrase !== "" &&
       skillNamePhrase !== "" &&
       (queryPhrase === skillNamePhrase || queryPhrase.includes(skillNamePhrase));
     const matchedPhrase = queryTerms.size > 1 && queryPhrase.length >= 4 && corpusPhrase.includes(queryPhrase);
 
     const tokenScore = queryTerms.size > 0 ? hitCount / queryTerms.size : 0;
-    const candidateScore = candidateTerms.size > 0 && candidateHitCount >= 3
-      ? candidateHitCount / candidateTerms.size
-      : 0;
+    const candidateScore =
+      candidateTerms.size > 0 && candidateHitCount >= 3 ? candidateHitCount / candidateTerms.size : 0;
     const nameScore = matchedName ? 0.45 : 0;
     const phraseScore = matchedPhrase ? 0.35 : 0;
     const cueScore = cueHitCount > 0 ? 0.4 : 0;

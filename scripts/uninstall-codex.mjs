@@ -59,7 +59,7 @@ async function disablePlugin() {
   try {
     config = await readFile(configPath, "utf8");
   } catch (err) {
-    if (err && /** @type {NodeJS.ErrnoException} */(err).code === "ENOENT") return;
+    if (err && /** @type {NodeJS.ErrnoException} */ (err).code === "ENOENT") return;
     throw err;
   }
   await atomicWrite(configPath, setPluginEnabled(config, PLUGIN_KEY, false));
@@ -71,7 +71,7 @@ async function removeSlashCommand() {
   try {
     existing = await readFile(promptPath, "utf8");
   } catch (err) {
-    if (err && /** @type {NodeJS.ErrnoException} */(err).code === "ENOENT") {
+    if (err && /** @type {NodeJS.ErrnoException} */ (err).code === "ENOENT") {
       log(`  /agentic-skill-router:skills prompt already absent`);
       return;
     }
@@ -81,7 +81,7 @@ async function removeSlashCommand() {
   if (!isManagedUnchanged(existing)) {
     process.stderr.write(
       `! ${promptPath} has local edits; keeping your version.\n` +
-      `  Remove the file manually if you no longer need the /agentic-skill-router:skills slash command.\n`,
+        `  Remove the file manually if you no longer need the /agentic-skill-router:skills slash command.\n`,
     );
     log(`  skipped /agentic-skill-router:skills prompt (user-modified)`);
     return;

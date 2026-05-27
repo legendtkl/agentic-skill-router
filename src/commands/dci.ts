@@ -32,14 +32,22 @@ import type { HostName } from "../types.ts";
 export async function cmdDci(argv: string[], hostName: HostName): Promise<number> {
   const [subcommand, ...rest] = argv;
   switch (subcommand) {
-    case "search": return cmdDciSearch(rest, hostName);
-    case "grep": return cmdDciGrep(rest, hostName);
-    case "find": return cmdDciFind(rest, hostName);
-    case "open": return cmdDciOpen(rest, hostName);
-    case "inspect": return cmdDciInspect(rest, hostName);
-    case "read": return cmdDciRead(rest, hostName);
-    case "select": return cmdDciSelect(rest, hostName);
-    case "budget": return cmdDciBudget(rest);
+    case "search":
+      return cmdDciSearch(rest, hostName);
+    case "grep":
+      return cmdDciGrep(rest, hostName);
+    case "find":
+      return cmdDciFind(rest, hostName);
+    case "open":
+      return cmdDciOpen(rest, hostName);
+    case "inspect":
+      return cmdDciInspect(rest, hostName);
+    case "read":
+      return cmdDciRead(rest, hostName);
+    case "select":
+      return cmdDciSelect(rest, hostName);
+    case "budget":
+      return cmdDciBudget(rest);
     case undefined:
     case "-h":
     case "--help":
@@ -378,9 +386,17 @@ async function cmdDciSelect(argv: string[], hostName: HostName): Promise<number>
         process.stderr.write(`warning: ${warning}\n`);
       }
     }
-    const result = selected.selected.length === 1
-      ? { ...selected.selected[0]!, query, recorded, warnings, selected: selected.selected, maxSelections: selected.maxSelections }
-      : { ...selected, query, recorded, warnings };
+    const result =
+      selected.selected.length === 1
+        ? {
+            ...selected.selected[0]!,
+            query,
+            recorded,
+            warnings,
+            selected: selected.selected,
+            maxSelections: selected.maxSelections,
+          }
+        : { ...selected, query, recorded, warnings };
     if (values.json) {
       process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     } else {

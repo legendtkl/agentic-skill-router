@@ -57,7 +57,7 @@ const lines = [
   "    · BUILTIN_SKILLS_VERSION      (host version it was verified against)",
   "    · BUILTIN_SKILLS_VERIFIED_AT  (ISO date YYYY-MM-DD)",
   "",
-  "See the README section \"Claude Code builtin skill list policy\" for the",
+  'See the README section "Claude Code builtin skill list policy" for the',
   "rationale and the full checklist.",
   "",
 ];

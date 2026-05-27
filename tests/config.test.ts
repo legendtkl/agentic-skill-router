@@ -80,10 +80,7 @@ test("loadConfig honours keepNames and keepIds", async () => {
   const path = join(dir, "config.json");
   try {
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(
-      path,
-      JSON.stringify({ keepNames: ["foo", "bar"], keepIds: ["user:baz"] }),
-    );
+    await writeFile(path, JSON.stringify({ keepNames: ["foo", "bar"], keepIds: ["user:baz"] }));
     const cfg = await loadConfig(path);
     assert.deepEqual(cfg.keepNames, ["foo", "bar"]);
     assert.deepEqual(cfg.keepIds, ["user:baz"]);
@@ -97,10 +94,7 @@ test("loadConfig ignores non-string entries in keepNames / keepIds", async () =>
   const path = join(dir, "config.json");
   try {
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(
-      path,
-      JSON.stringify({ keepNames: ["foo", 123, "", null], keepIds: "not-an-array" }),
-    );
+    await writeFile(path, JSON.stringify({ keepNames: ["foo", 123, "", null], keepIds: "not-an-array" }));
     const cfg = await loadConfig(path);
     assert.deepEqual(cfg.keepNames, ["foo"]);
     assert.equal(cfg.keepIds, undefined);
@@ -119,24 +113,15 @@ test("parseRouteMode accepts only supported modes", () => {
 });
 
 test("resolveUnusedForDays: CLI flag overrides config", () => {
-  assert.equal(
-    resolveUnusedForDays({ cliFlag: "60", config: { unusedForDays: 30, routeMode: "auto" } }),
-    60,
-  );
+  assert.equal(resolveUnusedForDays({ cliFlag: "60", config: { unusedForDays: 30, routeMode: "auto" } }), 60);
 });
 
 test("resolveUnusedForDays: missing CLI flag falls back to config", () => {
-  assert.equal(
-    resolveUnusedForDays({ config: { unusedForDays: 45, routeMode: "auto" } }),
-    45,
-  );
+  assert.equal(resolveUnusedForDays({ config: { unusedForDays: 45, routeMode: "auto" } }), 45);
 });
 
 test("resolveUnusedForDays: CLI flag with units", () => {
-  assert.equal(
-    resolveUnusedForDays({ cliFlag: "2w", config: { unusedForDays: 30, routeMode: "auto" } }),
-    14,
-  );
+  assert.equal(resolveUnusedForDays({ cliFlag: "2w", config: { unusedForDays: 30, routeMode: "auto" } }), 14);
 });
 
 test("isConfigKey accepts known keys and rejects others", () => {
@@ -214,16 +199,11 @@ test("setConfigValue serializes concurrent writes so neither key is dropped", as
   try {
     // Start from a known baseline so we can assert both writers preserve it.
     await writeFile(path, JSON.stringify({ futureKey: "keep" }) + "\n");
-    await Promise.all([
-      setConfigValue("routeMode", "metadata", path),
-      setConfigValue("unusedForDays", "42", path),
-    ]);
+    await Promise.all([setConfigValue("routeMode", "metadata", path), setConfigValue("unusedForDays", "42", path)]);
     const cfg = await loadConfig(path);
     assert.equal(cfg.routeMode, "metadata");
     assert.equal(cfg.unusedForDays, 42);
-    const raw = JSON.parse(
-      await (await import("node:fs/promises")).readFile(path, "utf8"),
-    ) as Record<string, unknown>;
+    const raw = JSON.parse(await (await import("node:fs/promises")).readFile(path, "utf8")) as Record<string, unknown>;
     // Unknown sibling key survives both writers.
     assert.equal(raw.futureKey, "keep");
     // Lock sibling file is cleaned up on success.
@@ -247,10 +227,7 @@ test("setConfigValue reaps stale lock from a dead PID and succeeds", async () =>
     // process.kill(pid, 0) reports ESRCH. Pair it with a fresh `startedAt`
     // so success proves the PID-liveness branch (not the age fallback).
     const fakePid = process.pid + 100000;
-    await writeFile(
-      lockPath,
-      JSON.stringify({ pid: fakePid, startedAt: Date.now() }),
-    );
+    await writeFile(lockPath, JSON.stringify({ pid: fakePid, startedAt: Date.now() }));
     await setConfigValue("routeMode", "metadata", path);
     const cfg = await loadConfig(path);
     assert.equal(cfg.routeMode, "metadata");
@@ -279,10 +256,7 @@ test("setConfigValue does not reap an empty lock file (atomic acquisition invari
     // instead of silently stealing the lock.
     await writeFile(lockPath, "");
     const started = Date.now();
-    await assert.rejects(
-      () => setConfigValue("routeMode", "metadata", path),
-      /timed out waiting for config lock/,
-    );
+    await assert.rejects(() => setConfigValue("routeMode", "metadata", path), /timed out waiting for config lock/);
     // Sanity: the call actually waited rather than returning immediately
     // after stealing the lock. The lock timeout is 5s, so anything >=1s
     // proves we backed off through the retry loop instead of hijacking.
@@ -307,10 +281,7 @@ test("setConfigValue reaps stale lock older than the age threshold and succeeds"
     await writeFile(path, JSON.stringify({ unusedForDays: 30 }) + "\n");
     // Use the live test process PID so the liveness check passes; rely on
     // the age fallback (startedAt > 60s ago) to declare the lock stale.
-    await writeFile(
-      lockPath,
-      JSON.stringify({ pid: process.pid, startedAt: Date.now() - 120_000 }),
-    );
+    await writeFile(lockPath, JSON.stringify({ pid: process.pid, startedAt: Date.now() - 120_000 }));
     await setConfigValue("routeMode", "body", path);
     const cfg = await loadConfig(path);
     assert.equal(cfg.routeMode, "body");

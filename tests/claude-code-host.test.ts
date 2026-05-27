@@ -47,11 +47,7 @@ test("claude-code builtin skills carry the static-snapshot provenance", async ()
     // The verifiedAt constant should look like an ISO date so downstream
     // consumers can parse it directly. Bumping the format would be a
     // breaking change to the public JSON projection.
-    assert.match(
-      BUILTIN_SKILLS_VERIFIED_AT,
-      /^\d{4}-\d{2}-\d{2}$/,
-      "BUILTIN_SKILLS_VERIFIED_AT must be YYYY-MM-DD",
-    );
+    assert.match(BUILTIN_SKILLS_VERIFIED_AT, /^\d{4}-\d{2}-\d{2}$/, "BUILTIN_SKILLS_VERIFIED_AT must be YYYY-MM-DD");
     assert.ok(BUILTIN_SKILLS_VERSION.length > 0, "BUILTIN_SKILLS_VERSION must be non-empty");
 
     // The CLI projection used by `skills list --json` must forward the

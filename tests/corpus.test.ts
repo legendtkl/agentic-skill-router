@@ -100,7 +100,10 @@ test("corpus search does not treat short Latin substrings as matches", () => {
   ];
 
   const broad = searchSkillCorpus(skills, { any: ["ai"], limit: 10 });
-  assert.deepEqual(broad.matches.map((match) => match.shortId), ["ai-helper"]);
+  assert.deepEqual(
+    broad.matches.map((match) => match.shortId),
+    ["ai-helper"],
+  );
 
   const singleChar = searchSkillCorpus(skills, { any: ["r"], limit: 10 });
   assert.equal(singleChar.matches.length, 0);
@@ -120,7 +123,10 @@ test("corpus --all multi-word terms require the full phrase or all tokens", () =
 
   const result = searchSkillCorpus(skills, { all: ["court form"], limit: 10 });
 
-  assert.deepEqual(result.matches.map((match) => match.shortId), ["court-form"]);
+  assert.deepEqual(
+    result.matches.map((match) => match.shortId),
+    ["court-form"],
+  );
 });
 
 test("corpus no-match diagnostics distinguish all-term and any-term filters", () => {

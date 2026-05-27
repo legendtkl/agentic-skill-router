@@ -10,10 +10,12 @@ const check = process.argv.includes("--check");
 
 await writeGeneratedFile(
   resolve(root, "plugins/codex/prompts/agentic-skill-router-skills.md"),
-  attachManagedMarker(renderSlashPrompt({
-    description: "Use the agentic-skill-router-skills skill with optional arguments.",
-    argumentHint: "[route <query>|list|suggest|status|enable <id...>|disable <id...> --yes]",
-  })),
+  attachManagedMarker(
+    renderSlashPrompt({
+      description: "Use the agentic-skill-router-skills skill with optional arguments.",
+      argumentHint: "[route <query>|list|suggest|status|enable <id...>|disable <id...> --yes]",
+    }),
+  ),
 );
 
 async function writeGeneratedFile(path, content) {

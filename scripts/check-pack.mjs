@@ -70,11 +70,10 @@ async function checkBinHelp() {
 async function checkPackContents() {
   let stdout;
   try {
-    ({ stdout } = await execFileAsync(
-      "npm",
-      ["pack", "--dry-run", "--json", "--ignore-scripts"],
-      { cwd: root, maxBuffer: 4 * 1024 * 1024 },
-    ));
+    ({ stdout } = await execFileAsync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+      cwd: root,
+      maxBuffer: 4 * 1024 * 1024,
+    }));
   } catch (err) {
     const stderr = typeof err?.stderr === "string" ? err.stderr : "";
     await fail(`\`npm pack --dry-run --json\` failed: ${stderr || err?.message || err}`);

@@ -95,10 +95,7 @@ test("user skill named 'agentic-skill-router-skills' is NOT auto-kept (only plug
 });
 
 test("config keepNames protects matching skills", () => {
-  const skills = [
-    mkSkill({ name: "review" }),
-    mkSkill({ name: "foo" }),
-  ];
+  const skills = [mkSkill({ name: "review" }), mkSkill({ name: "foo" })];
   const out = suggest(skills, new Map(), {
     unusedForDays: 30,
     now: NOW,
@@ -164,8 +161,10 @@ test("ambiguous bare-name match does NOT mask never-used", () => {
 test("plugin-namespaced usage attributes correctly to that plugin's skill", () => {
   const a = mkSkill({ name: "rescue", id: "user:rescue" });
   const b = mkSkill({
-    name: "rescue", id: "plugin:codex@openai-codex:rescue",
-    source: "plugin", pluginKey: "codex@openai-codex",
+    name: "rescue",
+    id: "plugin:codex@openai-codex:rescue",
+    source: "plugin",
+    pluginKey: "codex@openai-codex",
   });
   const usage = new Map<string, UsageStat>([
     ["codex:rescue", { skillId: "codex:rescue", lastUsed: new Date("2026-04-25"), callCount: 5, firstSeen: null }],
@@ -181,12 +180,16 @@ test("plugin-short conflict surfaces attributionAmbiguous flag", () => {
   // Two plugins sharing pluginShort "codex" but different marketplaces.
   // Transcript only carries the short form, so attribution is impossible.
   const a = mkSkill({
-    name: "rescue", id: "plugin:codex@market-a:rescue",
-    source: "plugin", pluginKey: "codex@market-a",
+    name: "rescue",
+    id: "plugin:codex@market-a:rescue",
+    source: "plugin",
+    pluginKey: "codex@market-a",
   });
   const b = mkSkill({
-    name: "rescue", id: "plugin:codex@market-b:rescue",
-    source: "plugin", pluginKey: "codex@market-b",
+    name: "rescue",
+    id: "plugin:codex@market-b:rescue",
+    source: "plugin",
+    pluginKey: "codex@market-b",
   });
   const usage = new Map<string, UsageStat>([
     // The model invoked "codex:rescue" — we can't tell which plugin.
@@ -206,12 +209,16 @@ test("plugin-short conflict surfaces attributionAmbiguous flag", () => {
 
 test("plugin-short conflict resolved by full-key transcript record", () => {
   const a = mkSkill({
-    name: "rescue", id: "plugin:codex@market-a:rescue",
-    source: "plugin", pluginKey: "codex@market-a",
+    name: "rescue",
+    id: "plugin:codex@market-a:rescue",
+    source: "plugin",
+    pluginKey: "codex@market-a",
   });
   const b = mkSkill({
-    name: "rescue", id: "plugin:codex@market-b:rescue",
-    source: "plugin", pluginKey: "codex@market-b",
+    name: "rescue",
+    id: "plugin:codex@market-b:rescue",
+    source: "plugin",
+    pluginKey: "codex@market-b",
   });
   // Transcript carried the full plugin key — only `a` gets credit.
   const usage = new Map<string, UsageStat>([
@@ -229,18 +236,14 @@ test("plugin-short conflict resolved by full-key transcript record", () => {
 });
 
 test("output sorted by confidence desc, then oldest-first", () => {
-  const skills = [
-    mkSkill({ name: "stale-newer" }),
-    mkSkill({ name: "never-used" }),
-    mkSkill({ name: "stale-older" }),
-  ];
+  const skills = [mkSkill({ name: "stale-newer" }), mkSkill({ name: "never-used" }), mkSkill({ name: "stale-older" })];
   const usage = new Map<string, UsageStat>([
     ["stale-newer", { skillId: "stale-newer", lastUsed: new Date("2026-02-15"), callCount: 1, firstSeen: null }],
     ["stale-older", { skillId: "stale-older", lastUsed: new Date("2026-01-01"), callCount: 1, firstSeen: null }],
   ]);
   const out = suggest(skills, usage, { unusedForDays: 30, now: NOW });
   assert.equal(out.length, 3);
-  assert.equal(out[0]!.skill.name, "never-used");      // high
-  assert.equal(out[1]!.skill.name, "stale-older");     // medium, older first
+  assert.equal(out[0]!.skill.name, "never-used"); // high
+  assert.equal(out[1]!.skill.name, "stale-older"); // medium, older first
   assert.equal(out[2]!.skill.name, "stale-newer");
 });

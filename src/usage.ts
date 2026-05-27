@@ -47,11 +47,7 @@ export function isPluginShortAmbiguous(skill: Skill, inventory: Skill[]): boolea
  *   3. Bare name fallback ("foo"). Skipped when `inventory` is provided and
  *      multiple skills claim the same name — see {@link lookupUsageStrict}.
  */
-export function lookupUsage(
-  skill: Skill,
-  usage: Map<string, UsageStat>,
-  inventory?: Skill[],
-): UsageStat | undefined {
+export function lookupUsage(skill: Skill, usage: Map<string, UsageStat>, inventory?: Skill[]): UsageStat | undefined {
   // (1) full plugin key form takes precedence — always unambiguous.
   if (skill.pluginKey) {
     const full = usage.get(skill.id);
@@ -235,9 +231,7 @@ export async function collectUsageStatsDetailed(
   const previous = useCache ? await readCache(cachePath) : null;
   const next: Record<string, CachedFileEntry> = {};
 
-  const sinceMs = opts.since instanceof Date && !Number.isNaN(opts.since.getTime())
-    ? opts.since.getTime()
-    : null;
+  const sinceMs = opts.since instanceof Date && !Number.isNaN(opts.since.getTime()) ? opts.since.getTime() : null;
 
   const stats = new Map<string, MutableStat>();
 

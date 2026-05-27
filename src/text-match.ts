@@ -106,12 +106,7 @@ const METADATA_GENERIC_TERMS: ReadonlySet<string> = new Set([
 // aliases would otherwise contribute full distinctive weight. This is the
 // original `SNIPPET_GENERIC_TERMS` set from dci.ts, kept here so the DCI
 // snippet selector retains its pre-refactor ranking semantics.
-const DCI_SNIPPET_EXTRA_GENERIC_TERMS: ReadonlySet<string> = new Set([
-  "and",
-  "for",
-  "the",
-  "with",
-]);
+const DCI_SNIPPET_EXTRA_GENERIC_TERMS: ReadonlySet<string> = new Set(["and", "for", "the", "with"]);
 
 const CJK_RE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+$/u;
 
@@ -135,7 +130,10 @@ const CJK_RUN_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Scri
  */
 export function termsFor(input: string, mode: TermsMode = "lexical"): Set<string> {
   if (mode === "metadata") {
-    const prepared = input.normalize("NFKC").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+    const prepared = input
+      .normalize("NFKC")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .toLowerCase();
     return collectTerms(prepared, METADATA_TOKEN_RE, METADATA_SPLIT_RE);
   }
   const prepared = input.normalize("NFKC").toLowerCase();
@@ -160,7 +158,10 @@ export function boundaryTermsFor(input: string): Set<string> {
  * apply uniformly.
  */
 export function compact(input: string): string {
-  return input.normalize("NFKC").toLowerCase().replace(/[^\p{Letter}\p{Number}]+/gu, "");
+  return input
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}]+/gu, "");
 }
 
 /**
