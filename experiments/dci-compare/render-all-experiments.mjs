@@ -119,6 +119,47 @@ async function loadScalingHard() {
   return rows;
 }
 
+async function loadRerunDir(name) {
+  const dir = join(ROOT, "experiments/dci-compare/runs", name);
+  const cellsPath = join(dir, "cells.json");
+  const aggPath = join(dir, "aggregates.json");
+  if (!existsSync(cellsPath) || !existsSync(aggPath)) return null;
+  return {
+    name,
+    cells: JSON.parse(await readFile(cellsPath, "utf8")),
+    aggregates: JSON.parse(await readFile(aggPath, "utf8")),
+  };
+}
+
+// New 16-variant fresh rerun (replaces §1+§2 historical data).
+// Claude Code still comes from the full rerun; Codex is overlaid with the
+// corrected new-CLI rerun so the HTML reflects the latest validated Codex run.
+async function loadRerun150() {
+  const base = await loadRerunDir("rerun-150-full-2026-05-26");
+  const codex = await loadRerunDir("rerun-codex-newcli-full-2026-05-26");
+  if (!base && !codex) return null;
+  if (!base) return { ...codex, sources: { codex: codex.name } };
+  if (!codex) return { ...base, sources: { claude: base.name, codex: base.name } };
+
+  const cells = [
+    ...base.cells.filter(c => c.host !== "codex"),
+    ...codex.cells.filter(c => c.host === "codex"),
+  ];
+  const aggregates = {};
+  for (const [key, value] of Object.entries(base.aggregates)) {
+    if (!key.startsWith("codex-")) aggregates[key] = value;
+  }
+  for (const [key, value] of Object.entries(codex.aggregates)) {
+    if (key.startsWith("codex-")) aggregates[key] = value;
+  }
+  return {
+    name: `${base.name} + ${codex.name}`,
+    cells,
+    aggregates,
+    sources: { claude: base.name, codex: codex.name },
+  };
+}
+
 async function loadEasy78KSummaries() {
   // For per-tier (single/multi) split which all-traces.json doesn't preserve
   const cellNames = ["claude-J-bounded-v2", "claude-K-bounded", "claude-M-bm25", "codex-J-bounded-v2", "codex-K-bounded", "codex-M-bm25"];
@@ -150,7 +191,7 @@ function renderHeader() {
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"/>
-<title>Disabled-Skill Routing — All Experiments</title>
+<title>Agentic Skill Router - All Experiments about retriever</title>
 <style>
   :root {
     --claude: #8b5cf6;
@@ -202,9 +243,6 @@ function renderHeader() {
   .bar-fill { height: 100%; background: var(--claude); }
   .bar-fill.codex { background: var(--codex); }
   .bar-fill.paper { background: var(--paper); }
-  .coverage-table td { text-align: center; }
-  .coverage-yes { background: #d1fae5; color: #065f46; font-weight: 600; }
-  .coverage-no { background: #fee2e2; color: #991b1b; }
   .trace-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 10px; margin-top: 8px; }
   .trace-card { background: #fafafa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 10px; }
   .trace-card .head { font-weight: 600; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
@@ -219,15 +257,14 @@ function renderHeader() {
   .tline .txt { color: #111; background: #f0f0f0; padding: 3px 6px; border-radius: 3px; white-space: pre-wrap; word-break: break-all; }
 </style>
 </head><body>
-<h1>Disabled-Skill Routing — All Experiments</h1>
+<h1>Agentic Skill Router - All Experiments about retriever</h1>
 <p class="intro">
-  Single self-contained HTML covering every experiment in
-  <code>REPORT-claudemd-optimized.md</code>. All sections, aggregate tables, per-query matrices,
-  execution traces (where transcripts survived), and variant SKILL.md
-  implementations are inlined — no external file references. Organized by
-  <b>dataset size</b> (150 → 1K → 79K Hard → 78K Easy 75-core), and within each
-  size split by <b>host</b>
-  (<span class="pill pill-claude">claude</span> = Opus 4.7,
+  Single self-contained HTML for the current routing comparison. Aggregate tables, per-query
+  matrices, execution traces, and variant SKILL.md implementations are inlined — no external
+  file references. Organized by the main evaluation stages:
+  <b>24 queries / 150 skills</b>, a <b>1K synthetic Codex scale check</b>, and
+  <b>78K Easy / 75 core skills</b>, split by <b>host</b>
+  (<span class="pill pill-claude">claude</span> = Opus 4.7 high reasoning,
   <span class="pill pill-codex">codex</span> = GPT-5.5 high reasoning).
   Paper baselines (SkillRouter arXiv:2603.22455) shown as
   <span class="pill pill-paper">paper</span> rows where comparable.
@@ -239,75 +276,127 @@ function renderToc() {
   return `<div class="toc">
   <b>Sections:</b>
   <ul>
-    <li><a href="#coverage">0. Experiment coverage matrix</a> — what was run on which host</li>
-    <li><a href="#small-claude">1. 150-skill × Claude Code</a> — 9 variants × with/without CLAUDE.md (paired), per-query matrix + traces</li>
-    <li><a href="#small-codex">2. 150-skill × Codex</a> — 16 variants (9 initial + 7 follow-on), per-query matrix + traces</li>
-    <li><a href="#medium-codex">3. 1K synthetic × Codex</a> — L-agentic scale check</li>
-    <li><a href="#hard-claude">4. 79K Hard × Claude Code</a> — J-bounded-v2 large-pool stress (no traces)</li>
-    <li><a href="#hard-codex">5. 79K Hard × Codex</a> — paper-core single + current-24 subset</li>
-    <li><a href="#easy-claude">6.1 78K Easy × 75 core × Claude Code</a> — K / J-v2 / M-bm25 (§9)</li>
-    <li><a href="#easy-codex">6.2 78K Easy × 75 core × Codex</a> — K / J-v2 / M-bm25 (§9)</li>
-    <li><a href="#easy-compare">7. 78K Easy cross-cell + paper baselines</a></li>
-    <li><a href="#variants">8. Variant implementations</a> — full SKILL.md for every variant</li>
+    <li><a href="#background">Background</a> — agentic retrieval papers and benchmark source</li>
+    <li><a href="#overview">0. Overview</a> — purpose, strategy families, metrics, and datasets</li>
+    <li><a href="#claude-150">1. Claude Code with 24 queries/150 skills</a></li>
+    <li><a href="#rerun-claude-with">1.1 with-CLAUDE.md</a></li>
+    <li><a href="#rerun-claude-without">1.2 without-CLAUDE.md</a></li>
+    <li><a href="#rerun-codex">2. CodeX with 24 queries/150 skills</a> — includes the latest L-agentic 1K synthetic row</li>
+    <li><a href="#easy-78k">3. 78K Easy with 75 core skills</a></li>
+    <li><a href="#easy-claude">3.1 Claude Code</a></li>
+    <li><a href="#easy-codex">3.2 CodeX</a></li>
+    <li><a href="#easy-compare">3.3 Cross-cell &amp; paper baselines</a></li>
+    <li><a href="#variants">4. Variant implementations</a> — full SKILL.md for every variant</li>
   </ul>
 </div>`;
 }
 
-// ---------- §0 coverage ----------
+// ---------- Background + §0 overview ----------
 
-function renderCoverage() {
-  const rows = [
-    { v: "A-router", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "B-cc", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "C-lite", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "D-agentic", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "E-digest", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "G-native", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "H-bounded", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "I-meta", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "J-bounded (v1)", c150: "✓", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "J-bounded-v2", c150: "✓", c1k: "—", chard: "✓", ceasy: "✓", x150: "—", x1k: "—", xhard: "✓", xeasy: "✓" },
-    { v: "K-bounded", c150: "—", c1k: "—", chard: "—", ceasy: "✓", x150: "✓", x1k: "—", xhard: "—", xeasy: "✓" },
-    { v: "K-lite (high)", c150: "—", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "K-lite (fixed)", c150: "—", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "—", xhard: "—", xeasy: "—" },
-    { v: "L-agentic", c150: "—", c1k: "—", chard: "—", ceasy: "—", x150: "✓", x1k: "✓", xhard: "—", xeasy: "—" },
-    { v: "M-bm25", c150: "—", c1k: "—", chard: "—", ceasy: "✓", x150: "✓", x1k: "—", xhard: "✓✓", xeasy: "✓" },
-  ];
-  const cell = (v) => `<td class="${v.startsWith("✓") ? "coverage-yes" : "coverage-no"}">${v}</td>`;
-  let tbody = "";
-  for (const r of rows) {
-    tbody += `<tr>
-      <td><b>${escapeHtml(r.v)}</b></td>
-      ${cell(r.c150)}${cell(r.c1k)}${cell(r.chard)}${cell(r.ceasy)}
-      ${cell(r.x150)}${cell(r.x1k)}${cell(r.xhard)}${cell(r.xeasy)}
-    </tr>`;
-  }
-  return `<h2 id="coverage">0. Experiment coverage matrix</h2>
+function renderBackground() {
+  return `<h2 id="background">Background</h2>
 <p class="intro">
-  Which (variant × host × dataset-size) combinations were actually executed.
-  <b>✓</b> = single run available, <b>✓✓</b> = multiple variations / query sets.
+  Recent retrieval-for-agent papers point in the same direction: stronger agents benefit when the
+  retrieval interface becomes more tool-like, inspectable, and iterative instead of a single opaque
+  top-k call. These experiments apply that idea to skill routing: give the agent a bounded CLI
+  retriever over skill metadata / corpora, then measure whether it can recover the right hidden skill
+  with less prompt bloat.
 </p>
-<table class="coverage-table">
-  <thead>
+<table>
+  <thead><tr><th>Paper</th><th>Main relevance to this report</th></tr></thead>
+  <tbody>
     <tr>
-      <th rowspan="2">Variant</th>
-      <th colspan="4"><span class="pill pill-claude">Claude Code</span></th>
-      <th colspan="4"><span class="pill pill-codex">Codex</span></th>
+      <td><a href="https://arxiv.org/abs/2605.05242">Beyond Semantic Similarity: Rethinking Retrieval for Agentic Search via Direct Corpus Interaction</a></td>
+      <td>Frames retrieval as an interface-design problem: agents can directly interact with corpora through tools such as search, reads, and scripts, which supports multi-step hypothesis refinement beyond fixed semantic top-k retrieval.</td>
     </tr>
     <tr>
-      <th>150</th><th>1K</th><th>79K Hard</th><th>78K Easy</th>
-      <th>150</th><th>1K</th><th>79K Hard</th><th>78K Easy</th>
+      <td><a href="https://arxiv.org/abs/2605.15184">Is Grep All You Need? How Agent Harnesses Reshape Agentic Search</a></td>
+      <td>Shows that retrieval quality is coupled to the agent harness and tool-output style; lexical retrieval can be competitive, but the surrounding CLI / tool loop changes outcomes.</td>
     </tr>
-  </thead>
-  <tbody>${tbody}</tbody>
+    <tr>
+      <td><a href="https://arxiv.org/abs/2605.05538">AgenticRAG: Agentic Retrieval for Enterprise Knowledge Bases</a></td>
+      <td>Motivates wrapping existing search infrastructure with agent tools such as search, find, open, and summarize so models can navigate evidence iteratively.</td>
+    </tr>
+    <tr>
+      <td><a href="https://arxiv.org/abs/2605.10848">Rethinking Agentic Search with Pi-Serini: Is Lexical Retrieval Sufficient?</a></td>
+      <td>Tests BM25-style retrieval inside a deeper agent loop, highlighting retrieval depth, browsing, and document reading as practical controls for agentic search.</td>
+    </tr>
+    <tr>
+      <td><a href="https://arxiv.org/abs/2603.22455">SkillRouter: Skill Routing for LLM Agents at Scale</a></td>
+      <td>Provides the benchmark framing and data source used here: large-scale skill routing, where the agent must select relevant skills without loading every skill body into the prompt.</td>
+    </tr>
+  </tbody>
 </table>
 <div class="note">
-  <b>Claude vs Codex asymmetry:</b> K-bounded / K-lite / L-agentic were only executed on Codex
-  at 150-skill. Claude got K / J-v2 / M-bm25 only at 78K Easy (§9). 1K synthetic was Codex-only.
-  Fully closing these gaps would require ~2-4 hours of additional Claude runtime per missing
-  variant — see <code>REPORT-claudemd-optimized.md</code> §12 follow-ups.
+  <b>Connection:</b> the papers above converge on a simple operational claim: agents improve when
+  retrieval is exposed as controllable tools. This report tests that claim in the narrower setting
+  of disabled-skill routing for Claude Code and CodeX.
+</div>`;
+}
+
+function renderOverview() {
+  return `<h2 id="overview">0. Overview</h2>
+<div class="grid-2">
+  <div class="panel">
+    <h3>Experiment Goal</h3>
+    <ul>
+      <li>Evaluate whether an agent can recover the correct disabled skill from a user task.</li>
+      <li>Compare native model selection against router-assisted strategies.</li>
+      <li>Measure both quality and operating cost: accuracy, trigger behavior, turns, context growth, tool calls, and estimated spend.</li>
+      <li>Test whether a CLI-style retriever keeps the prompt small while scaling from 150 skills to a synthetic 1K corpus.</li>
+    </ul>
+  </div>
+  <div class="panel">
+    <h3>Strategy Implementations</h3>
+    <table>
+      <thead><tr><th>Category</th><th>Variants</th><th>Implementation idea</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Native baseline</b></td>
+          <td><code>G-native</code></td>
+          <td>No explicit router. The host model chooses directly from its normal skill context.</td>
+        </tr>
+        <tr>
+          <td><b>Bash-based retrieval</b></td>
+          <td><code>B-cc</code>, <code>C-lite</code>, <code>H-bounded</code>, <code>I-meta</code>, <code>J-bounded</code>, <code>J-bounded-v2</code>, <code>K-bounded</code>, <code>K-lite</code></td>
+          <td>The agent uses shell primitives such as <code>find</code>, <code>grep</code>, <code>sed</code>, and bounded frontmatter reads over disabled <code>SKILL.md</code> files. Later variants tighten output budgets, metadata-only rules, and tie-break logic.</td>
+        </tr>
+        <tr>
+          <td><b>Tool-wrapped agentic retrieval</b></td>
+          <td><code>A-router</code>, <code>D-agentic</code>, <code>D-agentic-metadata</code>, <code>E-digest</code>, <code>L-agentic</code></td>
+          <td>Retrieval mechanics are exposed through stable CLI/tool primitives instead of ad hoc shell browsing: one-shot <code>skills route</code>, DCI <code>search/inspect</code>, compact <code>skill-corpus</code> catalog/show, or explicit <code>corpus search</code> / <code>corpus inspect</code> loops.</td>
+        </tr>
+        <tr>
+          <td><b>Large-scale BM25 retrieval</b></td>
+          <td><code>M-bm25</code></td>
+          <td>Uses BM25-ranked corpus search as the scalable lexical retriever, especially for the 78K Easy setting where full prompt loading is impossible.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </div>
-`;
+<div class="grid-2">
+  <div class="panel">
+    <h3>Metric Meaning</h3>
+    <ul>
+      <li><b>Accuracy:</b> exact expected-skill match over the query set.</li>
+      <li><b>Trigger:</b> whether the router workflow was actually invoked; native rows use n/a.</li>
+      <li><b>Turns:</b> number of agent interaction turns needed for the selection.</li>
+      <li><b>ctxStart / ctxEnd / growth:</b> context footprint before and after routing.</li>
+      <li><b>Cost / duration:</b> estimated model cost and summed per-query runtime.</li>
+      <li><b>Tool calls / Bash errors / cache hit:</b> operational signals for CLI reliability and caching behavior.</li>
+    </ul>
+  </div>
+  <div class="panel">
+    <h3>Dataset Setup</h3>
+    <ul>
+      <li><b>24 queries / 150 skills:</b> controlled comparison used for Claude Code and CodeX strategy ranking.</li>
+      <li><b>1K synthetic:</b> the same 150-skill corpus plus 850 synthetic noise skills; used only for CodeX L-agentic scalability.</li>
+      <li><b>78K Easy / 75 core:</b> larger benchmark slice used to compare K-bounded, J-bounded-v2, and M-bm25 against paper baselines.</li>
+      <li><b>Source benchmark:</b> derived from the SkillRouter paper's large-scale skill-routing framing and SkillsBench-style data.</li>
+    </ul>
+  </div>
+</div>`;
 }
 
 // ---------- trace rendering ----------
@@ -631,85 +720,6 @@ function renderCodex150(traces) {
 `;
 }
 
-// ---------- §3 Codex 1K ----------
-
-function renderCodex1K(traces) {
-  const base = traces["codex-150-l-agentic"];
-  const onek = traces["codex-1k-l-agentic"];
-  if (!base || !onek) return "";
-  const baseAgg = aggregateMetrics(base.variants["L-agentic"]);
-  const onekAgg = aggregateMetrics(onek.variants["L-agentic"]);
-
-  // Per-query
-  const queries = [...new Set([...Object.keys(base.variants["L-agentic"]), ...Object.keys(onek.variants["L-agentic"])])].sort();
-  let body = "";
-  for (const q of queries) {
-    const r150 = base.variants["L-agentic"][q];
-    const r1k = onek.variants["L-agentic"][q];
-    const exp = r150?.expected || r1k?.expected || "—";
-    const fmt = r => {
-      if (!r) return `<td class="num gray">—</td>`;
-      const cls = r.hit ? "hit" : "miss";
-      const m = r.metrics || {};
-      const meta = `${m.durationMs ? (m.durationMs/1000).toFixed(0) + "s" : "—"} · ${m.ctxEnd ? num(m.ctxEnd / 1000, 0) + "k" : "—"} · ${m.costUsd ? dollarsSmall(m.costUsd) : "—"}`;
-      return `<td class="num ${cls}">${r.hit ? "✓" : "✗"} ${escapeHtml(r.matched || "no-match")}<span class="meta">${meta}</span></td>`;
-    };
-    body += `<tr class="matrix-row"><td><code>${escapeHtml(q)}</code></td><td><code>${escapeHtml(exp)}</code></td>${fmt(r150)}${fmt(r1k)}</tr>`;
-  }
-
-  const traceBlocks = [
-    { label: "codex/L-150", host: "codex", variants: { "L-agentic": base.variants["L-agentic"] } },
-    { label: "codex/L-1K", host: "codex", variants: { "L-agentic": onek.variants["L-agentic"] } },
-  ];
-
-  return `<h2 id="medium-codex">3. 1K synthetic × Codex <span class="pill pill-codex">codex</span></h2>
-<p class="intro">
-  L-agentic (CLI <code>corpus search/inspect</code> + structured candidates) scaled past 150 to
-  1K = 150-skill comparison set + 850 synthetic noise skills. Validates that the CLI abstraction
-  handles ~7× the candidate pool without prompt blowup.
-</p>
-<div class="note"><b>No Claude Code equivalent.</b> L-agentic was never ported to Claude or run at 1K scale on Claude.</div>
-<table>
-  <thead><tr><th>Corpus</th><th class="num">Accuracy</th><th class="num">Cost est.</th><th class="num">Wall</th><th class="num">Total turns</th><th class="num">Avg ctx<sub>end</sub></th><th class="num">In tokens</th><th class="num">Out tokens</th><th class="num">Reasoning</th></tr></thead>
-  <tbody>
-    <tr>
-      <td><b>L-agentic × 150-skill</b></td>
-      <td class="num hit">${baseAgg.hits}/${baseAgg.n} (${pct(baseAgg.accuracy)})</td>
-      <td class="num">${dollars(baseAgg.sumCost)}</td>
-      <td class="num">${secs(baseAgg.sumDur)}</td>
-      <td class="num">${baseAgg.sumTurns}</td>
-      <td class="num">${num(baseAgg.avgCtxEnd / 1000, 1)}k</td>
-      <td class="num">${num(baseAgg.sumInput / 1000, 1)}k</td>
-      <td class="num">${num(baseAgg.sumOutput)}</td>
-      <td class="num">${num(baseAgg.sumReasoning)}</td>
-    </tr>
-    <tr>
-      <td><b>L-agentic × 1K synthetic</b></td>
-      <td class="num mid">${onekAgg.hits}/${onekAgg.n} (${pct(onekAgg.accuracy)})</td>
-      <td class="num">${dollars(onekAgg.sumCost)}</td>
-      <td class="num">${secs(onekAgg.sumDur)}</td>
-      <td class="num">${onekAgg.sumTurns}</td>
-      <td class="num">${num(onekAgg.avgCtxEnd / 1000, 1)}k</td>
-      <td class="num">${num(onekAgg.sumInput / 1000, 1)}k</td>
-      <td class="num">${num(onekAgg.sumOutput)}</td>
-      <td class="num">${num(onekAgg.sumReasoning)}</td>
-    </tr>
-  </tbody>
-</table>
-<details open>
-  <summary>3.1 Per-query matrix (L-agentic 150 vs 1K, each cell shows matched + duration/ctx/cost)</summary>
-  <table style="font-size:11.5px">
-    <thead><tr><th>Query</th><th>Expected</th><th class="num">L-agentic × 150</th><th class="num">L-agentic × 1K</th></tr></thead>
-    <tbody>${body}</tbody>
-  </table>
-</details>
-<details>
-  <summary>3.2 Per-query execution traces — 48 traces inlined</summary>
-  ${renderPerQueryTraces(traceBlocks)}
-</details>
-`;
-}
-
 // ---------- §4 Claude 79K Hard (cells.json only, no JSONL) ----------
 
 function renderHardClaude(scaling) {
@@ -758,7 +768,7 @@ function renderHardClaude(scaling) {
     </details>`;
   }
 
-  return `<h2 id="hard-claude">4. 79K Hard × Claude Code <span class="pill pill-claude">claude</span></h2>
+  return `<h2 id="hard-claude">3. 79K Hard × Claude Code <span class="pill pill-claude">claude</span></h2>
 <p class="intro">
   J-bounded-v2 scaling from 150 to 79,141 Hard pool. v2 fixes v1's shell glob ARG_MAX overflow
   and removes head-20 truncation. Bounded payload, cost only +35%, accuracy drops from 22/24 to 12/24.
@@ -810,7 +820,7 @@ function renderHardCodex(traces) {
     </tr>`;
     traceBlocks.push({ label: `codex/${e.queryset}`, host: "codex", variants: { [e.variant]: vdata } });
   }
-  return `<h2 id="hard-codex">5. 79K Hard × Codex <span class="pill pill-codex">codex</span></h2>
+  return `<h2 id="hard-codex">4. 79K Hard × Codex <span class="pill pill-codex">codex</span></h2>
 <p class="intro">
   Codex M-bm25 and J-bounded-v2 against the full 79,141-skill Hard pool on two query sets.
   J-v2 has 3 outputs in raw <code>name:</code> form rather than opaque <code>sr-*</code> ids;
@@ -834,7 +844,7 @@ function renderHardCodex(traces) {
 
 // ---------- §6 Easy 78K per host ----------
 
-function renderEasyHost(host, summaries) {
+function renderEasyHost(host, summaries, sectionNum) {
   const matching = Object.entries(summaries).filter(([k]) => k.startsWith(host + "-"));
   let tbody = "";
   for (const [name, s] of matching) {
@@ -854,9 +864,8 @@ function renderEasyHost(host, summaries) {
   }
   const idSuffix = host === "claude" ? "easy-claude" : "easy-codex";
   const pillClass = host === "claude" ? "pill-claude" : "pill-codex";
-  const sectionNum = host === "claude" ? "6.1" : "6.2";
-  const hostLabel = host === "claude" ? "Claude Code" : "Codex";
-  return `<h2 id="${idSuffix}">${sectionNum}. 78K Easy × 75 core × ${hostLabel} <span class="pill ${pillClass}">${host}</span></h2>
+  const hostLabel = host === "claude" ? "Claude Code" : "CodeX";
+  return `<h3 id="${idSuffix}">${sectionNum} ${hostLabel} <span class="pill ${pillClass}">${host}</span></h3>
 <table>
   <thead>
     <tr>
@@ -974,7 +983,7 @@ function renderEasyCompare(summaries, traces) {
     traceBlocks.push({ label: k, host, variants: traceBlk.variants });
   }
 
-  return `<h2 id="easy-compare">7. 78K Easy — cross-cell &amp; paper baselines + per-query traces</h2>
+  return `<h3 id="easy-compare">3.3 Cross-cell &amp; paper baselines</h3>
 <div class="takeaway">
   <b>Headline:</b> Best cell <b>codex/J-bounded-v2 at 40.0%</b> exceeds the strongest paper nd
   baseline (Qwen3-Emb-8B 30.7%) by +9.3pp, and beats BM25 with full body (34.7%). 6/6 cells beat
@@ -997,7 +1006,7 @@ function renderEasyCompare(summaries, traces) {
 </table>
 
 <details open>
-  <summary>7.1 Per-query matrix (75 queries × 6 cells, each cell shows top1 + turns/duration/ctx)</summary>
+  <summary>3.3.1 Per-query matrix (75 queries × 6 cells, each cell shows top1 + turns/duration/ctx)</summary>
   <p class="footnote">Leading badge: <span class="hit">✓6</span> = all 6 cells hit, <span class="miss">✗0</span> = all miss, <span class="mid">N/6</span> = partial.</p>
   <table style="font-size:11px">
     <thead>${matrixHead}</thead>
@@ -1006,8 +1015,345 @@ function renderEasyCompare(summaries, traces) {
 </details>
 
 <details>
-  <summary>7.2 Per-query execution traces — 450 traces inlined</summary>
+  <summary>3.3.2 Per-query execution traces — 450 traces inlined</summary>
   ${renderPerQueryTraces(traceBlocks)}
+</details>
+`;
+}
+
+function renderEasySection(summaries, traces) {
+  return `<h2 id="easy-78k">3. 78K Easy with 75 core skills</h2>
+<p class="intro">
+  This section groups the larger Easy split into one comparison block. It evaluates three router
+  variants (K-bounded, J-bounded-v2, M-bm25) on both hosts over 75 core Easy queries drawn from
+  the 78K-skill pool, then compares the six cells against published paper baselines.
+</p>
+${renderEasyHost("claude", summaries, "3.1")}
+${renderEasyHost("codex", summaries, "3.2")}
+${renderEasyCompare(summaries, traces)}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// FRESH RERUN sections (replace §1 + §2 historical data)
+// 16 variants × 24 queries × 2 conditions for Claude + 16 × 24 for Codex.
+// All metrics come from the new rerun via aggregate-rerun.mjs.
+// ─────────────────────────────────────────────────────────────────────────
+
+const VARIANT_ORDER = [
+  "G-native", "A-router", "B-cc", "C-lite", "D-agentic", "D-agentic-metadata",
+  "E-digest", "H-bounded", "I-meta", "J-bounded", "J-bounded-v2",
+  "K-bounded", "K-lite", "K-lite-replicate", "L-agentic", "M-bm25",
+];
+
+function fmtPct(x) { return x == null ? "—" : (x * 100).toFixed(1) + "%"; }
+function fmtCost(x) { return x == null ? "—" : "$" + x.toFixed(2); }
+function fmtCostS(x) { return x == null ? "—" : "$" + x.toFixed(3); }
+function fmtSec(ms) { return ms == null ? "—" : (ms / 1000).toFixed(0) + "s"; }
+function fmtK(x) { return x == null ? "—" : (x / 1000).toFixed(1) + "k"; }
+function fmtNum(x, dp = 0) { return x == null ? "—" : x.toFixed(dp); }
+
+function renderRerunAggregateRow(label, a, options = {}) {
+  if (!a) return "";
+  const accCl = a.accuracy >= 0.9 ? "hit" : a.accuracy >= 0.7 ? "mid" : "miss";
+  const trigStr = options.triggerText ?? `${a.triggers}/${a.n}`;
+  const badge = options.badge ? ` <span class="badge">${escapeHtml(options.badge)}</span>` : "";
+  return `<tr>
+      <td><b>${escapeHtml(label)}</b>${badge}</td>
+      <td class="num ${accCl}">${a.hits}/${a.n} <span class="gray">(${fmtPct(a.accuracy)})</span></td>
+      <td class="num">${trigStr}</td>
+      <td class="num">${a.totalTurns}</td>
+      <td class="num">${fmtNum(a.avgTurns, 1)}</td>
+      <td class="num">${fmtK(a.avgCtxStart)}</td>
+      <td class="num">${fmtK(a.avgCtxEnd)}</td>
+      <td class="num">${fmtK(a.avgCtxGrowth)}</td>
+      <td class="num">${fmtCost(a.sumCost)}</td>
+      <td class="num">${fmtSec(a.sumDuration)}</td>
+      <td class="num">${a.totalToolCalls}</td>
+      <td class="num">${a.totalBashErrors}</td>
+      <td class="num">${fmtPct(a.avgCacheHitRatio)}</td>
+      <td class="num">${fmtNum(a.avgOutputTextLen)}</td>
+    </tr>`;
+}
+
+function renderRerunAggregateTable(aggregates, host, condition, options = {}) {
+  // One row per variant for (host, condition). Shows 8 core + extras.
+  let rows = "";
+  for (const v of VARIANT_ORDER) {
+    const key = `${host}-${v}-${condition}`;
+    const a = aggregates[key];
+    if (!a) continue;
+    const trigStr = v === "G-native" ? "n/a" : `${a.triggers}/${a.n}`;
+    rows += renderRerunAggregateRow(v, a, { triggerText: trigStr });
+    if (options.afterVariantRows?.[v]) rows += options.afterVariantRows[v];
+  }
+  return `<table>
+    <thead><tr>
+      <th>Variant</th>
+      <th class="num">Accuracy</th>
+      <th class="num">Trigger</th>
+      <th class="num">Total turns</th>
+      <th class="num">Avg turns</th>
+      <th class="num">Avg ctxStart</th>
+      <th class="num">Avg ctxEnd</th>
+      <th class="num">Avg ctxGrowth</th>
+      <th class="num">Sum cost</th>
+      <th class="num">Sum dur</th>
+      <th class="num">Tool calls</th>
+      <th class="num">Bash errors</th>
+      <th class="num">Cache hit</th>
+      <th class="num">Avg out chars</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function renderFailureBreakdown(aggregates, host, condition) {
+  // Failure type buckets per variant
+  let rows = "";
+  for (const v of VARIANT_ORDER) {
+    const key = `${host}-${v}-${condition}`;
+    const a = aggregates[key];
+    if (!a || !a.failures) continue;
+    const f = a.failures;
+    rows += `<tr>
+      <td><b>${escapeHtml(v)}</b></td>
+      <td class="num hit">${f.hit || 0}</td>
+      <td class="num">${f.distractor || 0}</td>
+      <td class="num">${f.hallucinated || 0}</td>
+      <td class="num">${f.no_match || 0}</td>
+      <td class="num">${f.format_error || 0}</td>
+    </tr>`;
+  }
+  return `<table>
+    <thead><tr>
+      <th>Variant</th>
+      <th class="num">Hit</th>
+      <th class="num">Distractor</th>
+      <th class="num">Hallucinated</th>
+      <th class="num">No match</th>
+      <th class="num">Format error</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function renderToolHistTable(cells, host, condition) {
+  // Per-variant toolHist (Bash / Skill / Read / Grep / …) summed across queries
+  const byVariant = new Map();
+  const allTools = new Set();
+  for (const c of cells) {
+    if (c.host !== host || c.condition !== condition) continue;
+    const v = c.variant;
+    if (!byVariant.has(v)) byVariant.set(v, {});
+    const agg = byVariant.get(v);
+    for (const [t, n] of Object.entries(c.metrics?.toolHist || {})) {
+      agg[t] = (agg[t] || 0) + n;
+      allTools.add(t);
+    }
+  }
+  const tools = [...allTools].sort();
+  let head = `<tr><th>Variant</th>` + tools.map(t => `<th class="num">${escapeHtml(t)}</th>`).join("") + `<th class="num">Total</th></tr>`;
+  let body = "";
+  for (const v of VARIANT_ORDER) {
+    if (!byVariant.has(v)) continue;
+    const agg = byVariant.get(v);
+    let total = 0;
+    let cellsHtml = "";
+    for (const t of tools) {
+      const n = agg[t] || 0;
+      total += n;
+      cellsHtml += `<td class="num">${n || ""}</td>`;
+    }
+    body += `<tr><td><b>${escapeHtml(v)}</b></td>${cellsHtml}<td class="num"><b>${total}</b></td></tr>`;
+  }
+  return `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+function renderRerunPerQueryMatrix(cells, host, condition) {
+  // Variants in cols, queries in rows. Each cell = matched + (turns/dur/ctx) snippet.
+  const filtered = cells.filter(c => c.host === host && c.condition === condition);
+  const queries = [...new Set(filtered.map(c => c.queryId))].sort();
+  const variants = VARIANT_ORDER.filter(v => filtered.some(c => c.variant === v));
+  const byKey = new Map();
+  for (const c of filtered) byKey.set(`${c.variant}::${c.queryId}`, c);
+  let head = `<tr><th>Query</th><th>Expected</th>` + variants.map(v => `<th class="num">${escapeHtml(v)}</th>`).join("") + `</tr>`;
+  let body = "";
+  for (const qid of queries) {
+    const expected = filtered.find(c => c.queryId === qid)?.expected || "—";
+    let cellsHtml = "";
+    for (const v of variants) {
+      const c = byKey.get(`${v}::${qid}`);
+      if (!c) { cellsHtml += `<td class="num gray">—</td>`; continue; }
+      const cls = c.hit ? "hit" : "miss";
+      const sym = c.hit ? "✓" : "✗";
+      const m = c.metrics || {};
+      const meta = [
+        m.numTurns != null ? `t${m.numTurns}` : null,
+        m.durationMs != null ? `${(m.durationMs / 1000).toFixed(0)}s` : null,
+        m.ctxEnd != null ? fmtK(m.ctxEnd) : null,
+        m.costUsd != null ? fmtCostS(m.costUsd) : null,
+      ].filter(Boolean).join(" · ");
+      cellsHtml += `<td class="num ${cls}">${sym} ${escapeHtml(c.matched || "no-match")}<span class="meta">${meta}</span></td>`;
+    }
+    body += `<tr class="matrix-row"><td><code>${escapeHtml(qid)}</code></td><td><code>${escapeHtml(expected)}</code></td>${cellsHtml}</tr>`;
+  }
+  return `<table style="font-size:11px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+function renderRerunTraces(cells, host, condition) {
+  // Per-query collapsible cards. Each card = 1 variant's trace for that (host, cond, query).
+  const filtered = cells.filter(c => c.host === host && c.condition === condition);
+  const queries = [...new Set(filtered.map(c => c.queryId))].sort();
+  const variants = VARIANT_ORDER.filter(v => filtered.some(c => c.variant === v));
+  let body = "";
+  const renderSteps = (steps) => {
+    if (!steps || !steps.length) return `<div class="gray" style="font-size:10.5px">(no tool calls)</div>`;
+    return steps.map(s => {
+      if (s.tool) {
+        return `<div class="step"><div><span class="name">${escapeHtml(s.tool)}</span>: <span class="in">${escapeHtml(truncate(s.input || "", 250))}</span></div></div>`;
+      } else if (s.text) {
+        return `<div class="step"><div class="txt">${escapeHtml(truncate(s.text, 240))}</div></div>`;
+      }
+      return "";
+    }).join("");
+  };
+  for (const qid of queries) {
+    const items = variants.map(v => filtered.find(c => c.variant === v && c.queryId === qid)).filter(Boolean);
+    const expected = items[0]?.expected || "—";
+    const hitCount = items.filter(c => c.hit).length;
+    const hitLbl = hitCount === items.length ? `✓${items.length}` : hitCount === 0 ? `✗${items.length}` : `${hitCount}/${items.length}`;
+    const hitCls = hitCount === items.length ? "hit" : hitCount === 0 ? "miss" : "mid";
+    let cards = "";
+    for (const c of items) {
+      const m = c.metrics || {};
+      const cls = c.hit ? "hit" : "miss";
+      const sym = c.hit ? "✓" : "✗";
+      const meta = [
+        m.numTurns != null ? `turns ${m.numTurns}` : null,
+        m.durationMs != null ? `${(m.durationMs / 1000).toFixed(1)}s` : null,
+        m.ctxStart != null && m.ctxEnd != null ? `ctx ${fmtK(m.ctxStart)}→${fmtK(m.ctxEnd)} (+${fmtK(m.ctxGrowth)})` : null,
+        m.costUsd != null ? fmtCostS(m.costUsd) : null,
+        m.toolCallCount != null ? `${m.toolCallCount} tools` : null,
+        m.cacheHitRatio != null ? `cache ${(m.cacheHitRatio * 100).toFixed(0)}%` : null,
+      ].filter(Boolean).join(" · ");
+      const pillCls = c.host === "claude" ? "pill-claude" : "pill-codex";
+      cards += `<div class="trace-card">
+        <div class="head">
+          <span class="pill ${pillCls}">${escapeHtml(c.variant)}</span>
+          <span class="${cls}">${sym} ${escapeHtml(c.matched || "no-match")}</span>
+        </div>
+        <div class="meta-row">${escapeHtml(meta)}</div>
+        <div class="tline">${renderSteps(c.metrics?.steps || [])}</div>
+      </div>`;
+    }
+    body += `<details>
+      <summary><code>${escapeHtml(qid)}</code> — <code>${escapeHtml(expected)}</code> <span class="${hitCls}" style="margin-left:6px">${hitLbl}</span></summary>
+      <div class="trace-grid">${cards}</div>
+    </details>\n`;
+  }
+  return body;
+}
+
+function renderRerun(rerun, rerun1k, claudeRerun1k) {
+  if (!rerun) return `<h2 id="rerun">1. Fresh 16-variant rerun (150-skill)</h2>
+<div class="note">Run still in progress or no data yet. Output: <code>experiments/dci-compare/runs/rerun-150-full-2026-05-26/</code></div>`;
+
+  const { cells, aggregates } = rerun;
+  const claudeSource = rerun.sources?.claude || "rerun-150-full-2026-05-26";
+  const codexSource = rerun.sources?.codex || "rerun-150-full-2026-05-26";
+  const oneKSource = rerun1k?.name || "rerun-codex-newcli-l-agentic-1k-2026-05-26";
+  const oneKAggregate = rerun1k?.aggregates?.["codex-L-agentic-with-claudemd"] || null;
+  const oneKRow = renderRerunAggregateRow("L-agentic on 1K synthetic", oneKAggregate, {
+    badge: "1K synthetic",
+    triggerText: oneKAggregate ? `${oneKAggregate.triggers}/${oneKAggregate.n}` : "—",
+  });
+  // Claude 1K rows (L-agentic + M-bm25)
+  const claude1kSource = claudeRerun1k?.name || "rerun-claude-1k-lm-2026-05-26";
+  const claude1kRowByVariant = {};
+  for (const v of ["L-agentic", "M-bm25"]) {
+    const a = claudeRerun1k?.aggregates?.[`claude-${v}-with-claudemd`] || null;
+    claude1kRowByVariant[v] = renderRerunAggregateRow(`${v} on 1K synthetic`, a, {
+      badge: "1K synthetic",
+      triggerText: a ? `${a.triggers}/${a.n}` : "—",
+    });
+  }
+  // Count cells per (host, condition)
+  const counts = {};
+  for (const c of cells) {
+    const k = `${c.host}-${c.condition}`;
+    counts[k] = (counts[k] || 0) + 1;
+  }
+
+  return `<h2 id="claude-150">1. Claude Code with 24 queries/150 skills <span class="pill pill-claude">claude</span></h2>
+<p class="intro">
+  Fresh 2026-05-26 rerun with isolated HOMEs per cell. Model:
+  <code>claude-opus-4-7 --effort high</code>. The same 16 strategies are run across
+  24 single-skill queries from the 150-skill comparison corpus, with metrics extracted from
+  per-query stream-json transcripts.
+</p>
+<p class="intro">
+  The split below isolates prompt-injection effects: <b>with-CLAUDE.md</b> adds the project-level
+  routing instruction that tells Claude Code to call <code>skill-router-skills</code> when no enabled
+  skill matches; <b>without-CLAUDE.md</b> removes that instruction to measure the strategy body alone.
+  Source: <code>runs/${escapeHtml(claudeSource)}/</code>.
+</p>
+
+<h3 id="rerun-claude-with">1.1 with-CLAUDE.md</h3>
+<p class="intro">
+  Claude Code with the project routing hint enabled. ${counts["claude-with-claudemd"] || 0}/${16*24} cells.
+  The L-agentic / M-bm25 rows are followed by a <span class="badge">1K synthetic</span> companion
+  row (same SKILL.md, but the agent searches a 1000-skill corpus instead of 150) drawn from
+  <code>runs/${escapeHtml(claude1kSource)}/</code>. This isolates how the CLI-driven retrieval
+  primitive scales when the metadata catalog grows ~7×.
+</p>
+${renderRerunAggregateTable(aggregates, "claude", "with-claudemd", {
+  afterVariantRows: claude1kRowByVariant,
+})}
+<details>
+  <summary>Per-query matrix (each cell shows matched + turns / duration / ctxEnd / cost)</summary>
+  ${renderRerunPerQueryMatrix(cells, "claude", "with-claudemd")}
+</details>
+<details>
+  <summary>Per-query execution traces (16 variants × 24 queries, inlined)</summary>
+  ${renderRerunTraces(cells, "claude", "with-claudemd")}
+</details>
+
+<h3 id="rerun-claude-without">1.2 without-CLAUDE.md</h3>
+<p class="intro">
+  Same model, queries, and strategy files, but without the CLAUDE.md trigger-prompt injection.
+  ${counts["claude-without-claudemd"] || 0}/${16*24} cells.
+</p>
+${renderRerunAggregateTable(aggregates, "claude", "without-claudemd")}
+<details>
+  <summary>Per-query matrix</summary>
+  ${renderRerunPerQueryMatrix(cells, "claude", "without-claudemd")}
+</details>
+<details>
+  <summary>Per-query execution traces</summary>
+  ${renderRerunTraces(cells, "claude", "without-claudemd")}
+</details>
+
+<h2 id="rerun-codex">2. CodeX with 24 queries/150 skills <span class="pill pill-codex">codex</span></h2>
+<p class="intro">
+  Corrected new-CLI rerun. Model: <code>gpt-5.5</code> reasoning_effort=high; every task uses a
+  fresh CodeX home/project. CodeX has no with/without CLAUDE.md split, so each strategy runs once
+  per variant × query. Source: <code>runs/${escapeHtml(codexSource)}/</code>.
+  ${counts["codex-with-claudemd"] || 0}/${16*24} 150-skill cells.
+</p>
+<p class="intro">
+  The <b>L-agentic on 1K synthetic</b> row is the latest scale check from
+  <code>runs/${escapeHtml(oneKSource)}/</code>. It uses the same 150-skill comparison corpus plus
+  850 synthetic noise skills, so it is included here as an L-agentic scalability indicator rather
+  than as another 150-skill strategy row.
+</p>
+${renderRerunAggregateTable(aggregates, "codex", "with-claudemd", { afterVariantRows: { "L-agentic": oneKRow } })}
+<details>
+  <summary>2.1 Per-query matrix (150-skill rows only)</summary>
+  ${renderRerunPerQueryMatrix(cells, "codex", "with-claudemd")}
+</details>
+<details>
+  <summary>2.2 Per-query execution traces (150-skill rows only)</summary>
+  ${renderRerunTraces(cells, "codex", "with-claudemd")}
 </details>
 `;
 }
@@ -1017,7 +1363,7 @@ function renderEasyCompare(summaries, traces) {
 function renderVariants(variants) {
   if (!variants) return "";
   let body = "";
-  body += `<h3>8.1 dci-compare variants (used in §1, §2, §3)</h3>`;
+  body += `<h3>4.1 dci-compare variants (used in §1 and §2)</h3>`;
   const dciIds = [...new Set([
     ...Object.keys(variants.dciCompare.claude || {}),
     ...Object.keys(variants.dciCompare.codex || {}),
@@ -1031,7 +1377,7 @@ function renderVariants(variants) {
       ${codexText ? `<h4>variants/routing-only-codex/${escapeHtml(id)}.SKILL.md <span class="pill pill-codex">codex</span></h4><pre class="code"><code>${escapeHtml(codexText)}</code></pre>` : ''}
     </details>`;
   }
-  body += `<h3>8.2 skillrouter-easy variants (used in §6, §7)</h3>`;
+  body += `<h3>4.2 skillrouter-easy variants (used in §3)</h3>`;
   const easyIds = [...new Set([
     ...Object.keys(variants.skillrouterEasy.claude || {}),
     ...Object.keys(variants.skillrouterEasy.codex || {}),
@@ -1045,7 +1391,7 @@ function renderVariants(variants) {
       ${codexText ? `<h4>variants/codex/${escapeHtml(id)}.SKILL.md</h4><pre class="code"><code>${escapeHtml(codexText)}</code></pre>` : ''}
     </details>`;
   }
-  return `<h2 id="variants">8. Variant implementations</h2>
+  return `<h2 id="variants">4. Variant implementations</h2>
 <p class="intro">
   Full <code>SKILL.md</code> for every variant. Frontmatter is shared; only the body workflow differs.
 </p>
@@ -1059,35 +1405,32 @@ async function main() {
   let outPath = join(__dirname, "runs/report-all-experiments.html");
   for (const a of args) if (a.startsWith("--out=")) outPath = a.slice(6);
 
-  console.error("Loading all-traces.json...");
+  console.error("Loading all-traces.json (historical data)...");
   const tracesPath = join(__dirname, "runs/all-traces.json");
   if (!existsSync(tracesPath)) {
     console.error(`MISSING: ${tracesPath}. Run extract-all-traces.mjs first.`);
     process.exit(1);
   }
   const traces = JSON.parse(await readFile(tracesPath, "utf8"));
-  const [scalingHard, easySummaries, variants] = await Promise.all([
-    loadScalingHard(),
+  const [easySummaries, variants, rerun, rerun1k, claudeRerun1k] = await Promise.all([
     loadEasy78KSummaries(),
     loadAllVariants(),
+    loadRerun150(),
+    loadRerunDir("rerun-codex-newcli-l-agentic-1k-2026-05-26"),
+    loadRerunDir("rerun-claude-1k-lm-2026-05-26"),
   ]);
-  console.error(`Loaded: traces=${Object.keys(traces).length} experiments, scalingHard=${scalingHard.length}, easySummaries=${Object.keys(easySummaries).length} cells, variants=${Object.keys(variants.dciCompare.claude).length + Object.keys(variants.dciCompare.codex).length + Object.keys(variants.skillrouterEasy.claude).length + Object.keys(variants.skillrouterEasy.codex).length}`);
+  console.error(`Loaded: traces=${Object.keys(traces).length} experiments, easySummaries=${Object.keys(easySummaries).length} cells, variants=${Object.keys(variants.dciCompare.claude).length + Object.keys(variants.dciCompare.codex).length + Object.keys(variants.skillrouterEasy.claude).length + Object.keys(variants.skillrouterEasy.codex).length}`);
 
   const html = [
     renderHeader(),
     renderToc(),
-    renderCoverage(),
-    renderClaudePaired(traces),
-    renderCodex150(traces),
-    renderCodex1K(traces),
-    renderHardClaude(scalingHard),
-    renderHardCodex(traces),
-    renderEasyHost("claude", easySummaries),
-    renderEasyHost("codex", easySummaries),
-    renderEasyCompare(easySummaries, traces),
+    renderBackground(),
+    renderOverview(),
+    renderRerun(rerun, rerun1k, claudeRerun1k),      // §1+§2: fresh 16-variant rerun + Codex 1K aggregate row + Claude 1K
+    renderEasySection(easySummaries, traces),
     renderVariants(variants),
     "</body></html>",
-  ].join("\n");
+  ].join("\n").replace(/[ \t]+$/gm, "");
 
   await mkdir(dirname(outPath), { recursive: true });
   await writeFile(outPath, html);

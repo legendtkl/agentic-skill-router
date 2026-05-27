@@ -1,0 +1,2174 @@
+[
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "3d-scan-calc",
+  "expected": "skill-079",
+  "matched": "skill-079",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 14899,
+   "ctxStart": 25956,
+   "ctxEnd": 30325,
+   "ctxGrowth": 4369,
+   "costUsd": 0.17894775,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7492253183503081,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(Parse binary STL file, find largest connected component, extract Material ID from attribute byte cou)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-3d-scan-calc/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills co"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "azure-bgp-oscillation-route-leak",
+  "expected": "skill-070",
+  "matched": "skill-070",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 15996,
+   "ctxStart": 26262,
+   "ctxEnd": 30844,
+   "ctxGrowth": 4582,
+   "costUsd": 0.1857295,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7430516296509951,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(Detect BGP route oscillation and route leaks in Azure Virtual WAN topology)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-azure-bgp-oscillation-route-leak/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-sk"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "citation-check",
+  "expected": "skill-043",
+  "matched": "skill-043",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 16093,
+   "ctxStart": 25942,
+   "ctxEnd": 30376,
+   "ctxGrowth": 4434,
+   "costUsd": 0.17955249999999998,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.748745658047086,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(verify BibTeX citations for fake/hallucinated academic papers)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-citation-check/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills "
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "court-form-filling",
+  "expected": "skill-003",
+  "matched": "skill-003",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 7,
+   "durationMs": 33028,
+   "ctxStart": 26069,
+   "ctxEnd": 35843,
+   "ctxGrowth": 9774,
+   "costUsd": 0.279467,
+   "toolCallCount": 5,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 4
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8518907448123475,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 6,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(California Small Claims Court form SC-100 PDF filling)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-court-form-filling/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router ski"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-court-form-filling/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router ski"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-court-form-filling/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router ski"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-court-form-filling/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router ski"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "data-to-d3",
+  "expected": "skill-037",
+  "matched": "skill-037",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 18972,
+   "ctxStart": 26356,
+   "ctxEnd": 31371,
+   "ctxGrowth": 5015,
+   "costUsd": 0.18805775000000002,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7376696002933627,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills()"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-data-to-d3/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills corp"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "dialogue-parser",
+  "expected": "skill-009",
+  "matched": "skill-009",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 14420,
+   "ctxStart": 26232,
+   "ctxEnd": 30551,
+   "ctxGrowth": 4319,
+   "costUsd": 0.18243074999999997,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7456189151599444,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(dialogue parser script to JSON graph with nodes and edges, visualization in DOT format)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-dialogue-parser/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "earthquake-plate-calculation",
+  "expected": "skill-135",
+  "matched": "skill-135",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 17696,
+   "ctxStart": 26035,
+   "ctxEnd": 30442,
+   "ctxGrowth": 4407,
+   "costUsd": 0.18074425,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.747756357957062,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(earthquake furthest from Pacific plate boundary within Pacific plate using GeoPandas projections)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-earthquake-plate-calculation/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "econ-detrending-correlation",
+  "expected": "skill-080",
+  "matched": "skill-080",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 5,
+   "durationMs": 26916,
+   "ctxStart": 26434,
+   "ctxEnd": 31527,
+   "ctxGrowth": 5093,
+   "costUsd": 0.21315575,
+   "toolCallCount": 3,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 2
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8044096006495154,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 4,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(macroeconomic time series analysis: Hodrick-Prescott filter detrending, CPI deflation, Pearson corre)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-econ-detrending-correlation/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-r"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-econ-detrending-correlation/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-r"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "enterprise-information-search",
+  "expected": "skill-049",
+  "matched": "skill-049",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 17432,
+   "ctxStart": 25961,
+   "ctxEnd": 30355,
+   "ctxGrowth": 4394,
+   "costUsd": 0.1791955,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.748865974560419,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(enterprise data retrieval, answer questions from data file, write answers to json)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-enterprise-information-search/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "gh-repo-analytics",
+  "expected": "skill-021",
+  "matched": "skill-046",
+  "hit": false,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "distractor",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 31221,
+   "ctxStart": 27959,
+   "ctxEnd": 31874,
+   "ctxGrowth": 3915,
+   "costUsd": 0.14596199999999998,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.847038187384086,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(GitHub repository activity analysis - count PRs, issues, merge times, contributors for cli/cli repo)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-gh-repo-analytics/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skil"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "jax-computing-basics",
+  "expected": "skill-042",
+  "matched": "skill-042",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 15346,
+   "ctxStart": 25922,
+   "ctxEnd": 30304,
+   "ctxGrowth": 4382,
+   "costUsd": 0.17777249999999997,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7495990728926452,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(JAX programming tasks: load numpy input data, perform computations using JAX, save outputs)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-jax-computing-basics/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router s"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "lab-unit-harmonization",
+  "expected": "skill-123",
+  "matched": "skill-123",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 15356,
+   "ctxStart": 26397,
+   "ctxEnd": 30868,
+   "ctxGrowth": 4471,
+   "costUsd": 0.18553524999999998,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.741916925555172,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(clinical lab data unit harmonization CKD)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-lab-unit-harmonization/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "offer-letter-generator",
+  "expected": "skill-116",
+  "matched": "skill-116",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 6,
+   "durationMs": 30027,
+   "ctxStart": 25914,
+   "ctxEnd": 41754,
+   "ctxGrowth": 15840,
+   "costUsd": 0.29983899999999997,
+   "toolCallCount": 4,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 3
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8034809047000593,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 5,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(Fill Word docx template with placeholders from JSON data, save filled docx)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-offer-letter-generator/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-offer-letter-generator/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-offer-letter-generator/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "pddl-tpp-planning",
+  "expected": "skill-117",
+  "matched": "skill-117",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 16050,
+   "ctxStart": 26217,
+   "ctxEnd": 31594,
+   "ctxGrowth": 5377,
+   "costUsd": 0.19122374999999997,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.736815578465063,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(Solve travelling purchase problem (TPP) tasks using PDDL planning)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-pddl-tpp-planning/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skil"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "pptx-reference-formatting",
+  "expected": "skill-140",
+  "matched": "skill-140",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 16118,
+   "ctxStart": 27674,
+   "ctxEnd": 31831,
+   "ctxGrowth": 4157,
+   "costUsd": 0.13890175,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8464480997277289,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(detect dangling paper titles in pptx slides, change font, adjust box, create reference slide)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-pptx-reference-formatting/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-rou"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "protein-expression-analysis",
+  "expected": "skill-105",
+  "matched": "skill-105",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 15032,
+   "ctxStart": 28092,
+   "ctxEnd": 31374,
+   "ctxGrowth": 3282,
+   "costUsd": 0.137348,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8522645820267001,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(protein expression xlsx analysis with INDEX-MATCH lookups, group statistics, fold change calculation)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-protein-expression-analysis/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-r"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "quantum-numerical-simulation",
+  "expected": "skill-033",
+  "matched": "skill-033",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 13980,
+   "ctxStart": 26422,
+   "ctxEnd": 31484,
+   "ctxGrowth": 5062,
+   "costUsd": 0.19194300000000003,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7367346007257457,
+   "outputTextLen": 177,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(Simulate open Dicke model steady state, calculate cavity field Wigner function with QuTiP, quantum o)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-quantum-numerical-simulation/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "reserves-at-risk-calc",
+  "expected": "skill-105",
+  "matched": "skill-105",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 19765,
+   "ctxStart": 26324,
+   "ctxEnd": 31230,
+   "ctxGrowth": 4906,
+   "costUsd": 0.1908255,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7393085405455025,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(excel xlsx workbook formulas volatility log returns gold price reserves)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-reserves-at-risk-calc/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router "
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "shock-analysis-demand",
+  "expected": "skill-105",
+  "matched": "skill-109",
+  "hit": false,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "distractor",
+  "metrics": {
+   "numTurns": 6,
+   "durationMs": 25122,
+   "ctxStart": 28124,
+   "ctxEnd": 32640,
+   "ctxGrowth": 4516,
+   "costUsd": 0.190113,
+   "toolCallCount": 4,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 3
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.905299284128346,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 5,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(macro accounting investment spending shock small open economy demand side excel)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-shock-analysis-demand/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router "
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-shock-analysis-demand/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router "
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-shock-analysis-demand/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router "
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "shock-analysis-supply",
+  "expected": "skill-105",
+  "matched": "skill-105",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 5,
+   "durationMs": 21526,
+   "ctxStart": 28536,
+   "ctxEnd": 32397,
+   "ctxGrowth": 3861,
+   "costUsd": 0.16560325,
+   "toolCallCount": 3,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 2
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8835380191222134,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 4,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(economic modeling investment spending shock Cobb-Douglas production function HP filter Excel Solver )"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-shock-analysis-supply/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router "
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-shock-analysis-supply/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router "
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "taxonomy-tree-merge",
+  "expected": "skill-068",
+  "matched": "skill-068",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 13472,
+   "ctxStart": 26351,
+   "ctxEnd": 30741,
+   "ctxGrowth": 4390,
+   "costUsd": 0.1847275,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7433878294555768,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(unify product category taxonomies from multiple e-commerce platforms into hierarchical 5-level taxon)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-taxonomy-tree-merge/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router sk"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "video-tutorial-indexer",
+  "expected": "skill-113",
+  "matched": "skill-113",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 17254,
+   "ctxStart": 26364,
+   "ctxEnd": 30666,
+   "ctxGrowth": 4302,
+   "costUsd": 0.184344,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7438486750992521,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(video tutorial chapter indexing with timestamps from mp4)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-video-tutorial-indexer/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "virtualhome-agent-planning",
+  "expected": "skill-117",
+  "matched": "skill-117",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 16538,
+   "ctxStart": 26275,
+   "ctxEnd": 31714,
+   "ctxGrowth": 5439,
+   "costUsd": 0.19521775000000002,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7355732444068842,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(PDDL planning task for airport ground traffic control - IPC problem suite)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-virtualhome-agent-planning/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-ro"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "L-agentic",
+  "condition": "with-claudemd",
+  "queryId": "weighted-gdp-calc",
+  "expected": "skill-105",
+  "matched": "skill-105",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 17649,
+   "ctxStart": 26120,
+   "ctxEnd": 31148,
+   "ctxGrowth": 5028,
+   "costUsd": 0.189446,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7413556547104332,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(Excel xlsx VLOOKUP HLOOKUP XLOOKUP INDEX MATCH SUMPRODUCT weighted mean formulas in workbook sheets)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-L-agentic-with-claudemd-weighted-gdp-calc/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skil"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "3d-scan-calc",
+  "expected": "skill-079",
+  "matched": "skill-079",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 13612,
+   "ctxStart": 25956,
+   "ctxEnd": 30522,
+   "ctxGrowth": 4566,
+   "costUsd": 0.18041899999999997,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7480325044239545,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(parse binary STL, largest connected component, attribute byte material id, compute volume * density )"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-3d-scan-calc/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills corpu"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "azure-bgp-oscillation-route-leak",
+  "expected": "skill-070",
+  "matched": "skill-070",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 12991,
+   "ctxStart": 28037,
+   "ctxEnd": 31090,
+   "ctxGrowth": 3053,
+   "costUsd": 0.132872,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8551337882733232,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(Detect BGP route oscillation and leaks in Azure Virtual WAN network topology)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-azure-bgp-oscillation-route-leak/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "citation-check",
+  "expected": "skill-043",
+  "matched": "skill-043",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 14367,
+   "ctxStart": 27565,
+   "ctxEnd": 30780,
+   "ctxGrowth": 3215,
+   "costUsd": 0.1293205,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8567350559548722,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(verify BibTeX citations are real or fake/hallucinated)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-citation-check/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills cor"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "court-form-filling",
+  "expected": "skill-003",
+  "matched": "skill-003",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 6,
+   "durationMs": 25083,
+   "ctxStart": 27538,
+   "ctxEnd": 33194,
+   "ctxGrowth": 5656,
+   "costUsd": 0.1898335,
+   "toolCallCount": 4,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 3
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.9008578277608649,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 5,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(California Small Claims Court SC-100 form filling PDF)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-court-form-filling/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-court-form-filling/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-court-form-filling/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "data-to-d3",
+  "expected": "skill-037",
+  "matched": "skill-037",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 14415,
+   "ctxStart": 28131,
+   "ctxEnd": 31721,
+   "ctxGrowth": 3590,
+   "costUsd": 0.13644525000000002,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.849343423102604,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(D3.js v6 visualization bubble chart force simulation data table)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-data-to-d3/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills corpus "
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "dialogue-parser",
+  "expected": "skill-009",
+  "matched": "skill-009",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 14892,
+   "ctxStart": 26232,
+   "ctxEnd": 30762,
+   "ctxGrowth": 4530,
+   "costUsd": 0.18400849999999996,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7443556109322904,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(dialogue parser text to JSON graph nodes edges visualization dot)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-dialogue-parser/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills co"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "earthquake-plate-calculation",
+  "expected": "skill-135",
+  "matched": "skill-135",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 14802,
+   "ctxStart": 26035,
+   "ctxEnd": 30644,
+   "ctxGrowth": 4609,
+   "costUsd": 0.18202424999999997,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7465452224865116,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(earthquake furthest from Pacific plate boundary using GeoPandas projections)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-earthquake-plate-calculation/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-rou"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "econ-detrending-correlation",
+  "expected": "skill-080",
+  "matched": "skill-080",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 5,
+   "durationMs": 17923,
+   "ctxStart": 28209,
+   "ctxEnd": 31830,
+   "ctxGrowth": 3621,
+   "costUsd": 0.160492,
+   "toolCallCount": 3,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 2
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8872000859553858,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 4,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(Hodrick-Prescott filter detrending macroeconomic time series, Pearson correlation between detrended )"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-econ-detrending-correlation/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-rout"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-econ-detrending-correlation/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-rout"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "enterprise-information-search",
+  "expected": "skill-049",
+  "matched": "skill-049",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 15775,
+   "ctxStart": 25961,
+   "ctxEnd": 30917,
+   "ctxGrowth": 4956,
+   "costUsd": 0.1877085,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7445740970347281,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(enterprise data retrieval from /root/DATA answering questions from /root/question.txt)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-enterprise-information-search/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-ro"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "gh-repo-analytics",
+  "expected": "skill-021",
+  "matched": "skill-046",
+  "hit": false,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "distractor",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 15707,
+   "ctxStart": 26184,
+   "ctxEnd": 32088,
+   "ctxGrowth": 5904,
+   "costUsd": 0.196936,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7337460948594149,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(GitHub repo activity analytics: count PRs created in a date range, merged/closed counts, average tim)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-gh-repo-analytics/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills "
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "jax-computing-basics",
+  "expected": "skill-042",
+  "matched": "skill-042",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 13499,
+   "ctxStart": 27697,
+   "ctxEnd": 30568,
+   "ctxGrowth": 2871,
+   "costUsd": 0.1270445,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8590050091074681,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(JAX programming tasks - load input data, perform computation, save output)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-jax-computing-basics/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skil"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "lab-unit-harmonization",
+  "expected": "skill-123",
+  "matched": "skill-123",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 13731,
+   "ctxStart": 26397,
+   "ctxEnd": 31076,
+   "ctxGrowth": 4679,
+   "costUsd": 0.18715775,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7407258941967405,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(clinical lab data unit harmonization CKD)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-lab-unit-harmonization/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router sk"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "offer-letter-generator",
+  "expected": "skill-116",
+  "matched": "skill-116",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 13834,
+   "ctxStart": 25914,
+   "ctxEnd": 30482,
+   "ctxGrowth": 4568,
+   "costUsd": 0.178414,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7485275079018883,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(offer letter Word docx template placeholders)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-offer-letter-generator/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router sk"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "pddl-tpp-planning",
+  "expected": "skill-117",
+  "matched": "skill-117",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 18400,
+   "ctxStart": 26217,
+   "ctxEnd": 31846,
+   "ctxGrowth": 5629,
+   "costUsd": 0.19660324999999998,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7352964638579618,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(PDDL travelling purchase problem TPP planning)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-pddl-tpp-planning/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills "
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "pptx-reference-formatting",
+  "expected": "skill-140",
+  "matched": "skill-140",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 14571,
+   "ctxStart": 25899,
+   "ctxEnd": 32030,
+   "ctxGrowth": 6131,
+   "costUsd": 0.18958874999999997,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7354548266263445,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(detect dangling paper titles in pptx, change font, adjust box, create reference slide)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-pptx-reference-formatting/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "protein-expression-analysis",
+  "expected": "skill-105",
+  "matched": "skill-105",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 15210,
+   "ctxStart": 26317,
+   "ctxEnd": 31496,
+   "ctxGrowth": 5179,
+   "costUsd": 0.19373575,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7377329848310182,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(protein expression xlsx analysis with formulas INDEX-MATCH lookup, group statistics, fold change)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-protein-expression-analysis/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-rout"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "quantum-numerical-simulation",
+  "expected": "skill-033",
+  "matched": "skill-033",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 12615,
+   "ctxStart": 28197,
+   "ctxEnd": 31343,
+   "ctxGrowth": 3146,
+   "costUsd": 0.13431474999999998,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8531807126759935,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(open Dicke model steady state Wigner function quantum simulation QuTiP)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-quantum-numerical-simulation/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-rou"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "reserves-at-risk-calc",
+  "expected": "skill-105",
+  "matched": "skill-105",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 19167,
+   "ctxStart": 26324,
+   "ctxEnd": 31505,
+   "ctxGrowth": 5181,
+   "costUsd": 0.19702675,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7377479213950889,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(Excel task: download IMF commodity data, extract gold prices, compute log returns and volatility, ca)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-reserves-at-risk-calc/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router ski"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "shock-analysis-demand",
+  "expected": "skill-105",
+  "matched": "skill-109",
+  "hit": false,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "distractor",
+  "metrics": {
+   "numTurns": 6,
+   "durationMs": 24514,
+   "ctxStart": 26349,
+   "ctxEnd": 32840,
+   "ctxGrowth": 6491,
+   "costUsd": 0.24692525,
+   "toolCallCount": 4,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 3
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8395520421607379,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 5,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(macro accounting framework demand side investment spending shock small open economy Georgia IMF WEO )"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-shock-analysis-demand/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router ski"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-shock-analysis-demand/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router ski"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-shock-analysis-demand/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router ski"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "shock-analysis-supply",
+  "expected": "skill-105",
+  "matched": "skill-080",
+  "hit": false,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "distractor",
+  "metrics": {
+   "numTurns": 5,
+   "durationMs": 20793,
+   "ctxStart": 26761,
+   "ctxEnd": 42122,
+   "ctxGrowth": 15361,
+   "costUsd": 0.28678424999999996,
+   "toolCallCount": 3,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 2
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7385230920456465,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 4,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(Estimate investment spending shock to Georgia economy using Cobb-Douglas production function in Exce)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-shock-analysis-supply/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router ski"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-shock-analysis-supply/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router ski"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "taxonomy-tree-merge",
+  "expected": "skill-068",
+  "matched": "skill-068",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 14038,
+   "ctxStart": 26351,
+   "ctxEnd": 30983,
+   "ctxGrowth": 4632,
+   "costUsd": 0.18708450000000001,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7419395538223318,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(unify hierarchical product category taxonomies from multiple e-commerce sources into a single 5-leve)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-taxonomy-tree-merge/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skill"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "video-tutorial-indexer",
+  "expected": "skill-113",
+  "matched": "skill-113",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 12041,
+   "ctxStart": 27843,
+   "ctxEnd": 30884,
+   "ctxGrowth": 3041,
+   "costUsd": 0.1296585,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.8566607981220657,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(video tutorial chapter indexing timestamps)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-video-tutorial-indexer/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router sk"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "virtualhome-agent-planning",
+  "expected": "skill-117",
+  "matched": "skill-117",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 25939,
+   "ctxStart": 26275,
+   "ctxEnd": 31903,
+   "ctxGrowth": 5628,
+   "costUsd": 0.193892,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7345516159112102,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(PDDL planning task for airport ground traffic control from IPC problem suites)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-virtualhome-agent-planning/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-route"
+    }
+   ]
+  }
+ },
+ {
+  "host": "claude",
+  "variant": "M-bm25",
+  "condition": "with-claudemd",
+  "queryId": "weighted-gdp-calc",
+  "expected": "skill-105",
+  "matched": "skill-105",
+  "hit": true,
+  "routerTriggered": true,
+  "timedOut": false,
+  "apiError": false,
+  "failureType": "hit",
+  "metrics": {
+   "numTurns": 4,
+   "durationMs": 15299,
+   "ctxStart": 26120,
+   "ctxEnd": 31287,
+   "ctxGrowth": 5167,
+   "costUsd": 0.19019575,
+   "toolCallCount": 2,
+   "toolHist": {
+    "Skill": 1,
+    "Bash": 1
+   },
+   "bashErrorCount": 0,
+   "cacheHitRatio": 0.7406232763375621,
+   "outputTextLen": 34,
+   "isError": false,
+   "apiErrorStatus": null,
+   "stopReason": "end_turn",
+   "terminalReason": "completed",
+   "apiCallCount": 3,
+   "steps": [
+    {
+     "tool": "Skill",
+     "input": "agentic-skill-router:agentic-skill-router-skills(excel xlsx weighted mean SUMPRODUCT VLOOKUP INDEX MATCH GDP calculation)"
+    },
+    {
+     "tool": "Bash",
+     "input": "/Users/bytedance/github/agentic-skill-router/.claude/worktrees/multi-skill-test/experiments/dci-compare/.rerun-homes/claude-M-bm25-with-claudemd-weighted-gdp-calc/.claude/plugins/cache/local/agentic-skill-router/0.1.0/bin/agentic-skill-router skills "
+    }
+   ]
+  }
+ }
+]

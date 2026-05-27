@@ -275,16 +275,6 @@ const EXPERIMENTS = [
     variants: ["M-bm25"],
     pathFor: (variant) => variant,
   },
-  // §3 Codex L 1K
-  {
-    key: "codex-1k-l-agentic",
-    label: "Codex 1K synthetic (L-agentic)",
-    host: "codex",
-    parser: "codex",
-    base: join(CODEX_WORKTREE, "dci-compare/runs/codex-routing-only-l-agentic-1k-24-20260525"),
-    variants: ["L-agentic"],
-    pathFor: (variant) => variant,
-  },
   // §5 Codex 79K Hard
   {
     key: "codex-hard-m-bm25-current24",
@@ -359,7 +349,6 @@ async function loadGroundTruth() {
     { key: "codex-150-k-lite-fix", path: "experiments/dci-compare/runs/codex-routing-only-k-lite-fix-24-20260524/summary.json" },
     { key: "codex-150-l-agentic", path: "experiments/dci-compare/runs/codex-routing-only-l-agentic-24-20260525-v2/summary.json" },
     { key: "codex-150-m-bm25", path: "experiments/dci-compare/runs/codex-routing-only-m-bm25-index-fix-24-20260525/summary.json" },
-    { key: "codex-1k-l-agentic", path: "experiments/dci-compare/runs/codex-routing-only-l-agentic-1k-24-20260525/summary.json" },
     { key: "codex-hard-m-bm25-current24", path: "experiments/dci-compare/runs/codex-routing-only-m-bm25-skillrouter-hard-24-20260525/summary.json" },
     { key: "codex-hard-m-bm25-paper", path: "experiments/dci-compare/runs/codex-routing-only-paper-single-hard-m-bm25-24-20260525/summary.json" },
     { key: "codex-hard-jv2-paper", path: "experiments/dci-compare/runs/codex-routing-only-paper-single-hard-j-v2-24-20260525/summary.json" },
