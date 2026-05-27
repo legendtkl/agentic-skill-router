@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { open as openFile } from "node:fs/promises";
-import { compact, isGenericTerm, termsFor } from "./text-match.ts";
+import { compact, GENERIC_TERM_WEIGHT, isGenericTerm, termsFor } from "./text-match.ts";
 import type { Confidence, Skill } from "./types.ts";
 import { isRoutableDisabledSkill, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
 import type { MatchEvidence } from "./match-evidence.ts";
@@ -286,11 +286,21 @@ export async function dciSearchDisabledSkills(
       const queryTerms = termsFor(currentQuery);
       const queryPhrase = compact(currentQuery);
       let hitCount = 0;
+      let weightedHit = 0;
+      let weightedQueryWeight = 0;
+      let distinctiveHit = 0;
       for (const term of queryTerms) {
-        if (haystackTerms.has(term) || haystackPhrase.includes(term)) hitCount++;
+        const generic = isGenericTerm(term, "dci");
+        const weight = generic ? GENERIC_TERM_WEIGHT : 1;
+        weightedQueryWeight += weight;
+        if (haystackTerms.has(term) || haystackPhrase.includes(term)) {
+          hitCount++;
+          weightedHit += weight;
+          if (!generic) distinctiveHit++;
+        }
       }
       const phraseMatched = queryPhrase.length >= 4 && haystackPhrase.includes(queryPhrase);
-      const score = scoreSearchMatch(hitCount, queryTerms.size, phraseMatched);
+      const score = scoreSearchMatch(weightedHit, weightedQueryWeight, phraseMatched, distinctiveHit);
       if (score <= 0) continue;
       const snippets = snippetsForTerms(item.lines, queryTerms, queryPhrase, maxSnippets);
       const candidate: ScoredLoadedSkill = {
@@ -1122,10 +1132,32 @@ function evidenceForDciSearch(inputs: DciEvidenceInputs): MatchEvidence[] {
   );
 }
 
-function scoreSearchMatch(hitCount: number, queryTermCount: number, phraseMatched: boolean): number {
-  if (queryTermCount === 0) return phraseMatched ? 1 : 0;
-  const termScore = hitCount / queryTermCount;
-  return Math.min(1, termScore + (phraseMatched ? 0.35 : 0));
+/**
+ * Candidate-level score for a DCI search hit.
+ *
+ * `weightedHit` and `weightedQueryWeight` are computed by classifying each
+ * query term with `isGenericTerm(term, "dci")` and weighting generic terms
+ * at {@link GENERIC_TERM_WEIGHT} instead of `1`. This matches the generic
+ * down-weight metadata-route applies to per-term contributions so a query
+ * dominated by stop words ("the and a") cannot promote a weak candidate
+ * just because the haystack happens to contain those same generic tokens.
+ *
+ * When no distinctive term hits, the result is clamped strictly below the
+ * medium-confidence threshold (0.5) so generic-only matches cannot alone
+ * promote a skill to medium/high confidence — phrase matches on stop-word
+ * queries are also clamped because the phrase is itself generic.
+ */
+function scoreSearchMatch(
+  weightedHit: number,
+  weightedQueryWeight: number,
+  phraseMatched: boolean,
+  distinctiveHit: number,
+): number {
+  if (weightedQueryWeight <= 0) return phraseMatched ? 1 : 0;
+  const termScore = weightedHit / weightedQueryWeight;
+  const raw = Math.min(1, termScore + (phraseMatched ? 0.35 : 0));
+  if (distinctiveHit === 0) return Math.min(raw, 0.49);
+  return raw;
 }
 
 // Score per matched line, then return the top N by score (desc) with stable

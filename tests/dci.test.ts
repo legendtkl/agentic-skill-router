@@ -524,6 +524,91 @@ test("DCI snippet scoring prefers strong evidence over earlier generic-only matc
   }
 });
 
+test("DCI candidate score down-weights generic-only queries below medium confidence", async () => {
+  // A generic-heavy query whose only matched terms are common stop words
+  // ("the", "and", "for") must not promote a skill to medium/high
+  // confidence. Pre-issue-#110 the scorer counted raw hits, so a query of
+  // all-generic terms whose stop tokens all appeared (substring-wise) in
+  // the skill body scored `1.0` and could be auto-selected.
+  const corpus = await makeCorpus(0);
+  try {
+    const skill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:generic-only-probe",
+      name: "generic-only-probe",
+      description: "Storage helper module",
+      // Description/body intentionally omit "the"/"and"/"for" outside the
+      // single "the" in body — substring matches against compact(haystack)
+      // would otherwise inflate the hit count even though every matched
+      // term is generic. With only "the" hitting, weighted ratio =
+      // 0.15 / 0.45 ≈ 0.33, well below the 0.5 medium threshold.
+      body: "This body mentions the project; no other generics here.",
+      isDisabled: true,
+    });
+
+    const result = await dciSearchDisabledSkills(
+      [skill],
+      "the and for",
+      { topK: 1 },
+    );
+    assert.equal(result.matches.length, 1);
+    const score = result.matches[0]!.score;
+    // Weighted denominator = 3 * 0.15 = 0.45; weighted hit on "the" alone
+    // = 0.15; ratio ~= 0.33. Anything below 0.5 leaves the candidate in
+    // the "low" confidence band.
+    assert.ok(score < 0.5, `expected generic-only score < 0.5, got ${score}`);
+
+    const route = await dciRouteDisabledSkills([skill], "the and for", { topK: 1 });
+    assert.equal(route.matches[0]?.confidence, "low");
+    assert.equal(route.selected, null);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI candidate score ranks distinctive matches above generic-only matches on the same skill", async () => {
+  // The same skill is queried twice: once with a distinctive query whose
+  // terms are present in the body, and once with a generic-only query
+  // whose stop-word terms also appear. The distinctive query must score
+  // strictly higher and reach medium/high confidence; the generic query
+  // must stay in the low band.
+  const corpus = await makeCorpus(0);
+  try {
+    const skill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:kubernetes-deploy-probe",
+      name: "kubernetes-deploy-probe",
+      description: "Kubernetes deployment helper",
+      // Body kept short and free of generic tokens so the generic query
+      // doesn't pick up substring hits that would muddy the comparison.
+      body: "This skill handles kubernetes deployment workflows.",
+      isDisabled: true,
+    });
+
+    const distinctive = await dciSearchDisabledSkills(
+      [skill],
+      "kubernetes deployment",
+      { topK: 1 },
+    );
+    const generic = await dciSearchDisabledSkills(
+      [skill],
+      "the and for",
+      { topK: 1 },
+    );
+    assert.equal(distinctive.matches.length, 1);
+    assert.equal(generic.matches.length, 1);
+    assert.ok(
+      distinctive.matches[0]!.score > generic.matches[0]!.score,
+      `distinctive (${distinctive.matches[0]!.score}) must outrank generic (${generic.matches[0]!.score})`,
+    );
+
+    const distinctiveRoute = await dciRouteDisabledSkills([skill], "kubernetes deployment", { topK: 1 });
+    const genericRoute = await dciRouteDisabledSkills([skill], "the and for", { topK: 1 });
+    assert.notEqual(distinctiveRoute.matches[0]?.confidence, "low");
+    assert.equal(genericRoute.matches[0]?.confidence, "low");
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI grep returns bounded snippets from disabled skills", async () => {
   const corpus = await makeCorpus();
   try {
