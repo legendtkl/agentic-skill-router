@@ -565,6 +565,130 @@ test("DCI candidate score down-weights generic-only queries below medium confide
   }
 });
 
+test("DCI search lifts the distinctive-cap when a short-alias query fully covers a candidate (#150)", async () => {
+  // After PR #149, every <=2-char Latin term is "generic" in `dci` mode so
+  // `distinctiveHit` was zero for a single-token alias query like `"ai"` —
+  // even when the alias hit the skill name. The cap clamped the score
+  // below 0.5, dropping the route to "low" confidence. The fix lets a
+  // full-coverage match keep its raw score when every query term hits.
+  const corpus = await makeCorpus(0);
+  try {
+    const ai = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:ai",
+      name: "ai",
+      description: "Short distinctive alias skill",
+      body: "AI helper for AI-specific tasks.",
+      isDisabled: true,
+    });
+
+    const search = await dciSearchDisabledSkills([ai], "ai", { topK: 1 });
+    assert.equal(search.matches.length, 1);
+    assert.equal(search.matches[0]?.id, "user:codex:ai");
+    assert.ok(
+      (search.matches[0]?.score ?? 0) >= 0.5,
+      `expected full-coverage short alias score >= 0.5, got ${search.matches[0]?.score}`,
+    );
+
+    const route = await dciRouteDisabledSkills([ai], "ai", { topK: 1 });
+    assert.notEqual(route.matches[0]?.confidence, "low");
+
+    // Partial-coverage short-only queries (where not every query term hits)
+    // must STILL be capped: `"ai db"` against the `ai` skill matches only
+    // `ai`, so the cap should keep it below 0.5.
+    const partial = await dciSearchDisabledSkills([ai], "ai db", { topK: 1 });
+    assert.equal(partial.matches.length, 1);
+    assert.ok(
+      (partial.matches[0]?.score ?? 1) < 0.5,
+      `expected partial-coverage short alias score < 0.5, got ${partial.matches[0]?.score}`,
+    );
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI evidence labels id/name/description hits with the matching sub-field (#151)", async () => {
+  // Before the fix, every non-metadataOnly evidence entry was emitted with
+  // `field: "body"` / `source: "body"` even when the matched term only
+  // appeared in id/name/description. The fix builds per-field haystacks
+  // and attributes each term back to the first sub-field that contains it.
+  const corpus = await makeCorpus(0);
+  try {
+    const skill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:zephyr-id-only",
+      name: "zephyr-id-only",
+      description: "Distinctive marker invoiceunique only in description",
+      body: "The body text intentionally avoids the distinctive terms.",
+      isDisabled: true,
+    });
+
+    const result = await dciSearchDisabledSkills([skill], "zephyr invoiceunique", { topK: 1 });
+    assert.equal(result.matches.length, 1);
+    const evidence = result.matches[0]?.evidence ?? [];
+    const zephyr = evidence.find((e) => e.matched === "zephyr");
+    const invoice = evidence.find((e) => e.matched === "invoiceunique");
+    assert.ok(zephyr, `missing zephyr evidence in ${JSON.stringify(evidence)}`);
+    assert.ok(invoice, `missing invoiceunique evidence in ${JSON.stringify(evidence)}`);
+    // "zephyr" appears in id and name; the first sub-field is `id`.
+    assert.equal(zephyr!.field, "id");
+    assert.equal(zephyr!.source, "metadata");
+    // "invoiceunique" only appears in description.
+    assert.equal(invoice!.field, "description");
+    assert.equal(invoice!.source, "metadata");
+
+    // Body-only terms must still be labelled `body`.
+    const bodySkill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:body-evidence-probe",
+      name: "body-evidence-probe",
+      description: "Generic helper",
+      body: "Unique marker bodyuniquemarker appears only here.",
+      isDisabled: true,
+    });
+    const bodyResult = await dciSearchDisabledSkills([bodySkill], "bodyuniquemarker", { topK: 1 });
+    const bodyEvidence = bodyResult.matches[0]?.evidence ?? [];
+    const bodyHit = bodyEvidence.find((e) => e.matched === "bodyuniquemarker");
+    assert.ok(bodyHit, `missing body evidence in ${JSON.stringify(bodyEvidence)}`);
+    assert.equal(bodyHit!.field, "body");
+    assert.equal(bodyHit!.source, "body");
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI evidence isGeneric is computed on the normalized form (#152)", async () => {
+  // The phrase-bonus evidence row uses `currentQuery` verbatim, which may
+  // contain casing/punctuation. The classifier must run on the compacted
+  // form so a generic stop term like `"API"` is flagged consistently with
+  // its lowercase `api` counterpart.
+  const corpus = await makeCorpus(0);
+  try {
+    const skill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:api-phrase-probe",
+      name: "api-phrase-probe",
+      description: "API helper",
+      body: "This skill exposes an api surface.",
+      isDisabled: true,
+    });
+
+    const result = await dciSearchDisabledSkills([skill], "API", { topK: 1 });
+    assert.equal(result.matches.length, 1);
+    const evidence = result.matches[0]?.evidence ?? [];
+    const phraseEntry = evidence.find((e) => e.matched === "API");
+    if (phraseEntry) {
+      assert.equal(
+        phraseEntry.isGeneric,
+        true,
+        `expected isGeneric=true on phrase evidence for "API", got ${JSON.stringify(phraseEntry)}`,
+      );
+    }
+    // The per-term entry already arrives lowercased; its isGeneric must
+    // also be true for the metadata `api` stop term.
+    const termEntry = evidence.find((e) => e.matched === "api");
+    if (termEntry) assert.equal(termEntry.isGeneric, true);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI candidate score ranks distinctive matches above generic-only matches on the same skill", async () => {
   // The same skill is queried twice: once with a distinctive query whose
   // terms are present in the body, and once with a generic-only query
