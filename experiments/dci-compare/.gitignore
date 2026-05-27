@@ -17,3 +17,22 @@ runs/codex-routing-only-smoke-*/
 runs/native-prompt-capture/*-home/
 runs/native-prompt-capture/*request*.json
 runs/native-prompt-capture/codex-prompt-input.json
+
+# 2026-05-26 fresh rerun: only commit aggregates, not per-cell JSONLs
+.rerun-homes/
+
+# Intermediate experiment iterations (optimization attempts kept locally only)
+runs/rerun-150-partial-attempt1/
+runs/rerun-claude-bash-rerun-2026-05-26/
+runs/rerun-claude-l-3case-*/
+runs/rerun-claude-l-compact-2026-05-26/
+runs/rerun-claude-l-limit10-*/
+runs/rerun-claude-l-optimized-2026-05-26/
+runs/rerun-claude-l-restore-2026-05-27/
+runs/rerun-claude-l-restore-without-2026-05-27/
+runs/rerun-claude-lagentic-newcli-*/
+runs/rerun-claude-mbm25-newcli-*/
+runs/rerun-l-agentic-official-smoke*-2026-05-26/
+runs/rerun-l-agentic-original-24-2026-05-26/
+runs/smoke-*/
+runs/*.log
