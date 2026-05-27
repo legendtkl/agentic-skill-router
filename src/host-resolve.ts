@@ -52,13 +52,23 @@ function parseHostName(value: string | undefined): HostName | null {
   return null;
 }
 
+export interface CreateHostOptions {
+  /** Project directory used for project-scope skill discovery. */
+  cwd?: string;
+}
+
 /** Constructs the appropriate {@link Host} implementation for `hostName`. */
-export function createHost(hostName: HostName): Host {
-  if (hostName === "codex") return new CodexHost();
+export function createHost(hostName: HostName, opts: CreateHostOptions = {}): Host {
+  if (hostName === "codex") {
+    const codexOpts: { cwd?: string } = {};
+    if (opts.cwd) codexOpts.cwd = opts.cwd;
+    return new CodexHost(codexOpts);
+  }
   const claudeHome = process.env["CLAUDE_HOME"];
-  const opts: { claudeHome?: string } = {};
-  if (claudeHome) opts.claudeHome = claudeHome;
-  return new ClaudeCodeHost(opts);
+  const hostOpts: { claudeHome?: string; cwd?: string } = {};
+  if (claudeHome) hostOpts.claudeHome = claudeHome;
+  if (opts.cwd) hostOpts.cwd = opts.cwd;
+  return new ClaudeCodeHost(hostOpts);
 }
 
 /** User-facing display name for the host (used in CLI messages). */

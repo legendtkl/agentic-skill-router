@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import { parseStrict } from "../args.ts";
 import { disableSkill, enableSkill, enableSkillFromState } from "../apply.ts";
 import { loadConfig, resolveUnusedForDays } from "../config.ts";
@@ -23,10 +24,12 @@ export async function cmdDisable(argv: string[], hostName: HostName): Promise<nu
         yes: { type: "boolean", short: "y" },
         reason: { type: "string" },
         json: { type: "boolean" },
+        "allow-symlink-target-mutation": { type: "boolean" },
       },
       allowPositionals: true,
     },
   });
+  const allowSymlinkMutation = values["allow-symlink-target-mutation"] === true;
 
   const host = createHost(hostName);
   const skills = await host.listSkills();
@@ -53,6 +56,29 @@ export async function cmdDisable(argv: string[], hostName: HostName): Promise<nu
     // investigate; explicit `disable <id>` still works.
     const safe = suggested.filter((s) => !s.attributionAmbiguous);
     targets = safe.map((s) => s.skill);
+    // `--all-suggested` MUST NOT silently rewrite out-of-root symlink targets
+    // (e.g. ~/.claude/skills/foo → /shared/skill/foo) — that would let `--yes`
+    // alone modify files outside the host's skills root. Skip them with a
+    // clear stderr note and keep going for the rest of the batch.
+    if (!allowSymlinkMutation) {
+      const skippedSymlinks = targets.filter((t) => isOutOfRootMutableSymlink(t));
+      if (skippedSymlinks.length > 0) {
+        targets = targets.filter((t) => !isOutOfRootMutableSymlink(t));
+        const lines = await Promise.all(
+          skippedSymlinks.map(async (t) => {
+            const realTarget = await resolveLinkedTarget(t.skillMdPath);
+            const linkedPart = realTarget && realTarget !== t.skillMdPath
+              ? `${t.skillMdPath} -> ${realTarget}`
+              : t.skillMdPath;
+            return `  ${t.id}  (linked target: ${linkedPart})`;
+          }),
+        );
+        console.error(
+          `note: skipping ${skippedSymlinks.length} out-of-root symlink skill(s) from --all-suggested; ` +
+          `pass --allow-symlink-target-mutation to include them:\n${lines.join("\n")}`,
+        );
+      }
+    }
     reason = (values.reason as string | undefined) ?? `auto:unused-${unusedDays}d`;
   } else {
     if (positionals.length === 0) {
@@ -90,7 +116,13 @@ export async function cmdDisable(argv: string[], hostName: HostName): Promise<nu
   const results: Array<{ id: string; instanceKey: string; alreadyDisabled: boolean }> = [];
   for (const t of targets) {
     try {
-      const r = await disableSkill(t, reason, { statePath, host: host.name });
+      if (isOutOfRootMutableSymlink(t) && !allowSymlinkMutation) {
+        console.error(await symlinkMutationRefusal(t, "disable"));
+        return 1;
+      }
+      const allowOutOfRoot = allowSymlinkMutation && isOutOfRootMutableSymlink(t);
+      if (allowOutOfRoot) await warnIfSymlinkMutation(t, "disable");
+      const r = await disableSkill(t, reason, { statePath, host: host.name, allowOutOfRoot });
       results.push({
         id: t.id,
         instanceKey: skillInstanceKey(t.id, t.skillMdPath),
@@ -120,10 +152,14 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
     commandName: "agentic-skill-router skills enable",
     config: {
       args: argv,
-      options: { json: { type: "boolean" } },
+      options: {
+        json: { type: "boolean" },
+        "allow-symlink-target-mutation": { type: "boolean" },
+      },
       allowPositionals: true,
     },
   });
+  const allowSymlinkMutation = values["allow-symlink-target-mutation"] === true;
   if (positionals.length === 0) {
     console.error("specify <id...>");
     return 2;
@@ -131,6 +167,12 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
   const host = createHost(hostName);
   const skills = await host.listSkills();
   const statePath = statePathForHost(host.name);
+  // Snapshot the host's skill roots once per invocation so the state-only
+  // enable branch can re-validate any state-recorded path against current
+  // host policy (issues #100, #125). Inventory-path enable doesn't need
+  // these — it already operates on a Skill with `outOfRoot` precomputed by
+  // the host's scan.
+  const allowedSkillRoots = await host.skillRoots();
   const inventoryByInstanceKey = new Map<string, Skill>();
   for (const s of skills) {
     inventoryByInstanceKey.set(skillInstanceKey(s.id, s.skillMdPath), s);
@@ -193,7 +235,13 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
       if (resolvedKey && inventoryByInstanceKey.has(resolvedKey)) {
         // Inventory path: we have a live Skill to operate on.
         const s = inventoryByInstanceKey.get(resolvedKey)!;
-        const r = await enableSkill(s, { statePath, host: host.name });
+        if (isOutOfRootMutableSymlink(s) && !allowSymlinkMutation) {
+          console.error(await symlinkMutationRefusal(s, "enable"));
+          return 1;
+        }
+        const allowOutOfRoot = allowSymlinkMutation && isOutOfRootMutableSymlink(s);
+        if (allowOutOfRoot) await warnIfSymlinkMutation(s, "enable");
+        const r = await enableSkill(s, { statePath, host: host.name, allowOutOfRoot });
         results.push({
           id: s.id,
           instanceKey: skillInstanceKey(s.id, s.skillMdPath),
@@ -207,14 +255,34 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
       //    want the state resolver to produce a clear "unknown skill id"
       //    error. Pass the resolvedKey when known so enableSkillFromState
       //    operates on the canonical identity rather than the raw target.
+      //    Plumb the host's current skill roots AND the symlink-mutation
+      //    flag through so a record whose recorded `skillMdPath` now points
+      //    out-of-root gets the same refusal-with-flag-hint as the inventory
+      //    flow (PR #123, issues #100 & #125), not a silent rename of a
+      //    file outside the host's skills root.
       const lookup = resolvedKey ?? target;
-      const r = await enableSkillFromState(lookup, { statePath, host: host.name });
+      const r = await enableSkillFromState(lookup, {
+        statePath,
+        host: host.name,
+        allowedSkillRoots,
+        allowOutOfRoot: allowSymlinkMutation,
+      });
       results.push({ id: r.id, instanceKey: r.instanceKey, alreadyEnabled: r.alreadyEnabled });
     } catch (err) {
       const message = (err as Error).message;
       if (/unknown skill id/.test(message) || /ambiguous skill id/.test(message)) {
         console.error(message);
         return 2;
+      }
+      // The state-only refusal (out-of-root realpath without
+      // `--allow-symlink-target-mutation`, #100 + #125) already names the
+      // skill id, the linked target, and the required flag — printing
+      // `failed to enable X: refusing to enable X: ...` would just duplicate
+      // the id. Mirror the inventory-path branch which prints the refusal
+      // verbatim and exits 1.
+      if (/^refusing to enable /.test(message)) {
+        console.error(message);
+        return 1;
       }
       console.error(`failed to enable ${target}: ${message}`);
       return 1;
@@ -226,4 +294,46 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
     console.log(`enabled ${results.length} skill(s). Restart ${displayHost(host.name)} for changes to take effect.`);
   }
   return 0;
+}
+
+/**
+ * A non-builtin skill whose `SKILL.md` resolves outside the host's skills
+ * root (typically via a user-created symlink). Modifying it would rename a
+ * file under a path the host does not own, so the CLI requires explicit
+ * `--allow-symlink-target-mutation` before touching it. Builtins remain
+ * non-disableable irrespective of the flag.
+ */
+function isOutOfRootMutableSymlink(skill: Skill): boolean {
+  return skill.outOfRoot === true && skill.source !== "builtin";
+}
+
+async function warnIfSymlinkMutation(skill: Skill, operation: "disable" | "enable"): Promise<void> {
+  if (!isOutOfRootMutableSymlink(skill)) return;
+  const realTarget = await resolveLinkedTarget(skill.skillMdPath);
+  const linkedPart = realTarget && realTarget !== skill.skillMdPath
+    ? `${skill.skillMdPath} -> ${realTarget}`
+    : skill.skillMdPath;
+  console.error(
+    `warning: ${skill.id} is a symlink outside this host's skills root; ${operation} will modify the linked target (${linkedPart})`,
+  );
+}
+
+async function symlinkMutationRefusal(skill: Skill, operation: "disable" | "enable"): Promise<string> {
+  const realTarget = await resolveLinkedTarget(skill.skillMdPath);
+  const linkedPart = realTarget && realTarget !== skill.skillMdPath
+    ? `${skill.skillMdPath} -> ${realTarget}`
+    : skill.skillMdPath;
+  return (
+    `refusing to ${operation} ${skill.id}: skill resolves to a symlink target outside this host's skills root ` +
+    `(linked target: ${linkedPart}). ` +
+    `Re-run with --allow-symlink-target-mutation to modify the linked target.`
+  );
+}
+
+async function resolveLinkedTarget(skillMdPath: string): Promise<string | null> {
+  try {
+    return await realpath(skillMdPath);
+  } catch {
+    return null;
+  }
 }

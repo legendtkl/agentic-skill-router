@@ -1,6 +1,7 @@
 import {
   boundaryTermsFor,
   compact,
+  GENERIC_TERM_WEIGHT,
   isCjk,
   isGenericTerm,
   isShortLatinTerm,
@@ -234,7 +235,7 @@ function scoreIndexedSkill(candidate: IndexedSkill, query: QueryPlan, idf: Map<s
       const quality = matchQuality(term, item);
       if (quality <= 0) continue;
       const generic = isGenericTerm(term);
-      const genericFactor = generic ? 0.15 : 1;
+      const genericFactor = generic ? GENERIC_TERM_WEIGHT : 1;
       const contribution = item.weight * (idf.get(term) ?? 1) * quality * genericFactor;
       rawScore += contribution;
       if (generic) matchedGenericTerms.add(term);
@@ -315,8 +316,10 @@ function evidenceFor(item: MetadataField, matched: string, contribution: number)
   return {
     field: item.field,
     matched,
-    weight: item.weight,
+    isGeneric: isGenericTerm(matched),
     contribution: Number(contribution.toFixed(4)),
+    source: "metadata",
+    weight: item.weight,
     text: clamp(item.text),
   };
 }
@@ -349,7 +352,7 @@ function toRouteMatch(item: ScoredMetadataSkill): SkillRouteMatch {
       matchedName: item.exactNameMatched || item.exactAliasMatched,
       matchedPhrase: item.containedNameMatched ||
         item.containedAliasMatched ||
-        item.evidence.some((e) => e.matched.length >= 8 && compact(e.text).includes(compact(e.matched))),
+        item.evidence.some((e) => e.matched.length >= 8 && compact(e.text ?? "").includes(compact(e.matched))),
     },
   };
 }

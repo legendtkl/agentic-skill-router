@@ -1,5 +1,9 @@
+import { canRouteSkill } from "./skill-policy.ts";
 import { compact, termsFor } from "./text-match.ts";
 import type { Confidence, RouteMode, Skill } from "./types.ts";
+import type { MatchEvidence } from "./match-evidence.ts";
+
+export type { MatchEvidence } from "./match-evidence.ts";
 
 export interface RouteOptions {
   topK?: number;
@@ -12,14 +16,6 @@ export interface SkillRouteMatch {
   reason: string;
   signals: SkillRouteSignals;
   evidence?: MatchEvidence[];
-}
-
-export interface MatchEvidence {
-  field: string;
-  matched: string;
-  weight: number;
-  contribution: number;
-  text: string;
 }
 
 export interface SkillRouteSignals {
@@ -194,11 +190,12 @@ export function routeDisabledSkills(
 }
 
 export function isRoutableDisabledSkill(skill: Skill): boolean {
-  return skill.isDisabled &&
-    skill.canDisable &&
-    !skill.isPluginDisabled &&
-    !skill.conflict &&
-    skill.skillMdPath !== "";
+  // Routing only needs to READ the disabled marker file, so we no longer
+  // require mutation permission (`canDisable`). Skills reached via an
+  // out-of-root symlink are now surfaced as route candidates even though
+  // disable/enable still refuses to rename through that symlink — see
+  // `canMutateSkill` for the mutation gate.
+  return skill.isDisabled && canRouteSkill(skill);
 }
 
 function toRouteMatch(candidate: ScoredCandidate): SkillRouteMatch {

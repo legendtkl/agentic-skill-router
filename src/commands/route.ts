@@ -43,13 +43,18 @@ export async function cmdRoute(argv: string[], hostName: HostName): Promise<numb
   const config = await loadConfig();
   const routeMode = resolveRouteMode(values.mode as string | undefined, config.routeMode);
   if (!routeMode) {
-    console.error("--mode must be one of: auto, metadata, body, lexical, dci");
+    console.error("--mode must be one of: auto, metadata, lexical, dci (body is an alias for dci)");
     return 2;
   }
 
   const host = createHost(hostName);
   const skills = await host.listSkills();
   const result = await routeByMode(skills, query, routeMode, topK === undefined ? {} : { topK });
+  // `body` is a compatibility alias for `dci`; both modes share the same
+  // underlying router (see issue #111). We surface the alias in `--json`
+  // output as `routeModeAlias` so consumers can tell which spelling the
+  // caller used without changing the canonical `routeMode` field.
+  const routeModeAlias = routeMode === "body" ? "dci" : undefined;
   const selected = result.selected;
   let recorded = false;
   const warnings: string[] = [];
@@ -77,7 +82,7 @@ export async function cmdRoute(argv: string[], hostName: HostName): Promise<numb
     }
   }
 
-  const projected = projectRoute(result, recorded, warnings);
+  const projected = projectRoute(result, recorded, warnings, routeModeAlias);
   if (values.json) {
     process.stdout.write(JSON.stringify(projected, null, 2) + "\n");
     return 0;

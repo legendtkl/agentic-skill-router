@@ -16,6 +16,7 @@
   },
   "files": [
     "README.md",
+    "assets/",
     "bin/",
     "lib/agentic-skill-router.mjs",
     "skills/",

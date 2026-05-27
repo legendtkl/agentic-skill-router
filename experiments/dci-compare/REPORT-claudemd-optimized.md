@@ -281,17 +281,27 @@ Claude Code 部分区分 with-CLAUDE.md 与 without-CLAUDE.md,因为前者显式
 
 ### 6.1 with-CLAUDE.md 准确率
 
-| rank | variant | accuracy | trigger | hallucination |
-| ---: | --- | ---: | ---: | ---: |
-| 1 | B-cc | 23/24 (95.8%) | 24/24 | 0/24 |
-| 1 | C-lite | 23/24 (95.8%) | 24/24 | 0/24 |
-| 3 | D-agentic | 22/24 (91.7%) | 23/24 | 1/24 |
-| 3 | E-digest | 22/24 (91.7%) | 24/24 | 0/24 |
-| 3 | H-bounded | 22/24 (91.7%) | 23/24 | 1/24 |
-| 3 | J-bounded | 22/24 (91.7%) | 23/24 | 1/24 |
-| 7 | I-meta | 21/24 (87.5%) | 23/24 | 1/24 |
-| 8 | G-native | 15/24 (62.5%) | n/a | 0/24 |
-| 9 | A-router | 13/24 (54.2%) | 23/24 | 1/24 |
+| rank | variant | corpus | accuracy | trigger | hallu | cost | duration | turns | avg ctx_end | 说明 |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | L-agentic v3 | 150 | 24/24 (100%) | 24/24 | 0/24 | $4.05 | 608s | 101 | 35.3K | OR-only + 强制 inline 评估 top-3(无 inspect),Claude 上唯一 24/24 |
+| 2 | K-bounded | 150 | 23/24 (95.8%) | 24/24 | 0/24 | $3.27 | 547s | 102 | 30.7K | grep shortlist + 候选 metadata,中小 pool 低成本 Pareto 点 |
+| 2 | K-lite | 150 | 23/24 (95.8%) | 24/24 | 0/24 | $3.45 | 569s | 101 | 31.1K | K 的精简 prompt 版,准确率持平 |
+| 2 | L-agentic v3.1 | 150 | 23/24 (95.8%) | 24/24 | 0/24 | $3.47 | 470s | 96 | 32.6K | v3 + `--limit 5`,从 24→23 cell,见 §6.5 |
+| 2 | C-lite | 150 | 23/24 (95.8%) | 24/24 | 0/24 | $4.30 | 654s | 156 | 32.7K | 有界 grep / sed 局部读 body |
+| 2 | B-cc | 150 | 23/24 (95.8%) | 24/24 | 0/24 | $5.56 | 896s | 197 | 34.3K | 自由 shell DCI,读 body |
+| 7 | J-bounded | 150 | 22/24 (91.7%) | 23/24 | 1/24 | $3.07 | 374s | 96 | 30.7K | metadata-only bounded |
+| 7 | L-agentic v1 | 150 (原) | 22/24 (91.7%) | 24/24 | 0/24 | $3.50 | 596s | 102 | 32.4K | CLI corpus search/inspect,must-AND + 条件 inspect |
+| 7 | L-agentic v1 | 150 (rerun) | 22/24 (91.7%) | 24/24 | 0/24 | $3.51 | 494s | 101 | 32.4K | 同语料重跑,总数稳定;miss 集合与原跑不完全重合 |
+| 7 | D-agentic (read-body) | 150 | 22/24 (91.7%) | 23/24 | 1/24 | $3.65 | 467s | 100 | 34.1K | paired fixed rerun;读 body |
+| 7 | K-bounded | 1K syn | 22/24 (91.7%) | 24/24 | 0/24 | $3.74 | 890s | 116 | 31.2K | 1K 上 23→22 掉 1 cell,shell glob 未撞 ARG_MAX |
+| 7 | E-digest | 150 | 22/24 (91.7%) | 24/24 | 0/24 | $4.11 | 355s | 96 | 38.0K | catalog 拉 description 后选择 |
+| 7 | H-bounded | 150 | 22/24 (91.7%) | 23/24 | 1/24 | $4.16 | 542s | 132 | 32.9K | 类 B,限制裸 ls 和输出 |
+| 14 | L-agentic v1 | 1K syn | 21/24 (87.5%) | 24/24 | 0/24 | $3.31 | 499s | 100 | 31.1K | 比 150 只掉 1 cell,ctx_end 几乎不涨 |
+| 14 | M-bm25 | 150 | 21/24 (87.5%) | 24/24 | 0/24 | $3.62 | 537s | 99 | 32.5K | BM25 shortlist + Claude metadata rerank |
+| 14 | I-meta | 150 | 21/24 (87.5%) | 23/24 | 1/24 | $4.16 | 404s | 93 | 38.0K | description-only,禁止 body |
+| 17 | D-agentic (metadata-only) | 150 | 20/24 (83.3%) | 24/24 | 0/24 | $3.68 | 476s | 100 | 33.8K | c113b38 改 metadata-only 后明显回退 |
+| 18 | G-native | 150 | 15/24 (62.5%) | n/a | 0/24 | $2.98 | 130s | 24 | 36.5K | 不加载 router,corpus 全启用 |
+| 19 | A-router | 150 | 13/24 (54.2%) | 23/24 | 1/24 | $3.90 | 499s | 96 | 35.3K | 固定 lexical / 级联 scorer |
 
 解读:
 
@@ -316,8 +326,12 @@ Claude Code 部分区分 with-CLAUDE.md 与 without-CLAUDE.md,因为前者显式
 
 Pareto 角度:
 
-- 如果目标是 Claude Code 下的最高准确率,C-lite 比 B-cc 更便宜、更短。
-- 如果目标是低成本和较高准确率,J-bounded 是更合适的默认点。
+- **新 Pareto 点 K-bounded**:把高准确率档的成本下沿从 J-bounded 的 $3.07 (22/24) / C-lite 的 $4.30 (23/24) 推到 $3.27 (23/24)。K-lite 同准确率但稍贵 $0.18。
+- J-bounded 仍是 22/24 档的低成本选项 ($3.07);K-bounded 多对 1 cell 但贵 $0.20,需要更高准确率时选 K。
+- C-lite 是读 body 档的 23/24 / $4.30,B-cc 同准确率但贵 41%、慢 64%;C-lite 仍是 paired aggregate 内"读 body"档的合理代表。
+- **1K scaling 对比 K vs L**:K-bounded 1K 22/24 (掉 1 cell),L-agentic 1K 21/24 (掉 1 cell);K 仍多对 1 cell,但 K 1K duration 890s vs L 1K 499s,K 慢 78%。K shell glob 在 1K 上没撞 `ARG_MAX`(只 1000 个 dir,远低于 ~13K 的限值,见 §8.2);更大 pool (10K+) 仍未验证。**K 适合中小 pool (≤1K) 默认,L 是大 pool 的安全选项**:K 准确率略高一格但工程更脆,L 准确率扩展边界更清楚。
+- **L-agentic 150 重跑方差**:两次 150 run 都为 22/24,总数稳定;但 miss 集合不完全重合(原跑 miss `shock-analysis-demand`,rerun miss `econ-detrending-correlation`),`gh-repo-analytics` 是两跑共有 miss。这印证 §10 "每 cell 只跑一次" 的局限性:边缘 ambiguous 样本在 N=1 下有跑间方差,但总分级聚合 (n=24) 仍稳定。
+- D-agentic metadata-only (20/24) 明显低于 paired 中读 body 的 D-agentic (22/24),给 Claude Code 一个 body-on-tie 信号。M-bm25 / D-agentic metadata-only 的 miss 与 K / L 高度重合,说明剩余差距是 ambiguous / overloaded 样本而非这些策略本身退化。
 - G-native 成本低但准确率不足,不适合作为该语料上的唯一方案。
 
 ### 6.3 with-CLAUDE.md vs without-CLAUDE.md
@@ -334,9 +348,9 @@ Pareto 角度:
 | J-bounded | 22/24 | 18/24 | 23/24 | 19/24 |
 | **paired aggregate, excl. D-agentic** | **146/168** | **116/168** | **164/168** | **131/168** |
 
-G-native 两条 arm 均为 15/24。由于 G-native 不加载 `skill-router-skills`,CLAUDE.md 对它基本是 no-op;这支持一个结论:with-arm 提升主要来自 trigger 行为改变,而非单纯跨 run 随机波动。不过每 cell 仍只有一次运行,不能据此给出统计显著性结论。D-agentic 的 row 保留为修复后参考值,但因为它来自另一次 rerun,aggregate 不再混入 D-agentic。
+G-native 两条 arm 均为 15/24。由于 G-native 不加载 `skill-router-skills`,CLAUDE.md 对它基本是 no-op;这支持一个结论:with-arm 提升主要来自 trigger 行为改变,而非单纯跨 run 随机波动。不过每 cell 仍只有一次运行,不能据此给出统计显著性结论。D-agentic 的 row 保留为修复后参考值,但因为它来自另一次 rerun,aggregate 不再混入 D-agentic。后续策略迭代(D metadata-only / K / L / M)只跑 with-CLAUDE.md 单 arm,没有同期 paired without-arm 数据。
 
-### 6.4 失败构成
+### 6.3 失败构成
 
 with-CLAUDE.md 下没有任何变体选到随机 noise skill。错误主要落在两类:
 
@@ -797,6 +811,16 @@ A-router 直接把长 query 交给固定 scorer。真实 query 中大量步骤�
 | Claude/Codex fresh-env 16-variant raw run | `experiments/dci-compare/runs/rerun-150-full-2026-05-26/` |
 | Claude L-agentic restore rerun | `experiments/dci-compare/runs/rerun-claude-l-restore-2026-05-27/aggregates.json` |
 | Claude L/M 1K synthetic rerun | `experiments/dci-compare/runs/rerun-claude-1k-lm-2026-05-26/aggregates.json` |
+| Claude newvariants driver | `experiments/dci-compare/routing-only-newvariants.mjs` |
+| Claude newvariants render | `experiments/dci-compare/render-newvariants.mjs` |
+| Claude D-meta/K/K-lite/L/M 150 | `experiments/dci-compare/runs/claude-routing-only-newvariants-150-20260525/summary.json` |
+| Claude K-bounded 1K | `experiments/dci-compare/runs/claude-routing-only-newvariants-k-1k-20260525/summary.json` |
+| Claude L-agentic 1K | `experiments/dci-compare/runs/claude-routing-only-newvariants-1k-20260525/summary.json` |
+| Claude L-agentic 150 rerun | `experiments/dci-compare/runs/claude-routing-only-newvariants-l-150-rerun-20260525/summary.json` |
+| Claude L-agentic v2 150 | `experiments/dci-compare/runs/claude-routing-only-newvariants-l-v2-150-20260525/summary.json` |
+| Claude L-agentic v3 150 | `experiments/dci-compare/runs/claude-routing-only-newvariants-l-v3-150-20260525/summary.json` |
+| Claude L-agentic v3.1 150 | `experiments/dci-compare/runs/claude-routing-only-newvariants-l-v3.1-150-20260525/summary.json` |
+| L-agentic v1 / v2 / v3 SKILL.md 备份 | `experiments/dci-compare/variants/routing-only/L-agentic-v{1,2,3}.SKILL.md.backup` |
 | Codex 9x24 summary | `experiments/dci-compare/runs/codex-routing-only-9x24/summary.json` |
 | Codex new-CLI 16x24 rerun | `experiments/dci-compare/runs/rerun-codex-newcli-full-2026-05-26/aggregates.json` |
 | Codex D-agentic metadata-only | `experiments/dci-compare/runs/codex-routing-only-d-agentic-metadata-24-20260524/summary.json` |

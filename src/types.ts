@@ -47,6 +47,21 @@ export interface Skill {
    * well-formed skills.
    */
   frontmatterWarnings?: string[];
+  /**
+   * Provenance for skill entries that are not discovered on disk and instead
+   * come from a hand-maintained list (e.g. the Claude Code binary builtin
+   * skills, which expose no queryable inventory). Set only for `source ===
+   * "builtin"` entries so callers can show when the snapshot was last
+   * verified and warn if it has drifted from the host's actual builtins.
+   * Omitted for skills discovered on disk.
+   */
+  builtinListSource?: {
+    kind: "static-snapshot";
+    /** Host version the snapshot was taken against, e.g. "claude-code@2.x". */
+    version: string;
+    /** ISO date (YYYY-MM-DD) the snapshot was last hand-verified. */
+    verifiedAt: string;
+  };
 }
 
 export interface UsageStat {
@@ -54,6 +69,30 @@ export interface UsageStat {
   lastUsed: Date | null;
   callCount: number;
   firstSeen: Date | null;
+}
+
+/**
+ * Per-scan diagnostics returned by {@link import("./usage.ts").collectUsageStatsDetailed}.
+ *
+ * - `scannedFiles`: total `.jsonl` files enumerated under the transcript root.
+ * - `cachedFiles`: files whose contents were not parsed because either the
+ *   on-disk (size, mtime) cache matched OR the file's mtime is older than the
+ *   `since` cutoff. Both cases share this counter because their effect is the
+ *   same — no line-by-line parsing happened.
+ * - `parsedFiles`: files that were actually read line-by-line during this scan.
+ * - `skippedDirs`: subdirectories of the transcript root that were skipped
+ *   because `readdir` returned `EACCES` / `EPERM` (see #106).
+ * - `durationMs`: wall-clock duration of the scan in milliseconds.
+ *
+ * Invariants: `scannedFiles === cachedFiles + parsedFiles` (modulo files that
+ * disappeared between enumeration and stat, which are excluded from both).
+ */
+export interface UsageDiagnostics {
+  scannedFiles: number;
+  cachedFiles: number;
+  parsedFiles: number;
+  skippedDirs: number;
+  durationMs: number;
 }
 
 export type SuggestionReason = "never-used" | "stale";
@@ -91,6 +130,49 @@ export interface DisableRecord {
   source?: SkillSource;
   disabledAt: string;
   reason: string;
+  /**
+   * `realpath(skillMdPath)` captured at disable time. Only written when the
+   * disable went through an out-of-root symlink (i.e. `allowOutOfRoot=true`
+   * and the skill was flagged outOfRoot). Used by enable/reapply to detect
+   * if the symlink target was retargeted to a different file after disable;
+   * a mismatch refuses the rename and surfaces a manual-repair error so we
+   * never silently mutate an unrelated file the user did not pre-approve.
+   *
+   * Optional for back-compat with state files written before this field
+   * existed; absent value disables the mismatch check (no recorded canonical
+   * to compare against).
+   */
+  canonicalSkillMdPath?: string;
+  /**
+   * True when the disable mutated a file reached via an out-of-root symlink.
+   * Mirrors the `outOfRoot` skill flag at disable time so subsequent
+   * enable/reapply can decide whether to require the canonical-path check.
+   * Optional for back-compat.
+   */
+  discoveredViaSymlink?: boolean;
+}
+
+/**
+ * Raised when enable/reapply detects the symlink target underneath a recorded
+ * out-of-root disable was retargeted to a different real file between disable
+ * and the current operation. We refuse to rename the new target because the
+ * user only approved a mutation on the originally-disabled file.
+ */
+export class SkillSymlinkTargetMismatchError extends Error {
+  readonly recordedCanonical: string;
+  readonly currentCanonical: string;
+  constructor(skillId: string, skillMdPath: string, recordedCanonical: string, currentCanonical: string) {
+    super(
+      `Refusing to modify skill "${skillId}": the symlink at ${skillMdPath} now ` +
+      `resolves to ${currentCanonical}, but the disable record was captured for ` +
+      `${recordedCanonical}. Manual repair required — restore the symlink to its ` +
+      `original target, or remove the stale disable record from state and re-disable ` +
+      `the new target explicitly if that is the intended skill.`,
+    );
+    this.name = "SkillSymlinkTargetMismatchError";
+    this.recordedCanonical = recordedCanonical;
+    this.currentCanonical = currentCanonical;
+  }
 }
 
 /**
@@ -158,6 +240,17 @@ export interface State {
 export interface Config {
   unusedForDays: number;
   routeMode: RouteMode;
+  /**
+   * Optional cap on how far back the transcript scan parses files. When set,
+   * any session file whose mtime is older than `now - usageSinceDays*24h` is
+   * skipped (counted as `cachedFiles` in {@link UsageDiagnostics}). Directory
+   * enumeration still descends into every subtree because we cannot infer a
+   * dir's recency from its own mtime, but per-file parse cost is bounded.
+   *
+   * Overridable per-invocation via `AGENTIC_SKILL_ROUTER_USAGE_SINCE` (a number
+   * of days). Set to 0 or omit to scan all available history.
+   */
+  usageSinceDays?: number;
   /**
    * Extra skill names to protect from the "suggest disable" policy.
    * Matches against `skill.name` for any source. Use this when you want to

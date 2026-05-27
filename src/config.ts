@@ -1,6 +1,7 @@
-import { link, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { atomicWriteJson } from "./atomic-write.ts";
 import type { Config, RouteMode } from "./types.ts";
 
 export const DEFAULT_CONFIG_PATH = join(homedir(), ".agentic-skill-router", "config.json");
@@ -12,7 +13,13 @@ export const DEFAULT_CONFIG: Config = {
 };
 
 /** Keys the CLI accepts via `config set <key> <value>`. */
-export const CONFIG_KEYS = ["unusedForDays", "routeMode", "keepNames", "keepIds"] as const;
+export const CONFIG_KEYS = [
+  "unusedForDays",
+  "routeMode",
+  "keepNames",
+  "keepIds",
+  "usageSinceDays",
+] as const;
 export type ConfigKey = (typeof CONFIG_KEYS)[number];
 
 /** Valid values for `routeMode`. Kept in sync with {@link parseRouteMode}. */
@@ -60,7 +67,47 @@ export async function loadConfig(path: string = configPath()): Promise<Config> {
   if (keepNames) cfg.keepNames = keepNames;
   const keepIds = parseStringArray(obj["keepIds"]);
   if (keepIds) cfg.keepIds = keepIds;
+  if (
+    typeof obj["usageSinceDays"] === "number"
+    && Number.isFinite(obj["usageSinceDays"])
+    && (obj["usageSinceDays"] as number) > 0
+  ) {
+    cfg.usageSinceDays = Math.floor(obj["usageSinceDays"] as number);
+  }
   return cfg;
+}
+
+/**
+ * Resolve the effective transcript-scan cutoff. Precedence:
+ *   1. `AGENTIC_SKILL_ROUTER_USAGE_SINCE` env var, parsed as a positive number
+ *      of days. A value of `0` or anything non-numeric/non-positive disables
+ *      the cutoff for this invocation, overriding the config file.
+ *   2. `usageSinceDays` from the loaded config.
+ *   3. `null` (no cutoff — scan all history).
+ *
+ * Pure: callers pass `now` for testability.
+ */
+export function resolveUsageSince(opts: {
+  config: Config;
+  env?: NodeJS.ProcessEnv;
+  now?: Date;
+}): Date | null {
+  const env = opts.env ?? process.env;
+  const now = opts.now ?? new Date();
+  const raw = env["AGENTIC_SKILL_ROUTER_USAGE_SINCE"];
+  if (raw !== undefined) {
+    const trimmed = raw.trim();
+    if (trimmed === "") return daysAgoOrNull(opts.config.usageSinceDays, now);
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return new Date(now.getTime() - n * 86_400_000);
+  }
+  return daysAgoOrNull(opts.config.usageSinceDays, now);
+}
+
+function daysAgoOrNull(days: number | undefined, now: Date): Date | null {
+  if (typeof days !== "number" || !Number.isFinite(days) || days <= 0) return null;
+  return new Date(now.getTime() - days * 86_400_000);
 }
 
 function parseStringArray(value: unknown): string[] | null {
@@ -140,17 +187,17 @@ export async function loadRawConfigObject(path: string = configPath()): Promise<
 
 /**
  * Atomically write the given config object to disk: write a temp file in the
- * same directory then `rename` it into place so a crash during the write
- * cannot leave a partial file at the canonical path.
+ * same directory, fsync it, then `rename` it into place and fsync the parent
+ * directory so the write survives an abrupt power loss. The temp filename
+ * includes randomUUID() so two writers in the same millisecond cannot collide
+ * on the temp path.
  */
 export async function saveRawConfigObject(
   config: Record<string, unknown>,
   path: string = configPath(),
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
-  await writeFile(tmp, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
-  await rename(tmp, path);
+  await atomicWriteJson(path, config, { mode: 0o600, durable: true });
 }
 
 /**
@@ -183,6 +230,21 @@ export function parseConfigValue(key: ConfigKey, value: string): unknown {
     case "keepNames":
     case "keepIds":
       return parseStringArrayValue(key, value);
+    case "usageSinceDays": {
+      const trimmed = value.trim();
+      if (trimmed === "") {
+        throw new ConfigValueError(
+          `usageSinceDays must be a positive integer or 0 to disable (got ${JSON.stringify(value)})`,
+        );
+      }
+      const n = Number(trimmed);
+      if (!Number.isInteger(n) || n < 0) {
+        throw new ConfigValueError(
+          `usageSinceDays must be a non-negative integer (got ${JSON.stringify(value)})`,
+        );
+      }
+      return n;
+    }
   }
 }
 

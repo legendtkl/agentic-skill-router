@@ -1,0 +1,31 @@
+{
+  "rows": [
+    {
+      "variant": "L-agentic",
+      "total": 24,
+      "triggered": 24,
+      "correct": 22,
+      "hallucinated": 0,
+      "sumCost": 3.5084635,
+      "sumTurns": 101,
+      "sumDur": 493504,
+      "meanCtxEnd": 32367.833333333332,
+      "misses": [
+        {
+          "queryId": "econ-detrending-correlation",
+          "expected": "skill-080",
+          "matched": "skill-105",
+          "timedOut": false,
+          "triggered": true
+        },
+        {
+          "queryId": "gh-repo-analytics",
+          "expected": "skill-021",
+          "matched": "skill-046",
+          "timedOut": false,
+          "triggered": true
+        }
+      ]
+    }
+  ]
+}

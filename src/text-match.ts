@@ -49,6 +49,19 @@
 export type TermsMode = "lexical" | "metadata";
 export type GenericTermMode = "metadata" | "dci";
 
+/**
+ * Per-term weight applied to generic / stop terms in router scoring.
+ *
+ * Distinctive terms count at full weight (`1.0`); generic terms count at this
+ * reduced weight when computing both the matched-hit total and the query
+ * normalization total. This keeps a long generic-heavy query (e.g.
+ * "the and a") from inflating a candidate's match ratio.
+ *
+ * Both `metadata-route.ts` and `dci.ts` use the same constant so their
+ * generic-term down-weight stays consistent.
+ */
+export const GENERIC_TERM_WEIGHT = 0.15;
+
 const METADATA_GENERIC_TERMS: ReadonlySet<string> = new Set([
   // Latin generic / stop terms — taken verbatim from metadata-route.ts so
   // the canonical scoring-side classifier is unchanged.

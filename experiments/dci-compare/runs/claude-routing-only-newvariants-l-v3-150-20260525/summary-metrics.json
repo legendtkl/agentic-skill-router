@@ -1,0 +1,16 @@
+{
+  "rows": [
+    {
+      "variant": "L-agentic",
+      "total": 24,
+      "triggered": 24,
+      "correct": 24,
+      "hallucinated": 0,
+      "sumCost": 4.0538082499999994,
+      "sumTurns": 101,
+      "sumDur": 607670,
+      "meanCtxEnd": 35261.375,
+      "misses": []
+    }
+  ]
+}

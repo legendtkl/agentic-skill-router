@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { atomicWriteJson } from "./atomic-write.ts";
 import { DISABLED_SUFFIX } from "./scan.ts";
 import type { Confidence, DisableRecord, HostName, PendingOp, RoutedSkillRecord, SkillSource, State } from "./types.ts";
 
@@ -75,6 +76,8 @@ function validateRecord(x: unknown): DisableRecord | null {
   if (x["skillName"] !== undefined && typeof x["skillName"] !== "string") return null;
   if (x["source"] !== undefined && !isSkillSource(x["source"])) return null;
   if (x["instanceKey"] !== undefined && typeof x["instanceKey"] !== "string") return null;
+  if (x["canonicalSkillMdPath"] !== undefined && typeof x["canonicalSkillMdPath"] !== "string") return null;
+  if (x["discoveredViaSymlink"] !== undefined && typeof x["discoveredViaSymlink"] !== "boolean") return null;
   // Migration safety: always canonicalize identity from `(id, skillMdPath)`.
   // This heals legacy/malformed keys on load and persists the corrected key on
   // the next save.
@@ -88,6 +91,10 @@ function validateRecord(x: unknown): DisableRecord | null {
     disabledAt: x["disabledAt"],
     reason: x["reason"],
     pluginKey: x["pluginKey"] as string | null,
+    ...(typeof x["canonicalSkillMdPath"] === "string" && x["canonicalSkillMdPath"] !== ""
+      ? { canonicalSkillMdPath: x["canonicalSkillMdPath"] }
+      : {}),
+    ...(x["discoveredViaSymlink"] === true ? { discoveredViaSymlink: true } : {}),
   };
 }
 
@@ -242,13 +249,10 @@ export async function loadState(path: string = STATE_PATH, host: HostName = "cla
 
 export async function saveState(state: State, path: string = STATE_PATH): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
-  // Per-process unique temp name avoids two CLI invocations clobbering each
-  // other's temp file before rename. Truly concurrent state mutations are
-  // still racy (read-modify-write), but rename atomicity protects the final
-  // file.
-  const tmp = `${path}.tmp.${process.pid}.${Date.now()}`;
-  await writeFile(tmp, JSON.stringify(state, null, 2) + "\n", { mode: 0o600 });
-  await rename(tmp, path);
+  // Atomic write with fsync + parent-directory fsync so the state survives an
+  // abrupt power loss. The temp filename includes randomUUID() so two writers
+  // in the same millisecond cannot collide on the temp path.
+  await atomicWriteJson(path, state, { mode: 0o600, durable: true });
 }
 
 export async function withStateLock<T>(

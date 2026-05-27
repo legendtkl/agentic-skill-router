@@ -152,7 +152,7 @@ test("CLI list --json discovers Claude project skill roots from AGENTIC_SKILL_RO
         },
       },
     );
-    const listed = JSON.parse(result.stdout) as Array<{ id: string; description: string; source: string }>;
+    const listed = (JSON.parse(result.stdout) as { skills: Array<{ id: string; description: string; source: string }> }).skills;
 
     assert.ok(
       listed.some(
@@ -434,7 +434,7 @@ test("CLI list --json surfaces frontmatterWarnings only when non-empty", async (
       ["--import", "tsx", cli, "skills", "list", "--json"],
       { env: { ...process.env, CLAUDE_HOME: home, AGENTIC_SKILL_ROUTER_CWD: home } },
     );
-    const listed = JSON.parse(result.stdout) as Array<{ id: string; frontmatterWarnings?: string[] }>;
+    const listed = (JSON.parse(result.stdout) as { skills: Array<{ id: string; frontmatterWarnings?: string[] }> }).skills;
     const nested = listed.find((s) => s.id === "user:nested-cli");
     const clean = listed.find((s) => s.id === "user:clean-cli");
     assert.ok(nested);

@@ -1,7 +1,15 @@
 import { isPluginShortAmbiguous, lookupUsage } from "./usage.ts";
 import { parseRouteMode } from "./config.ts";
 import type { SkillRouteMatch, SkillRouteResult } from "./route.ts";
-import type { Confidence, RouteMode, Skill, Suggestion, UsageStat } from "./types.ts";
+import type { Confidence, RouteMode, Skill, Suggestion, UsageDiagnostics, UsageStat } from "./types.ts";
+
+/**
+ * Render a {@link UsageDiagnostics} record as a single human-readable line for
+ * the text outputs of `skills list` and `skills suggest`.
+ */
+export function formatUsageDiagnostics(d: UsageDiagnostics): string {
+  return `usage: scanned ${d.scannedFiles} files (parsed ${d.parsedFiles}, cached ${d.cachedFiles}, skipped ${d.skippedDirs} dirs) in ${d.durationMs}ms`;
+}
 
 // ────────────────── top-level usage ──────────────────
 
@@ -16,12 +24,18 @@ USAGE
   agentic-skill-router init [codex|claude-code] [project|global] [--cwd=<dir>] [--force] [--json]
   agentic-skill-router skills list [--json]
   agentic-skill-router skills suggest [--unused-for=<dur>] [--json]
-  agentic-skill-router skills route --query=<text> [--mode=auto|metadata|body|lexical|dci] [--json] [--top-k=N] [--no-record]
+  agentic-skill-router skills route --query=<text> [--mode=auto|metadata|lexical|dci|body] [--json] [--top-k=N] [--no-record]
+                                       (--mode=body is an alias for --mode=dci;
+                                       both invoke the disabled-skill DCI router.
+                                       --json reports routeModeAlias when an alias is used.)
   agentic-skill-router skills corpus search (--any=<term>... | --all=<term>...) [--ranker=weighted|bm25] [--limit=N] [--json]
   agentic-skill-router skills corpus inspect <id-or-name-or-ref...> [--json]
   agentic-skill-router skills corpus select <id-or-name-or-ref> --query=<text> --confidence=high|medium --reason=<text> [--json]
   agentic-skill-router skills dci search --query=<text> [--query=<text>...] [--metadata-only] [--json] [--top-k=N]
   agentic-skill-router skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
+                                       (--regex is advanced/power-user mode;
+                                       patterns are length-capped and screened
+                                       for catastrophic-backtracking shapes.)
   agentic-skill-router skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]
   agentic-skill-router skills dci open <id-or-ref> [--line=N] [--window=N] [--json]
   agentic-skill-router skills dci inspect <id-or-ref> [--json]
@@ -29,16 +43,17 @@ USAGE
   agentic-skill-router skills dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
   agentic-skill-router skills dci budget [--json]
   agentic-skill-router skills body <search|grep|find|open|inspect|read|select|budget> ...  (alias for dci)
-  agentic-skill-router skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>]
-  agentic-skill-router skills enable <id...>
+  agentic-skill-router skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>] [--allow-symlink-target-mutation]
+  agentic-skill-router skills enable <id...> [--allow-symlink-target-mutation]
   agentic-skill-router skills status [--json]
   agentic-skill-router skills config get [--json]
   agentic-skill-router skills config set <key> <value>
   agentic-skill-router skills config path
+  agentic-skill-router skills web [--port=N] [--bind=ADDR] [--dangerously-bind-public] [--project-root=DIR ...]
 
 DURATION  bare integer = days. Suffixed: 30d / 2w / 3m / 1y
 CONFIG    ~/.agentic-skill-router/config.json   { "unusedForDays": 30, "routeMode": "auto" }
-          keys: unusedForDays (int), routeMode (auto|metadata|body|lexical|dci),
+          keys: unusedForDays (int), routeMode (auto|metadata|lexical|dci; body is an alias for dci),
                 keepNames (JSON array), keepIds (JSON array)
 HOST      installed plugin wrappers set their host; repo checkouts default to claude-code
 STATE     ~/.agentic-skill-router/state-<host>.json
@@ -69,6 +84,7 @@ export function projectSkill(s: Skill, usage: Map<string, UsageStat>, inventory?
     callCount: u?.callCount ?? 0,
     ...(ambiguous ? { attributionAmbiguous: true } : {}),
     ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
+    ...(s.builtinListSource ? { builtinListSource: s.builtinListSource } : {}),
   };
 }
 
@@ -86,7 +102,12 @@ export function projectSuggestion(s: Suggestion) {
 }
 
 /** Shape a route result for `skills route --json` output. */
-export function projectRoute(result: SkillRouteResult, recorded: boolean, warnings: string[] = []) {
+export function projectRoute(
+  result: SkillRouteResult,
+  recorded: boolean,
+  warnings: string[] = [],
+  routeModeAlias?: string,
+) {
   const projectMatch = (m: SkillRouteMatch) => ({
     id: m.skill.id,
     name: m.skill.name,
@@ -104,6 +125,7 @@ export function projectRoute(result: SkillRouteResult, recorded: boolean, warnin
     query: result.query,
     mode: result.mode,
     routeMode: result.routeMode,
+    ...(routeModeAlias ? { routeModeAlias } : {}),
     action: result.selected ? "read-skill-file" as const : "no-confident-match" as const,
     recorded,
     warnings,

@@ -28,6 +28,49 @@ agentic-skill-router init claude-code project
 agentic-skill-router init claude-code global
 ```
 
+For `claude-code`, `init` also writes a small routing-trigger block into
+`CLAUDE.md` (project scope: `<projectRoot>/CLAUDE.md`; global scope:
+`$CLAUDE_HOME/CLAUDE.md`, defaulting to `~/.claude/CLAUDE.md`). The exact
+block written is:
+
+```markdown
+<!-- agentic-skill-router:claude-md:begin -->
+## Skill routing
+
+`agentic-skill-router-skills` is a routing Skill that searches a catalog of
+locally-installed disabled skills.
+
+When the `agentic-skill-router-skills` Skill is available and no other
+enabled Skill clearly matches the user's query, call
+`agentic-skill-router-skills` before answering. Do not invent a Skill name
+or fabricate a routing result without a Skill/tool result. If
+`agentic-skill-router-skills` is not installed in this environment, this
+section does not apply.
+```
+
+(closed with `<!-- agentic-skill-router:claude-md:end -->`)
+
+The HTML-comment fence makes the block idempotent: re-running `init` replaces
+the first existing fenced block in place (preserving its position in your
+file) and strips any duplicate blocks elsewhere. Fence markers must appear
+on their own line — markers quoted inline inside a paragraph or code block
+are ignored, so the parser cannot be tricked by user-authored prose.
+Existing CLAUDE.md content outside the fence is preserved. Line endings
+follow the file's dominant style (CRLF only when CRLF lines outnumber bare
+LF lines, otherwise LF). If `CLAUDE.md` is found with an unbalanced fence
+(`:begin` without a matching `:end`), `init` aborts before touching the
+skill directory, so a malformed file never produces a partial install.
+The conditional wording (`If ... is not installed ... this section does
+not apply`) is intentional: if the plugin is later uninstalled, a stale
+block left in CLAUDE.md is harmless rather than driving the agent to call
+a nonexistent Skill.
+
+The wording mirrors the validated `claudemd-policy-probe` in
+`experiments/dci-compare/`, which lifted router trigger rate from 78% to
+97.6% and routing accuracy from 69% to 86.9% on the 150-skill paired Claude
+Code run. Pass `--no-claude-md` to skip this write. Codex `init` never
+touches CLAUDE.md.
+
 After init, restart the target agent if it was already running, then ask the
 installed `agentic-skill-router-skills` skill to audit, slim, or route installed skills.
 
@@ -217,6 +260,34 @@ Warnings are attached to the skill record as the optional
 authors can spot silently-skipped metadata. Keep all routing metadata at the
 top level (see the `lark-mail` example above) so it parses reliably.
 
+### Claude Code builtin skill list policy
+
+Claude Code ships a handful of skills inside the binary itself (`init`,
+`review`, `claude-api`, etc.) and does not expose a queryable inventory of
+them. `agentic-skill-router` keeps a hand-maintained snapshot in
+[`src/hosts/claude-code.ts`](src/hosts/claude-code.ts) as the
+`BUILTIN_SKILLS` constant, alongside two companion constants documenting
+when the snapshot was last checked:
+
+- `BUILTIN_SKILLS_VERSION` — the Claude Code version the snapshot was
+  verified against.
+- `BUILTIN_SKILLS_VERIFIED_AT` — ISO date (`YYYY-MM-DD`) of that
+  verification.
+
+Both values are surfaced for every builtin entry in `skills list --json`
+under a `builtinListSource` field of the form
+`{ kind: "static-snapshot", version, verifiedAt }`. Consumers that care
+about drift can read those values and warn when they go stale, without
+needing to hard-code Anthropic release dates.
+
+To refresh the snapshot after a Claude Code release adds or removes a
+builtin, follow the checklist in
+[`scripts/update-claude-builtin-skills.mjs`](scripts/update-claude-builtin-skills.mjs):
+edit the array, bump both constants, run `npm run typecheck && npm test`,
+and ship. The script itself only prints the checklist — it does not call
+out to the network or a Claude Code binary, so the runtime stays
+dependency-free.
+
 ## Troubleshooting
 
 See [`docs/troubleshooting.md`](docs/troubleshooting.md) for recovery
@@ -301,6 +372,55 @@ in `--mode=metadata|lexical|dci` every hit is attributed to that mode by
 definition. `metadataHitRate` is reported in `auto` and `metadata` modes; it
 is `n/a` in `lexical` and `dci`. `dciEscalationRate` is meaningful only in
 `auto` mode and is `n/a` elsewhere.
+
+#### `--mode=body` is an alias for `--mode=dci`
+
+`dci` is the canonical name for the disabled-skill body/DCI router; `body`
+was the original spelling and is kept as a compatibility alias. Both modes
+call the same underlying router and therefore return identical
+`selected`/`matches` for the same query — only the `routeMode` label in the
+output reflects which spelling the caller used. When `--mode=body` is
+passed, `skills route --json` also emits `routeModeAlias: "dci"` so
+consumers can tell that the canonical mode is `dci`. `--mode=dci` does not
+emit a `routeModeAlias` field. The same alias applies to the
+`routeMode` config key (`agentic-skill-router skills config set routeMode body`
+behaves identically to `... routeMode dci`).
+
+### DCI grep/find `--regex` is power-user mode
+
+`skills dci grep` and `skills dci find` default to literal substring matching,
+which is the recommended path for both humans and agents. Passing `--regex`
+enables ECMAScript regex matching against every line of every disabled
+`SKILL.md` and is treated as an advanced/power-user surface. To protect the
+shared corpus walker from catastrophic-backtracking (ReDoS) inputs, the CLI
+applies a static guard before compiling the pattern AND a per-line wall-clock
+deadline at match time:
+
+Static guard (rejects with exit code 2 and `DciRegexComplexityError`):
+
+- Length cap (200 characters).
+- A quantifier (`+`, `*`, `?`, `{n,}`, `{n,m}` with `m > 10`) applied to a
+  group whose body itself contains another quantifier — the canonical
+  nested-repetition ReDoS shape. Covers `(a+)+`, `(.*)*`, `(a?)+`,
+  `(a{1,})+`, `(a+){2,}`, `([a-z]+){2,}`, and so on.
+- A quantifier applied to a group whose top-level alternatives share a
+  common prefix — e.g. `(a|aa)+`, `(foo|foobar)+`.
+- `{n,}` with no upper bound, or `{n,m}` with `m > 10`, applied to a group.
+- More than 4 consecutive quantified atoms with the same signature — e.g.
+  `a*a*a*a*a*…`, `\d*\d*\d*…`, `[a-z]*[a-z]*…`. These patterns have no
+  groups and slip past every other rule but produce exponential
+  backtracking that the post-hoc per-line deadline cannot pre-empt.
+
+Runtime deadline (rejects with exit code 2 and `DciRegexTimeoutError`):
+
+- A single per-line match that exceeds 50ms is treated as catastrophic and
+  aborts further matching for that pattern. The deadline is post-hoc — the
+  engine cannot be pre-empted without a Worker — so one slow line can still
+  burn its 50ms, but aggregate damage stays bounded.
+
+The static heuristic is intentionally over-rejecting on a power-user surface;
+if it flags a pattern you believe is safe, rewrite without nested repetition
+or overlapping alternatives, or drop `--regex` for literal mode.
 
 Layout:
 

@@ -192,7 +192,8 @@ test(
       };
       assert.equal(settings.enabledPlugins?.["agentic-skill-router@local"], true);
 
-      const listed = await runRouterJson<SkillListItem[]>(routerBin, ["skills", "list", "--json"], fresh.env);
+      const listedEnvelope = await runRouterJson<{ skills: SkillListItem[] }>(routerBin, ["skills", "list", "--json"], fresh.env);
+      const listed = listedEnvelope.skills;
       const claudeOpenAiSkills = listed.filter((item) => {
         if (item.pluginKey !== null) return false;
         // Accept only simple user:<name> ids; reject project:claude:* and

@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   collectUsageStats,
+  collectUsageStatsDetailed,
   isPluginShortAmbiguous,
   lookupUsage,
   lookupUsageStrict,
@@ -96,6 +97,83 @@ test("collectUsageStats skips unreadable transcript files", async () => {
     assert.equal(stats.get("bar"), undefined);
   } finally {
     await chmod(unreadable, 0o600).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("collectUsageStats skips unreadable transcript subdirs and warns", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based unreadable dir test is unreliable on Windows");
+    return;
+  }
+  if (process.getuid && process.getuid() === 0) {
+    t.skip("root bypasses POSIX directory permission checks");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-usage-dir-eacces-"));
+  const projectsDir = join(root, "projects");
+  const readableDir = join(projectsDir, "readable");
+  const unreadableDir = join(projectsDir, "unreadable");
+  const readableSession = join(readableDir, "session.jsonl");
+  const buriedSession = join(unreadableDir, "session.jsonl");
+  const mkLine = (skill: string) => `${JSON.stringify({
+    timestamp: "2026-04-10T08:00:00.000Z",
+    message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
+  })}\n`;
+  await mkdir(readableDir, { recursive: true });
+  await mkdir(unreadableDir, { recursive: true });
+  await writeFile(readableSession, mkLine("foo"), "utf8");
+  await writeFile(buriedSession, mkLine("bar"), "utf8");
+  await chmod(unreadableDir, 0o000);
+
+  // Verify the OS actually rejects readdir for the test user; some
+  // filesystems / sandboxes silently grant access despite chmod 000.
+  let dirIsActuallyBlocked = false;
+  try {
+    const { readdir } = await import("node:fs/promises");
+    await readdir(unreadableDir);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    dirIsActuallyBlocked = code === "EACCES" || code === "EPERM";
+  }
+  if (!dirIsActuallyBlocked) {
+    await chmod(unreadableDir, 0o700).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+    t.skip("filesystem did not honor chmod 0o000 (likely overlay/sandbox FS)");
+    return;
+  }
+
+  const errors: string[] = [];
+  const origError = console.error;
+  console.error = (...args: unknown[]) => {
+    errors.push(args.map((a) => String(a)).join(" "));
+  };
+  try {
+    const stats = await collectUsageStats(projectsDir);
+    assert.equal(stats.get("foo")?.callCount, 1, "readable subtree must still be scanned");
+    assert.equal(stats.get("bar"), undefined, "unreadable subtree must not contribute");
+    const matched = errors.find((m) => m.includes(unreadableDir) && /EACCES|EPERM/.test(m));
+    assert.ok(matched, `expected a stderr warning naming ${unreadableDir}; got ${JSON.stringify(errors)}`);
+  } finally {
+    console.error = origError;
+    await chmod(unreadableDir, 0o700).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("collectUsageStats propagates unexpected directory errors", async () => {
+  // readdir on a regular file produces ENOTDIR — that is not in the
+  // EACCES/EPERM/ENOENT allowlist and must still surface as a thrown error
+  // rather than being silently swallowed.
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-usage-enotdir-"));
+  const notADir = join(root, "not-a-dir");
+  await writeFile(notADir, "ignored", "utf8");
+  try {
+    await assert.rejects(
+      () => collectUsageStats(notADir),
+      (err: NodeJS.ErrnoException) => err.code === "ENOTDIR",
+    );
+  } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -374,6 +452,155 @@ test("collectUsageStats: no host and no cachePath skips caching entirely", async
     // create any side-effect cache file.
     const stats = await collectUsageStats(projectsDir);
     assert.equal(stats.get("foo")?.callCount, 1);
+  } finally {
+    await cleanup();
+  }
+});
+
+// ─── diagnostics + since cutoff (issue #112) ────────────────────────────────
+
+test("collectUsageStatsDetailed returns diagnostics with sensible counts", async () => {
+  const { projectsDir, cleanup } = await mkTmpProjects();
+  try {
+    const sessionA = join(projectsDir, "proj-a", "session.jsonl");
+    const sessionB = join(projectsDir, "proj-b", "session.jsonl");
+    await writeTranscript(sessionA, [FOO_TOOLUSE]);
+    await writeTranscript(sessionB, [BAR_TOOLUSE]);
+
+    delete process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"];
+    const { usage, diagnostics } = await collectUsageStatsDetailed(projectsDir);
+
+    assert.equal(usage.get("foo")?.callCount, 1);
+    assert.equal(usage.get("bar")?.callCount, 1);
+    assert.equal(diagnostics.scannedFiles, 2);
+    assert.equal(diagnostics.parsedFiles, 2, "fresh scan with no cache parses every file");
+    assert.equal(diagnostics.cachedFiles, 0);
+    assert.equal(diagnostics.skippedDirs, 0);
+    assert.equal(typeof diagnostics.durationMs, "number");
+    assert.ok(diagnostics.durationMs >= 0, "durationMs must be non-negative");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("collectUsageStatsDetailed reports cache hits as cachedFiles, not parsedFiles", async () => {
+  const { projectsDir, cacheDir, cleanup } = await mkTmpProjects();
+  try {
+    const session = join(projectsDir, "proj-a", "session.jsonl");
+    await writeTranscript(session, [FOO_TOOLUSE]);
+    const cachePath = join(cacheDir, "usage-cache-codex.json");
+    delete process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"];
+
+    // First scan populates the cache.
+    const first = await collectUsageStatsDetailed(projectsDir, { cachePath });
+    assert.equal(first.diagnostics.parsedFiles, 1);
+    assert.equal(first.diagnostics.cachedFiles, 0);
+
+    // Second scan should hit the cache.
+    const second = await collectUsageStatsDetailed(projectsDir, { cachePath });
+    assert.equal(second.diagnostics.parsedFiles, 0);
+    assert.equal(second.diagnostics.cachedFiles, 1);
+    assert.equal(second.diagnostics.scannedFiles, 1);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("collectUsageStatsDetailed.skippedDirs counts EACCES/EPERM directory skips", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("chmod-based unreadable dir test is unreliable on Windows");
+    return;
+  }
+  if (process.getuid && process.getuid() === 0) {
+    t.skip("root bypasses POSIX directory permission checks");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-usage-skipdir-diag-"));
+  const projectsDir = join(root, "projects");
+  const readableDir = join(projectsDir, "readable");
+  const unreadableDir = join(projectsDir, "unreadable");
+  await mkdir(readableDir, { recursive: true });
+  await mkdir(unreadableDir, { recursive: true });
+  await writeFile(join(readableDir, "session.jsonl"), FOO_TOOLUSE + "\n");
+  await writeFile(join(unreadableDir, "session.jsonl"), BAR_TOOLUSE + "\n");
+  await chmod(unreadableDir, 0o000);
+
+  let dirIsActuallyBlocked = false;
+  try {
+    const { readdir } = await import("node:fs/promises");
+    await readdir(unreadableDir);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    dirIsActuallyBlocked = code === "EACCES" || code === "EPERM";
+  }
+  if (!dirIsActuallyBlocked) {
+    await chmod(unreadableDir, 0o700).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+    t.skip("filesystem did not honor chmod 0o000 (likely overlay/sandbox FS)");
+    return;
+  }
+
+  const origError = console.error;
+  console.error = () => undefined;
+  try {
+    const { diagnostics } = await collectUsageStatsDetailed(projectsDir);
+    assert.equal(diagnostics.skippedDirs, 1, "unreadable subtree must be counted exactly once");
+    assert.equal(diagnostics.scannedFiles, 1, "only the readable session should count as scanned");
+    assert.equal(diagnostics.parsedFiles, 1);
+  } finally {
+    console.error = origError;
+    await chmod(unreadableDir, 0o700).catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("collectUsageStatsDetailed: `since` skips files older than the cutoff", async () => {
+  const { projectsDir, cleanup } = await mkTmpProjects();
+  try {
+    const oldSession = join(projectsDir, "proj-old", "session.jsonl");
+    const newSession = join(projectsDir, "proj-new", "session.jsonl");
+    await writeTranscript(oldSession, [FOO_TOOLUSE]);
+    await writeTranscript(newSession, [BAR_TOOLUSE]);
+    // Force the old session's mtime back well before any reasonable cutoff.
+    const longAgo = new Date(Date.now() - 365 * 86_400_000);
+    await utimes(oldSession, longAgo, longAgo);
+
+    delete process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"];
+    const since = new Date(Date.now() - 7 * 86_400_000);
+    const { usage, diagnostics } = await collectUsageStatsDetailed(projectsDir, { since });
+
+    assert.equal(usage.get("bar")?.callCount, 1, "recent session must still be parsed");
+    assert.equal(usage.get("foo"), undefined, "old session must not be parsed");
+    assert.equal(diagnostics.scannedFiles, 2, "both files are enumerated even when skipped by date");
+    assert.equal(diagnostics.parsedFiles, 1);
+    assert.equal(diagnostics.cachedFiles, 1, "since-skipped files are counted as cached");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("collectUsageStatsDetailed: `since` reuses old cache entries for skipped files", async () => {
+  const { projectsDir, cacheDir, cleanup } = await mkTmpProjects();
+  try {
+    const session = join(projectsDir, "proj-old", "session.jsonl");
+    await writeTranscript(session, [FOO_TOOLUSE]);
+    const cachePath = join(cacheDir, "usage-cache-codex.json");
+    delete process.env["AGENTIC_SKILL_ROUTER_USAGE_CACHE"];
+
+    // Seed the cache while no cutoff is set.
+    await collectUsageStatsDetailed(projectsDir, { cachePath });
+
+    // Now backdate the file and re-scan with a 7-day cutoff. The file is now
+    // older than the cutoff, but the cache still knows about it — coverage of
+    // historical attribution must not regress.
+    const longAgo = new Date(Date.now() - 365 * 86_400_000);
+    await utimes(session, longAgo, longAgo);
+
+    const since = new Date(Date.now() - 7 * 86_400_000);
+    const { usage, diagnostics } = await collectUsageStatsDetailed(projectsDir, { cachePath, since });
+    assert.equal(usage.get("foo")?.callCount, 1, "stale cache must still contribute to the merged result");
+    assert.equal(diagnostics.parsedFiles, 0);
+    assert.equal(diagnostics.cachedFiles, 1);
   } finally {
     await cleanup();
   }

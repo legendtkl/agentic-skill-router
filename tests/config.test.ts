@@ -14,6 +14,7 @@ import {
   parseDuration,
   parseRouteMode,
   resolveUnusedForDays,
+  resolveUsageSince,
   saveRawConfigObject,
   setConfigValue,
 } from "../src/config.ts";
@@ -329,4 +330,80 @@ test("saveRawConfigObject creates parent directory and writes JSON", async () =>
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// ─── usageSinceDays (issue #112) ────────────────────────────────────────────
+
+test("CONFIG_KEYS includes usageSinceDays", () => {
+  assert.ok((CONFIG_KEYS as readonly string[]).includes("usageSinceDays"));
+});
+
+test("loadConfig parses usageSinceDays from JSON", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-usage-since-"));
+  const path = join(dir, "config.json");
+  try {
+    await writeFile(path, JSON.stringify({ usageSinceDays: 14 }) + "\n");
+    const cfg = await loadConfig(path);
+    assert.equal(cfg.usageSinceDays, 14);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("loadConfig ignores non-positive usageSinceDays", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "agentic-skill-router-usage-since-bad-"));
+  const path = join(dir, "config.json");
+  try {
+    await writeFile(path, JSON.stringify({ usageSinceDays: 0 }) + "\n");
+    const cfg = await loadConfig(path);
+    assert.equal(cfg.usageSinceDays, undefined);
+
+    await writeFile(path, JSON.stringify({ usageSinceDays: -5 }) + "\n");
+    const cfg2 = await loadConfig(path);
+    assert.equal(cfg2.usageSinceDays, undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("parseConfigValue('usageSinceDays', ...) accepts non-negative integers", () => {
+  assert.equal(parseConfigValue("usageSinceDays", "30"), 30);
+  assert.equal(parseConfigValue("usageSinceDays", "0"), 0);
+  assert.throws(() => parseConfigValue("usageSinceDays", "abc"), ConfigValueError);
+  assert.throws(() => parseConfigValue("usageSinceDays", "-1"), ConfigValueError);
+  assert.throws(() => parseConfigValue("usageSinceDays", ""), ConfigValueError);
+});
+
+test("resolveUsageSince returns null when no config and no env", () => {
+  const since = resolveUsageSince({ config: { ...DEFAULT_CONFIG }, env: {} });
+  assert.equal(since, null);
+});
+
+test("resolveUsageSince computes cutoff from config.usageSinceDays", () => {
+  const now = new Date("2026-05-01T00:00:00Z");
+  const since = resolveUsageSince({
+    config: { ...DEFAULT_CONFIG, usageSinceDays: 7 },
+    env: {},
+    now,
+  });
+  assert.ok(since instanceof Date);
+  assert.equal(since!.toISOString(), "2026-04-24T00:00:00.000Z");
+});
+
+test("resolveUsageSince env override beats config value", () => {
+  const now = new Date("2026-05-01T00:00:00Z");
+  const since = resolveUsageSince({
+    config: { ...DEFAULT_CONFIG, usageSinceDays: 30 },
+    env: { AGENTIC_SKILL_ROUTER_USAGE_SINCE: "3" },
+    now,
+  });
+  assert.equal(since!.toISOString(), "2026-04-28T00:00:00.000Z");
+});
+
+test("resolveUsageSince env=0 disables the cutoff even when config sets one", () => {
+  const since = resolveUsageSince({
+    config: { ...DEFAULT_CONFIG, usageSinceDays: 30 },
+    env: { AGENTIC_SKILL_ROUTER_USAGE_SINCE: "0" },
+  });
+  assert.equal(since, null);
 });

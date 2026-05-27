@@ -1,0 +1,71 @@
+---
+name: skill-router-skills
+description: MUST be used FIRST, before any other tool, for EVERY user request that mentions a specific tool, API, file format, service, framework, library, CLI, platform, dataset, or domain workflow -- e.g. parsing/operating/querying/configuring/deploying/transcribing/analyzing/debugging/generating/refactoring/troubleshooting a named technology. A large catalog of disabled Agent Skills is installed locally; one of them likely specializes in this exact task. Invoke this skill FIRST to identify which one before attempting the task.
+metadata:
+  skill-router.version: "2"
+  skill-router.variant: "L-agentic"
+---
+
+# skill-router - Variant L (agentic corpus primitives, v2)
+
+Use the `skill-router` corpus primitives as an AgenticRAG-style retrieval
+harness. Do not call `skills route` and do not call `skills dci`. Do not read
+skill bodies. Route from disabled-skill metadata only.
+
+CLI: `<abs-path-to-skill-router>`.
+
+## Workflow
+
+1. Extract 3-7 distinctive query terms from the user request. Prefer
+   terms that uniquely identify the task (technical nouns, named methods,
+   APIs, file extensions, protocols, exact operations) and skip generic
+   filler. For any concept that has more than one common phrasing, include
+   both forms — different skills phrase the same concept differently in
+   their `description`, so a single phrasing risks zero-recall on the
+   correct skill.
+
+2. Search metadata with OR-only `--any` terms (no `--all`). Start with the
+   full term set:
+
+   ```bash
+   <abs-path-to-skill-router> skills corpus search \
+     --any "<term1>" --any "<term2>" --any "<term3>" --any "<term4>" \
+     --limit 30 --json
+   ```
+
+   The result reports `totalMatches`, `returned`, `truncated`, and stable
+   `ref` values. Adjust only if necessary, within a small bounded budget
+   (2-4 searches total):
+   - if `totalMatches` is 0, replace one term with a broader synonym and
+     retry;
+   - if `truncated` is true or `totalMatches` > 30, add 1-2 more specific
+     terms (still as `--any`, not `--all`) and retry;
+   - never use `--all` unless three consecutive searches return >30 each.
+
+3. **Always inspect the top-3 candidates** before committing — even if the
+   top-1 looks obvious from the search snippet. The search response only
+   shows truncated description snippets; the full `description` from
+   `corpus inspect` often contains the distinguishing operation that
+   distractors lack.
+
+   ```bash
+   <abs-path-to-skill-router> skills corpus inspect <ref1> <ref2> <ref3> --json
+   ```
+
+   If the shortlist has fewer than 3 candidates, inspect all of them. Skip
+   inspect only if there is exactly 1 candidate in the shortlist.
+
+4. Choose by metadata evidence from the inspect result (not the search
+   snippet):
+   - Prefer explicit operation coverage over nearby topic similarity.
+   - Prefer a dedicated file-format/tool skill when the task is to operate
+     that file format or tool.
+   - Prefer a domain/method skill when the named method/domain constraint
+     is central and the file/tool is only the substrate.
+   - For retrieve/extract/structured-answer tasks, prefer metadata
+     mentioning evidence, search, extraction, or structured output over
+     broad discovery or planning.
+   - If still tied, choose the metadata covering the most distinctive
+     required verbs and nouns.
+
+Return exactly one bare `skill-NNN`. Do not execute the user's task.

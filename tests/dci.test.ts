@@ -1,10 +1,18 @@
+import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import {
   DCI_BUDGET,
+  DCI_REGEX_LINE_TIMEOUT_MS,
+  DCI_REGEX_MAX_DOT_WILDCARDS,
+  DCI_REGEX_MAX_LENGTH,
+  DciRegexComplexityError,
+  DciRegexTimeoutError,
   dciFindInSkill,
   dciGrepDisabledSkills,
   dciInspectSkill,
@@ -15,6 +23,7 @@ import {
   dciSelectSkill,
   dciSelectSkills,
   routableDisabledSkills,
+  validateRegexPattern,
 } from "../src/dci.ts";
 import { routeDisabledSkillsAuto } from "../src/auto-route.ts";
 import { routeDisabledSkills } from "../src/route.ts";
@@ -515,6 +524,91 @@ test("DCI snippet scoring prefers strong evidence over earlier generic-only matc
   }
 });
 
+test("DCI candidate score down-weights generic-only queries below medium confidence", async () => {
+  // A generic-heavy query whose only matched terms are common stop words
+  // ("the", "and", "for") must not promote a skill to medium/high
+  // confidence. Pre-issue-#110 the scorer counted raw hits, so a query of
+  // all-generic terms whose stop tokens all appeared (substring-wise) in
+  // the skill body scored `1.0` and could be auto-selected.
+  const corpus = await makeCorpus(0);
+  try {
+    const skill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:generic-only-probe",
+      name: "generic-only-probe",
+      description: "Storage helper module",
+      // Description/body intentionally omit "the"/"and"/"for" outside the
+      // single "the" in body — substring matches against compact(haystack)
+      // would otherwise inflate the hit count even though every matched
+      // term is generic. With only "the" hitting, weighted ratio =
+      // 0.15 / 0.45 ≈ 0.33, well below the 0.5 medium threshold.
+      body: "This body mentions the project; no other generics here.",
+      isDisabled: true,
+    });
+
+    const result = await dciSearchDisabledSkills(
+      [skill],
+      "the and for",
+      { topK: 1 },
+    );
+    assert.equal(result.matches.length, 1);
+    const score = result.matches[0]!.score;
+    // Weighted denominator = 3 * 0.15 = 0.45; weighted hit on "the" alone
+    // = 0.15; ratio ~= 0.33. Anything below 0.5 leaves the candidate in
+    // the "low" confidence band.
+    assert.ok(score < 0.5, `expected generic-only score < 0.5, got ${score}`);
+
+    const route = await dciRouteDisabledSkills([skill], "the and for", { topK: 1 });
+    assert.equal(route.matches[0]?.confidence, "low");
+    assert.equal(route.selected, null);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI candidate score ranks distinctive matches above generic-only matches on the same skill", async () => {
+  // The same skill is queried twice: once with a distinctive query whose
+  // terms are present in the body, and once with a generic-only query
+  // whose stop-word terms also appear. The distinctive query must score
+  // strictly higher and reach medium/high confidence; the generic query
+  // must stay in the low band.
+  const corpus = await makeCorpus(0);
+  try {
+    const skill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:kubernetes-deploy-probe",
+      name: "kubernetes-deploy-probe",
+      description: "Kubernetes deployment helper",
+      // Body kept short and free of generic tokens so the generic query
+      // doesn't pick up substring hits that would muddy the comparison.
+      body: "This skill handles kubernetes deployment workflows.",
+      isDisabled: true,
+    });
+
+    const distinctive = await dciSearchDisabledSkills(
+      [skill],
+      "kubernetes deployment",
+      { topK: 1 },
+    );
+    const generic = await dciSearchDisabledSkills(
+      [skill],
+      "the and for",
+      { topK: 1 },
+    );
+    assert.equal(distinctive.matches.length, 1);
+    assert.equal(generic.matches.length, 1);
+    assert.ok(
+      distinctive.matches[0]!.score > generic.matches[0]!.score,
+      `distinctive (${distinctive.matches[0]!.score}) must outrank generic (${generic.matches[0]!.score})`,
+    );
+
+    const distinctiveRoute = await dciRouteDisabledSkills([skill], "kubernetes deployment", { topK: 1 });
+    const genericRoute = await dciRouteDisabledSkills([skill], "the and for", { topK: 1 });
+    assert.notEqual(distinctiveRoute.matches[0]?.confidence, "low");
+    assert.equal(genericRoute.matches[0]?.confidence, "low");
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI grep returns bounded snippets from disabled skills", async () => {
   const corpus = await makeCorpus();
   try {
@@ -541,6 +635,287 @@ test("DCI grep treats patterns literally unless regex is explicit", async () => 
     assert.match(regex.matches[0]?.snippets[0]?.text ?? "", /dci-orchid-ledger-repair/);
   } finally {
     await corpus.cleanup();
+  }
+});
+
+test("DCI regex validator rejects over-length patterns with a clear error", () => {
+  assert.doesNotThrow(() => validateRegexPattern("a".repeat(DCI_REGEX_MAX_LENGTH)));
+  const tooLong = "a".repeat(DCI_REGEX_MAX_LENGTH + 1);
+  assert.throws(
+    () => validateRegexPattern(tooLong),
+    (err: unknown) => {
+      if (!(err instanceof DciRegexComplexityError)) return false;
+      return err.message.includes(String(DCI_REGEX_MAX_LENGTH));
+    },
+  );
+});
+
+test("DCI regex validator rejects nested-quantifier ReDoS shapes", () => {
+  // Codex P1 follow-up: every pattern below must be flagged by the static
+  // heuristic. The first set is from the original issue; the second set is
+  // from the codex follow-up that broke the narrow first-pass heuristic.
+  const original = ["(a+)+$", "(.*)*", "(.+)+", "(\\d+)+$", "(ab+)+x"];
+  const codexFollowUp = [
+    "(a+){2,}$",
+    "([a-z]+){2,}$",
+    "(a{1,})+$",
+    "(a?)+$",
+    "^(a|aa)+$",
+  ];
+  for (const pattern of [...original, ...codexFollowUp]) {
+    assert.throws(
+      () => validateRegexPattern(pattern),
+      DciRegexComplexityError,
+      `expected ${pattern} to be flagged as ReDoS-shaped`,
+    );
+  }
+  // Safe patterns must continue to pass the heuristic.
+  for (const pattern of ["^foo", "dci-.*-repair", "[a-z]+", "orchid|ledger"]) {
+    assert.doesNotThrow(() => validateRegexPattern(pattern), `expected ${pattern} to pass`);
+  }
+});
+
+test("DCI regex validator rejects open or oversized group bounds", () => {
+  // `{n,}` directly on a group is rejected even when the inner body is tame.
+  assert.throws(() => validateRegexPattern("(a){2,}"), DciRegexComplexityError);
+  // `{n,m}` with `m` larger than the small allowed bound is rejected.
+  assert.throws(() => validateRegexPattern("(a){2,50}"), DciRegexComplexityError);
+  // Small bounded repetition on a plain group is fine.
+  assert.doesNotThrow(() => validateRegexPattern("(abc){3}"));
+  assert.doesNotThrow(() => validateRegexPattern("(abc){1,5}"));
+});
+
+test("DCI regex validator open-bound check inspects only THIS group's quantifier (P2)", () => {
+  // Regression for chatgpt-codex inline review on PR #141: the previous
+  // implementation re-scanned `pattern.slice(group.end)` for `{n,}` and
+  // wrongly rejected patterns where an EARLIER group was quantified with
+  // `+`/`*` and any LATER unrelated atom happened to use `{n,}`. The
+  // attached quantifier is `+`, not `{n,}`, so this pattern must validate.
+  assert.doesNotThrow(() => validateRegexPattern("(foo)+bar{2,}"));
+  // Also: a `*` group followed by an unrelated `{n,}` on a non-group atom.
+  assert.doesNotThrow(() => validateRegexPattern("(foo)*baz{3,}"));
+  // And the same shape with a large bounded later atom — the group's `+`
+  // is not `{n,m>10}`, so this must validate.
+  assert.doesNotThrow(() => validateRegexPattern("(foo)+bar{0,100}"));
+  // Counter-checks: the actual quantifier on the group is `{n,}` /
+  // large-bounded → still correctly rejected.
+  assert.throws(() => validateRegexPattern("(foo){2,}"), DciRegexComplexityError);
+  assert.throws(() => validateRegexPattern("(foo){0,100}"), DciRegexComplexityError);
+  // A non-group atom with a small in-range bound must remain accepted.
+  assert.doesNotThrow(() => validateRegexPattern("(foo)+bar{0,3}"));
+});
+
+test("DCI regex validator does not flag non-capturing group prefix as inner quantifier", () => {
+  // `(?:...)` inside an outer quantified group must not be treated as a
+  // nested quantifier just because of the leading `?`.
+  assert.doesNotThrow(() => validateRegexPattern("((?:foo)bar)+"));
+  assert.doesNotThrow(() => validateRegexPattern("((?:foo))"));
+});
+
+test("DCI regex validator rejects consecutive overlapping quantified atoms", () => {
+  // Codex P1 follow-up #3: long runs of `a*a*a*…` style atoms have no
+  // groups so they slip past every earlier rule but produce exponential
+  // backtracking. They must be rejected statically and fast — before the
+  // regex is compiled, never mind matched.
+  const cases: Array<{ pattern: string; label: string }> = [
+    { pattern: "a*".repeat(24) + "b", label: "a* x24 + b" },
+    { pattern: "\\d*".repeat(10), label: "\\d* x10" },
+    { pattern: "[a-z]*".repeat(8), label: "[a-z]* x8" },
+    { pattern: "a+".repeat(6), label: "a+ x6" },
+    { pattern: "a?".repeat(6), label: "a? x6" },
+    { pattern: ".*".repeat(6), label: ".* x6" },
+    { pattern: "a{0,3}".repeat(6), label: "a{0,3} x6" },
+  ];
+  for (const { pattern, label } of cases) {
+    const startedAt = Date.now();
+    assert.throws(
+      () => validateRegexPattern(pattern),
+      DciRegexComplexityError,
+      `expected ${label} (${pattern}) to be flagged as overlapping streak`,
+    );
+    const elapsed = Date.now() - startedAt;
+    assert.ok(elapsed < 50, `expected ${label} to reject in <50ms, took ${elapsed}ms`);
+  }
+});
+
+test("DCI regex validator does not flag normal patterns with a few quantified atoms", () => {
+  // Regression set: each pattern is below the overlap-streak cap and must
+  // validate. Different signatures in a row are also fine — only same-
+  // signature runs trigger the rule.
+  for (const pattern of [
+    "a*b*c?",
+    "^\\d+\\.\\d+$",
+    "https?://[\\w.-]+",
+    "[a-z][0-9][a-z]",
+    "a*b*c*d*",
+    "\\d\\d\\d\\d\\d", // five unquantified atoms — must not trigger
+    "a*a*a*a*",        // exactly at the streak cap — still allowed
+  ]) {
+    assert.doesNotThrow(() => validateRegexPattern(pattern), `expected ${pattern} to pass`);
+  }
+});
+
+test("DCI regex validator rejects excessive top-level dot-wildcards (Rule 6)", () => {
+  // `.*` and `.+` interleaved with literals produce O(n^k) backtracking when
+  // the literal appears many times in the subject. The streak rule misses
+  // these because each wildcard's streak resets on the literal in between.
+  // More than DCI_REGEX_MAX_DOT_WILDCARDS unbounded dot-wildcards is rejected.
+  const tooMany = DCI_REGEX_MAX_DOT_WILDCARDS + 1;
+  const badPatterns = [
+    ".*a.*a.*a.*a.*c",                         // 4 .* interleaved → caught
+    ".+".repeat(tooMany) + "x",               // chain of .+ → caught
+    ".*foo.*bar.*baz.*qux",                    // 4 .* → caught
+    // Mixed unbounded + literal sandwich
+    [...Array(tooMany)].map(() => ".*x").join("") + "c",
+  ];
+  for (const pattern of badPatterns) {
+    assert.throws(
+      () => validateRegexPattern(pattern),
+      DciRegexComplexityError,
+      `expected "${pattern}" to be flagged by the dot-wildcard rule`,
+    );
+  }
+
+  // ≤ DCI_REGEX_MAX_DOT_WILDCARDS unbounded dot-wildcards must pass.
+  const goodPatterns = [
+    ".*keyword.*",                             // 2 .*  — very common
+    ".*foo.*bar",                              // 2 .*
+    ".*foo.*bar.*baz",                         // 3 .* — at the limit
+    ".+foo.+bar",                              // 2 .+
+    // Bounded .? does NOT count toward the dot-wildcard limit.
+    ".?a.?a.?a.?a.?c",                        // 5 .? — bounded, allowed
+    "a.?b.?c.?d.?e.?f",                       // 6 .? — bounded, allowed
+  ];
+  for (const pattern of goodPatterns) {
+    assert.doesNotThrow(
+      () => validateRegexPattern(pattern),
+      `expected "${pattern}" to pass the dot-wildcard rule`,
+    );
+  }
+});
+
+test("DCI grep rejects the codex consecutive-overlap pattern at the API in under 50ms", async () => {
+  // Stronger guarantee than the validator-only test: the public API path
+  // must also reject the pattern before any compile-or-match work happens.
+  const corpus = await makeCorpus(0);
+  try {
+    const pattern = "a*".repeat(24) + "b";
+    const startedAt = Date.now();
+    await assert.rejects(
+      () => dciGrepDisabledSkills(corpus.skills, pattern, { regex: true }),
+      DciRegexComplexityError,
+    );
+    const elapsed = Date.now() - startedAt;
+    assert.ok(
+      elapsed < 50,
+      `expected API to reject codex overlap pattern in <50ms, took ${elapsed}ms`,
+    );
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI grep surfaces complexity errors through DciRegexComplexityError, not crashes", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    // Literal mode is unaffected by the regex guard, including for patterns
+    // that would be flagged when --regex is set.
+    const literal = await dciGrepDisabledSkills(corpus.skills, "(a+)+$");
+    assert.equal(literal.mode, "literal");
+    assert.equal(literal.matches.length, 0);
+
+    // A safe regex still works (regression guard).
+    const safe = await dciGrepDisabledSkills(corpus.skills, "^anything", { regex: true });
+    assert.equal(safe.mode, "regex");
+
+    // Dangerous regex is rejected synchronously at the API boundary.
+    await assert.rejects(
+      () => dciGrepDisabledSkills(corpus.skills, "(a+)+$", { regex: true }),
+      DciRegexComplexityError,
+    );
+    await assert.rejects(
+      () => dciGrepDisabledSkills(corpus.skills, "a".repeat(DCI_REGEX_MAX_LENGTH + 1), { regex: true }),
+      DciRegexComplexityError,
+    );
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI grep rejects every codex-named pathological pattern via the API in under 100ms", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const patterns = [
+      "(a+){2,}$",
+      "([a-z]+){2,}$",
+      "(a{1,})+$",
+      "(a?)+$",
+      "^(a|aa)+$",
+    ];
+    for (const pattern of patterns) {
+      const startedAt = Date.now();
+      await assert.rejects(
+        () => dciGrepDisabledSkills(corpus.skills, pattern, { regex: true }),
+        DciRegexComplexityError,
+        `expected ${pattern} to be rejected at the API boundary`,
+      );
+      const elapsed = Date.now() - startedAt;
+      assert.ok(
+        elapsed < 100,
+        `expected ${pattern} to reject quickly without hanging, took ${elapsed}ms`,
+      );
+    }
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI grep per-line wall-clock deadline catches a pattern that slips the heuristic", async () => {
+  // Two interleaved signatures (`a?b?a?b?…`) defeat the consecutive-overlap
+  // streak rule — each streak resets after every atom — and the dot-wildcard
+  // rule (no `.*`/`.+`) — but still produce catastrophic backtracking on V8
+  // against an `abab…` line. The deadline must fire and surface a
+  // DciRegexTimeoutError instead of hanging the corpus walker.
+  //
+  // N=14 produces ~800ms per call on a typical developer machine (well above
+  // the 50ms deadline) while staying below the 15s upper bound even on slow
+  // CI hardware. The deadline is post-hoc — regex.test() runs to completion
+  // before we check the clock — so the single catastrophic call dominates
+  // the elapsed time.
+  const N = 14;
+  const slowPattern = "a?b?".repeat(N) + "ab".repeat(N) + "c";
+
+  // Sanity: validator must accept the pattern (otherwise we are not testing
+  // the deadline path).
+  assert.doesNotThrow(() => validateRegexPattern(slowPattern));
+
+  // Build a single-skill corpus whose body line forces the backtracking path.
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-dci-timeout-"));
+  try {
+    const skill = await writeCorpusSkill(root, {
+      id: "user:codex:timeout-probe",
+      name: "timeout-probe",
+      description: "regex deadline probe",
+      body: "ab".repeat(N),
+      isDisabled: true,
+    });
+
+    const startedAt = Date.now();
+    await assert.rejects(
+      () => dciGrepDisabledSkills([skill], slowPattern, { regex: true }),
+      DciRegexTimeoutError,
+    );
+    const elapsed = Date.now() - startedAt;
+    // The deadline is post-hoc: the engine completes one catastrophic call
+    // before we abort. The 15s upper bound accommodates up to ~20× hardware
+    // variance; the lower bound confirms the deadline actually fired.
+    assert.ok(elapsed < 15000, `expected deadline to abort within 15s, took ${elapsed}ms`);
+    assert.ok(
+      elapsed >= DCI_REGEX_LINE_TIMEOUT_MS,
+      `expected at least one slow line (>=${DCI_REGEX_LINE_TIMEOUT_MS}ms), took ${elapsed}ms`,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 
@@ -618,6 +993,197 @@ test("DCI read truncates content and select returns a read action", async () => 
   }
 });
 
+test("DCI read honors the byte budget at the read syscall, not after a full readFile", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    // 100 KB body (well past a 4 KB read budget) to prove the helper does
+    // not materialize the full file in memory. The body is plain ASCII so
+    // each character maps to one byte.
+    const bigBody = "a".repeat(100_000);
+    const huge = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:read-budget-probe",
+      name: "read-budget-probe",
+      description: "Bounded-read fixture",
+      body: bigBody,
+      isDisabled: true,
+    });
+    corpus.skills.push(huge);
+
+    const budget = 4096;
+    const read = await dciReadSkill(corpus.skills, "user:codex:read-budget-probe", { maxChars: budget });
+    assert.equal(read.action, "read-skill-file");
+    assert.equal(read.truncated, true);
+    assert.equal(read.maxChars, budget);
+    assert.equal(read.content.length, budget);
+    // The +1 detection byte is allowed but we must not pull the whole file.
+    assert.ok(read.bytesRead <= budget + 1, `bytesRead should be <= budget+1, got ${read.bytesRead}`);
+    // Sanity: content really came from the file — frontmatter sits at the
+    // top of every SKILL.md the corpus helper writes.
+    assert.ok(read.content.startsWith("---\nname: read-budget-probe"));
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI read on a small file still returns the same content as before", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const body = "hello world\nsecond line\n";
+    const small = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:small-read-probe",
+      name: "small-read-probe",
+      description: "Small read fixture",
+      body,
+      isDisabled: true,
+    });
+    corpus.skills.push(small);
+
+    const read = await dciReadSkill(corpus.skills, "user:codex:small-read-probe");
+    assert.equal(read.action, "read-skill-file");
+    assert.equal(read.truncated, false);
+    // The full SKILL.md contents (frontmatter + body) survive the round trip.
+    assert.match(read.content, /name: small-read-probe/);
+    assert.match(read.content, /hello world/);
+    assert.match(read.content, /second line/);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI find stops at the byte budget and reports truncation for matches past the cap", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const cap = DCI_BUDGET.maxSkillBytes;
+    // Build a body whose only match for `zephyrfindmarker` sits well past
+    // the byte cap. Strict semantics: find must NOT scan past the cap.
+    const padding = "x".repeat(cap + 8_192);
+    const big = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:find-budget-probe",
+      name: "find-budget-probe",
+      description: "Find byte-budget fixture",
+      body: `${padding}\nzephyrfindmarker on a line near EOF`,
+      isDisabled: true,
+    });
+    corpus.skills.push(big);
+
+    const found = await dciFindInSkill(
+      corpus.skills,
+      "user:codex:find-budget-probe",
+      "zephyrfindmarker",
+      { maxSnippets: 1 },
+    );
+    assert.equal(found.snippets.length, 0, "match past the byte cap must not be returned");
+    assert.equal(found.action, "no-matches");
+    assert.equal(found.truncated, true);
+    assert.equal(found.maxBytes, cap);
+    // We must have actually scanned bytes — we just stopped at the cap.
+    assert.ok(found.bytesRead > 0);
+    // In-chunk cap enforcement guarantees we never report more than `cap`
+    // bytes consumed, even when readable's highWaterMark is larger.
+    assert.ok(found.bytesRead <= cap, `bytesRead must stay at or under cap, got ${found.bytesRead}`);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI find caps a single pathologically long line inside the chunk handler", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const cap = DCI_BUDGET.maxSkillBytes;
+    // Build a single line of length 2 * maxSkillBytes with the match
+    // marker placed at byte offset `cap + 100` (well past the cap) and NO
+    // newline before the marker. Streamed naively, readline would buffer
+    // the whole line before yielding; the chunk-level cap must prevent
+    // both the heap blow-up AND the false-positive match past the cap.
+    const lineLength = cap * 2;
+    const markerOffset = cap + 100;
+    const marker = "zephyrlonglinemarker";
+    // SKILL.md is wrapped in frontmatter, so the giant single line sits
+    // a few lines down. Account for the prefix bytes when placing the
+    // marker so its byte offset relative to file start is past the cap.
+    const frontmatter = "---\nname: long-line-cap-probe\ndescription: Long-line cap fixture\n---\n\n";
+    const frontmatterBytes = Buffer.byteLength(frontmatter, "utf8");
+    const beforeMarker = "x".repeat(markerOffset - frontmatterBytes);
+    const afterMarker = "x".repeat(lineLength - beforeMarker.length - marker.length);
+    const giantLine = `${beforeMarker}${marker}${afterMarker}`;
+    assert.equal(giantLine.length, lineLength);
+    const fileContent = `${frontmatter}${giantLine}\n`;
+
+    const dir = join(corpus.root, "long-line-cap-probe");
+    await mkdir(dir, { recursive: true });
+    const skillMdPath = join(dir, "SKILL.md.agentic-skill-router-disabled");
+    await writeFile(skillMdPath, fileContent);
+    const skill: Skill = {
+      id: "user:codex:long-line-cap-probe",
+      name: "long-line-cap-probe",
+      description: "Long-line cap fixture",
+      source: "user",
+      pluginKey: null,
+      skillMdPath,
+      isDisabled: true,
+      isPluginDisabled: false,
+      canDisable: true,
+      conflict: false,
+    };
+    corpus.skills.push(skill);
+
+    const start = Date.now();
+    const found = await dciFindInSkill(
+      corpus.skills,
+      "user:codex:long-line-cap-probe",
+      marker,
+      { maxSnippets: 1 },
+    );
+    const elapsed = Date.now() - start;
+
+    // Strict-cap semantic: marker past the cap means no snippet, truncated.
+    assert.equal(found.snippets.length, 0, "match past the byte cap must not be returned");
+    assert.equal(found.action, "no-matches");
+    assert.equal(found.truncated, true);
+    assert.equal(found.maxBytes, cap);
+    assert.ok(found.bytesRead <= cap, `bytesRead must stay at or under cap, got ${found.bytesRead}`);
+
+    // Latency guard: at ~200 KB on disk, reading just the in-cap prefix
+    // should complete in well under 500ms. A regressed implementation
+    // that buffers the whole line through readline takes much longer
+    // because of allocation pressure on the giant pending buffer.
+    assert.ok(elapsed < 500, `dciFindInSkill should return quickly when capped, took ${elapsed}ms`);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI find on a small file still returns the same snippets and is not flagged truncated", async () => {
+  const corpus = await makeCorpus();
+  try {
+    const search = await dciSearchDisabledSkills(corpus.skills, "dci-orchid-ledger-repair");
+    const ref = search.matches[0]!.ref;
+    const found = await dciFindInSkill(corpus.skills, ref, "final answer", { maxSnippets: 1 });
+    assert.equal(found.id, "user:codex:body-only-probe");
+    assert.equal(found.snippets.length, 1);
+    assert.equal(found.truncated, false);
+    assert.ok(found.bytesRead > 0);
+    assert.equal(found.maxBytes, DCI_BUDGET.maxSkillBytes);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI open streams the file and reports bytesRead for the window scan", async () => {
+  const corpus = await makeCorpus();
+  try {
+    const search = await dciSearchDisabledSkills(corpus.skills, "dci-orchid-ledger-repair");
+    const ref = search.matches[0]!.ref;
+    const found = await dciFindInSkill(corpus.skills, ref, "final answer", { maxSnippets: 1 });
+    const opened = await dciOpenSkillWindow(corpus.skills, ref, { line: found.snippets[0]!.line, window: 3 });
+    assert.equal(opened.action, "read-skill-window");
+    assert.ok(opened.bytesRead > 0, "open should report streamed bytes");
+    assert.match(opened.content, /\d+: .*final answer/);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI multi-select records a bounded set of disabled skills", async () => {
   const corpus = await makeCorpus();
   try {
@@ -637,6 +1203,59 @@ test("DCI multi-select records a bounded set of disabled skills", async () => {
       () => dciSelectSkills(corpus.skills, search.matches.slice(0, 4).map((m) => m.ref), "medium", "too many"),
       /too many DCI selections/,
     );
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI multi-select dedups by instance key so duplicate-id skills both appear", async () => {
+  const corpus = await makeCorpus(0);
+  try {
+    const first = await writeCorpusSkill(corpus.root, {
+      id: "plugin:dup@local:tool",
+      name: "dup-instance-v1",
+      description: "duplicate logical skill instance one",
+      body: "Use this skill for dci-instance-key-v1.",
+      isDisabled: true,
+      source: "plugin",
+      pluginKey: "dup@local",
+    });
+    const second = await writeCorpusSkill(corpus.root, {
+      id: "plugin:dup@local:tool",
+      name: "dup-instance-v2",
+      description: "duplicate logical skill instance two",
+      body: "Use this skill for dci-instance-key-v2.",
+      isDisabled: true,
+      source: "plugin",
+      pluginKey: "dup@local",
+    });
+    const skills = [first, second];
+
+    const search = await dciSearchDisabledSkills(skills, "dci-instance-key", { topK: 2 });
+    assert.equal(search.matches.length, 2);
+
+    const selected = dciSelectSkills(
+      skills,
+      [search.matches[0]!.ref, search.matches[1]!.ref],
+      "medium",
+      "both duplicate-id instances must be preserved",
+    );
+    assert.equal(selected.selected.length, 2);
+    const selectedPaths = selected.selected.map((s) => s.skillMdPath).sort();
+    assert.deepEqual(selectedPaths, [first.skillMdPath, second.skillMdPath].sort());
+    // Both share the same logical id, but instance-key dedup must keep both.
+    assert.equal(selected.selected[0]!.id, "plugin:dup@local:tool");
+    assert.equal(selected.selected[1]!.id, "plugin:dup@local:tool");
+    assert.notEqual(selected.selected[0]!.skillMdPath, selected.selected[1]!.skillMdPath);
+
+    // Still dedup when the SAME instance ref is passed twice.
+    const dedupSame = dciSelectSkills(
+      skills,
+      [search.matches[0]!.ref, search.matches[0]!.ref],
+      "medium",
+      "identical refs collapse",
+    );
+    assert.equal(dedupSame.selected.length, 1);
   } finally {
     await corpus.cleanup();
   }
@@ -706,5 +1325,179 @@ test("auto route upgrades umbrella skills to DCI evidence", async () => {
     assert.equal(auto.selected?.skill.id, "user:codex:bytedance-auth");
   } finally {
     await corpus.cleanup();
+  }
+});
+
+// ────────────────── CLI-level regex guard tests ──────────────────
+
+const execFileAsync = promisify(execFile);
+const DCI_TEST_DIR = dirname(fileURLToPath(import.meta.url));
+const DCI_REPO_ROOT = dirname(DCI_TEST_DIR);
+const DCI_CLI_PATH = join(DCI_REPO_ROOT, "src", "cli.ts");
+
+async function makeDciCliEnv(): Promise<{ env: NodeJS.ProcessEnv; cleanup: () => Promise<void> }> {
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-dci-cli-"));
+  const codexHome = join(root, ".codex");
+  const stateDir = join(root, ".agentic-skill-router");
+  const disabledDir = join(codexHome, "skills", "probe");
+  await mkdir(disabledDir, { recursive: true });
+  await writeFile(
+    join(disabledDir, "SKILL.md.agentic-skill-router-disabled"),
+    "---\nname: probe\ndescription: dci regex guard probe skill\n---\n\nfoo bar baz\n",
+  );
+  await mkdir(stateDir, { recursive: true });
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    AGENTIC_SKILL_ROUTER_HOST: "codex",
+    CODEX_HOME: codexHome,
+    AGENTS_HOME: join(root, ".agents"),
+    AGENTIC_SKILL_ROUTER_CWD: root,
+    AGENTIC_SKILL_ROUTER_STATE_DIR: stateDir,
+  };
+  return { env, cleanup: () => rm(root, { recursive: true, force: true }) };
+}
+
+async function runDciCli(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  try {
+    const ok = await execFileAsync(process.execPath, ["--import", "tsx", DCI_CLI_PATH, ...args], { env });
+    return { code: 0, stdout: ok.stdout ?? "", stderr: ok.stderr ?? "" };
+  } catch (err) {
+    const e = err as { code?: number; stdout?: string; stderr?: string };
+    return { code: typeof e.code === "number" ? e.code : 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
+  }
+}
+
+test("CLI: skills dci grep --regex with invalid regex exits 2 without crashing", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", "[unclosed"], fake.env);
+    assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
+    assert.match(r.stderr, /invalid --regex pattern/);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex rejects over-length pattern with complexity error", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const longPattern = "a".repeat(DCI_REGEX_MAX_LENGTH + 1);
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", longPattern], fake.env);
+    assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
+    assert.match(r.stderr, new RegExp(String(DCI_REGEX_MAX_LENGTH)));
+    assert.match(r.stderr, /chars/);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex rejects (a+)+$ nested-quantifier shape", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", "(a+)+$"], fake.env);
+    assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
+    assert.match(r.stderr, /catastrophic-backtracking|nested quantifier/i);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep without --regex is unaffected by the guard", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    // Literal mode must accept the same pattern the guard would reject in regex
+    // mode. It will simply find no matches in the probe skill body.
+    const r = await runDciCli(["skills", "dci", "grep", "--pattern", "(a+)+$", "--json"], fake.env);
+    // Exit 1 means "no matches" — that is the unaffected literal behavior.
+    assert.ok(r.code === 0 || r.code === 1, `expected exit 0/1, got ${r.code}; stderr=${r.stderr}`);
+    assert.doesNotMatch(r.stderr, /catastrophic|complexity|chars/i);
+    const parsed = JSON.parse(r.stdout) as { mode: string };
+    assert.equal(parsed.mode, "literal");
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex with a safe pattern still routes (regression)", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", "^foo", "--json"], fake.env);
+    assert.equal(r.code, 0, `expected exit 0, got ${r.code}; stderr=${r.stderr}`);
+    const parsed = JSON.parse(r.stdout) as { mode: string; matches: Array<{ id: string }> };
+    assert.equal(parsed.mode, "regex");
+    assert.ok(parsed.matches.some((m) => m.id === "user:codex:probe"));
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex rejects every codex-named pathological pattern with exit 2", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const patterns = [
+      "(a+){2,}$",
+      "([a-z]+){2,}$",
+      "(a{1,})+$",
+      "(a?)+$",
+      "^(a|aa)+$",
+    ];
+    for (const pattern of patterns) {
+      const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", pattern], fake.env);
+      assert.equal(r.code, 2, `expected exit 2 for ${pattern}, got ${r.code}; stderr=${r.stderr}`);
+      assert.match(r.stderr, /catastrophic|overlapping|open-ended|large \{n,m\} bound/);
+    }
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex rejects the codex consecutive-overlap pattern with exit 2", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    const pattern = "a*".repeat(24) + "b";
+    const startedAt = Date.now();
+    const r = await runDciCli(["skills", "dci", "grep", "--regex", "--pattern", pattern], fake.env);
+    const elapsed = Date.now() - startedAt;
+    assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
+    assert.match(r.stderr, /consecutive overlapping/);
+    // The CLI spawns node + tsx, so allow a generous bound, but it must
+    // nowhere near approach the ~75s the unguarded engine would burn.
+    assert.ok(elapsed < 5000, `expected fast reject, took ${elapsed}ms`);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CLI: skills dci grep --regex deadline catches a heuristic-bypassing slow pattern", async () => {
+  const fake = await makeDciCliEnv();
+  try {
+    // Rewrite the probe skill body so its single line forces catastrophic
+    // backtracking on the deadline test pattern below.
+    const probeDir = join(fake.env.CODEX_HOME as string, "skills", "probe");
+    const N = 14;
+    await writeFile(
+      join(probeDir, "SKILL.md.agentic-skill-router-disabled"),
+      `---\nname: probe\ndescription: dci regex deadline probe skill\n---\n\n${"ab".repeat(N)}\n`,
+    );
+
+    // Interleaved signatures defeat the static streak rule and the dot-wildcard
+    // rule but still trip the per-line deadline.
+    const slowPattern = "a?b?".repeat(N) + "ab".repeat(N) + "c";
+    const startedAt = Date.now();
+    const r = await runDciCli(
+      ["skills", "dci", "grep", "--regex", "--pattern", slowPattern, "--json"],
+      fake.env,
+    );
+    const elapsed = Date.now() - startedAt;
+    assert.equal(r.code, 2, `expected exit 2, got ${r.code}; stderr=${r.stderr}`);
+    assert.match(r.stderr, /deadline|>.*ms on a single line/);
+    // The deadline is post-hoc: spawning + one catastrophic match + abort.
+    // 20s accommodates up to ~25× hardware variance over the ~800ms baseline.
+    assert.ok(elapsed < 20000, `expected deadline path to abort within 20s, took ${elapsed}ms`);
+  } finally {
+    await fake.cleanup();
   }
 });

@@ -10,6 +10,7 @@ import { cmdList } from "./commands/list.ts";
 import { cmdRoute } from "./commands/route.ts";
 import { cmdStatus } from "./commands/status.ts";
 import { cmdSuggest } from "./commands/suggest.ts";
+import { cmdWeb } from "./commands/web.ts";
 import { findDeprecatedHostFlag, resolveHostName } from "./host-resolve.ts";
 import { usage } from "./output.ts";
 
@@ -37,6 +38,7 @@ export async function run(argv: string[]): Promise<number> {
         case "enable": return await cmdEnable(rest, hostName);
         case "status": return await cmdStatus(rest, hostName);
         case "config": return await cmdConfig(rest);
+        case "web": return await cmdWeb(rest, hostName);
         case undefined:
         case "-h":
         case "--help":

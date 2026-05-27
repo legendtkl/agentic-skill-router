@@ -193,7 +193,8 @@ test(
       const config = await readFile(join(fresh.codexHome, "config.toml"), "utf8");
       assert.match(config, /\[plugins\."agentic-skill-router@local"\]\nenabled = true/);
 
-      const listed = await runRouterJson<SkillListItem[]>(routerBin, ["skills", "list", "--json"], fresh.env);
+      const listedEnvelope = await runRouterJson<{ skills: SkillListItem[] }>(routerBin, ["skills", "list", "--json"], fresh.env);
+      const listed = listedEnvelope.skills;
       const codexOpenAiSkills = listed.filter((item) => item.id.startsWith("user:codex:"));
       assert.equal(codexOpenAiSkills.length, installedOpenAiSkillCount);
       assert.equal(codexOpenAiSkills.length, EXPECTED_OPENAI_CURATED_SKILL_COUNT);

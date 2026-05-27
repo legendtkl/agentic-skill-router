@@ -251,6 +251,128 @@ export async function readClaudeSettings(path: string): Promise<ClaudeSettings> 
   return { enabledPlugins: out };
 }
 
+/**
+ * Strip a TOML line comment in a quote-aware way.
+ *
+ * The previous implementation did `line.replace(/#.*\/, "")`, which corrupts
+ * any value or section header that legitimately contains `#` inside a string.
+ * Example: `name = "skill#1"` would lose `#1"` and parse wrong, and
+ * `[plugins."weird#name"]` would be split mid-name.
+ *
+ * The walker tracks four mutually exclusive string states recognised by TOML:
+ *   - basic (double-quoted): supports `\\` escapes including `\"`.
+ *   - literal (single-quoted): no escapes — `'\'` is a backslash; the next
+ *     `'` closes the string.
+ *   - multi-line basic (`"""..."""`): no `#` inside is a comment; escapes
+ *     work the same as basic but newlines/quotes embed literally.
+ *   - multi-line literal (`'''...'''`): like multi-line basic, no escapes.
+ *
+ * A `#` only starts a comment when the walker is outside every string state.
+ * Everything from that `#` to end of line is dropped and trailing whitespace
+ * is trimmed. The leading whitespace of the line is preserved so the caller's
+ * own `.trim()`/structural regex behaves the same as before for normal lines.
+ *
+ * This is a single-line walker — callers feed it one physical line at a time.
+ * Multi-line strings that actually span lines are not used by Codex's
+ * config.toml plugin section, so this is sufficient for the values we parse.
+ */
+export function stripTomlComment(line: string): string {
+  type State =
+    | "none"
+    | "basic"
+    | "literal"
+    | "multiBasic"
+    | "multiLiteral";
+  let state: State = "none";
+  let i = 0;
+  const len = line.length;
+  while (i < len) {
+    const ch = line[i]!;
+    switch (state) {
+      case "none": {
+        if (ch === "#") {
+          // Comment starts here; drop the rest of the line and trim trailing
+          // whitespace from the kept prefix so structural regexes downstream
+          // see the same shape they would have with the old replace().
+          return line.slice(0, i).replace(/[ \t]+$/, "");
+        }
+        if (ch === '"') {
+          if (line.startsWith('"""', i)) {
+            state = "multiBasic";
+            i += 3;
+            continue;
+          }
+          state = "basic";
+          i += 1;
+          continue;
+        }
+        if (ch === "'") {
+          if (line.startsWith("'''", i)) {
+            state = "multiLiteral";
+            i += 3;
+            continue;
+          }
+          state = "literal";
+          i += 1;
+          continue;
+        }
+        i += 1;
+        continue;
+      }
+      case "basic": {
+        if (ch === "\\" && i + 1 < len) {
+          // Skip the escaped char so an escaped quote (\") does not close
+          // the string. We don't decode the escape; only consume it.
+          i += 2;
+          continue;
+        }
+        if (ch === '"') {
+          state = "none";
+          i += 1;
+          continue;
+        }
+        i += 1;
+        continue;
+      }
+      case "literal": {
+        // TOML literal strings have NO escapes; the first single quote ends.
+        if (ch === "'") {
+          state = "none";
+          i += 1;
+          continue;
+        }
+        i += 1;
+        continue;
+      }
+      case "multiBasic": {
+        if (ch === "\\" && i + 1 < len) {
+          i += 2;
+          continue;
+        }
+        if (ch === '"' && line.startsWith('"""', i)) {
+          state = "none";
+          i += 3;
+          continue;
+        }
+        i += 1;
+        continue;
+      }
+      case "multiLiteral": {
+        if (ch === "'" && line.startsWith("'''", i)) {
+          state = "none";
+          i += 3;
+          continue;
+        }
+        i += 1;
+        continue;
+      }
+    }
+  }
+  // No comment encountered; trim trailing whitespace to match the old
+  // replace().trim() shape callers expect to operate on.
+  return line.replace(/[ \t]+$/, "");
+}
+
 export async function readCodexPluginSettings(path: string): Promise<ClaudeSettings> {
   let raw: string;
   try {
@@ -263,11 +385,22 @@ export async function readCodexPluginSettings(path: string): Promise<ClaudeSetti
   const enabledPlugins: Record<string, boolean> = {};
   let currentPlugin: string | null = null;
   for (const rawLine of raw.split(/\r?\n/)) {
-    const line = rawLine.replace(/#.*/, "").trim();
+    const line = stripTomlComment(rawLine).trim();
     if (line === "") continue;
-    const section = /^\[plugins\."([^"]+)"\]$/.exec(line) ?? /^\[plugins\.([^\]]+)\]$/.exec(line);
-    if (section) {
-      currentPlugin = section[1] ?? null;
+    // Quoted plugin key: `[plugins."foo@bar"]`. The captured name may itself
+    // contain `#` because the comment stripper above already protected the
+    // quoted region. Match the outermost quote pair non-greedily so a
+    // trailing `]` after the closing quote can still close the section.
+    const quotedSection = /^\[plugins\."(.+)"\]$/.exec(line);
+    if (quotedSection) {
+      currentPlugin = quotedSection[1] ?? null;
+      continue;
+    }
+    // Bare-key fallback: `[plugins.foo]`. TOML bare keys forbid `#`, so the
+    // `[^\]#]+` class is safe and also rejects accidental embedded comments.
+    const bareSection = /^\[plugins\.([^\]#]+)\]$/.exec(line);
+    if (bareSection) {
+      currentPlugin = bareSection[1]!.trim();
       continue;
     }
     if (!currentPlugin) continue;
