@@ -6,13 +6,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 import { atomicWrite } from "../scripts/lib/atomic-write.mjs";
-import {
-  PLUGIN_KEY,
-  PLUGIN_NAME,
-  MARKETPLACE,
-  isPlainObject,
-  stripProxy,
-} from "../scripts/lib/common.mjs";
+import { PLUGIN_KEY, PLUGIN_NAME, MARKETPLACE, isPlainObject, stripProxy } from "../scripts/lib/common.mjs";
 import {
   HOST_ENTRY_ASSET_DIRS,
   RUNTIME_ASSET_DIRS,
@@ -68,8 +62,8 @@ test("atomicWrite creates parent directories and writes content", async () => {
   const root = await mkdtemp(join(tmpdir(), "sr-atomic-"));
   try {
     const path = join(root, "a/b/c/file.json");
-    await atomicWrite(path, "{\"hello\":true}\n");
-    assert.equal(await readFile(path, "utf8"), "{\"hello\":true}\n");
+    await atomicWrite(path, '{"hello":true}\n');
+    assert.equal(await readFile(path, "utf8"), '{"hello":true}\n');
     // No stray .tmp files should remain after a successful write.
     const siblings = await readdir(dirname(path));
     assert.deepEqual(siblings.sort(), ["file.json"]);
@@ -94,10 +88,7 @@ test("normalizeManifestSkills rewrites skills field to ./skills/", async () => {
   const root = await mkdtemp(join(tmpdir(), "sr-normalize-"));
   try {
     const manifestPath = join(root, "plugin.json");
-    await writeFile(
-      manifestPath,
-      JSON.stringify({ name: "x", version: "1.0.0", skills: "../../skills/" }, null, 2),
-    );
+    await writeFile(manifestPath, JSON.stringify({ name: "x", version: "1.0.0", skills: "../../skills/" }, null, 2));
     await normalizeManifestSkills(manifestPath);
     const parsed = JSON.parse(await readFile(manifestPath, "utf8"));
     assert.equal(parsed.skills, "./skills/");
@@ -265,7 +256,7 @@ test("cleanupOldVersions only unlinks symlinks pointing outside cache root", asy
     } catch {
       // expected
     }
-    assert.equal((await readFile(sentinel, "utf8")), "must survive");
+    assert.equal(await readFile(sentinel, "utf8"), "must survive");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -334,12 +325,7 @@ test("warnAboutDisabledSkills reportMalformed surfaces invalid records", async (
     await writeFile(
       statePath,
       JSON.stringify({
-        disabledSkills: [
-          { id: "user:foo" },
-          { id: "" },
-          { notAnId: "x" },
-          "string-not-record",
-        ],
+        disabledSkills: [{ id: "user:foo" }, { id: "" }, { notAnId: "x" }, "string-not-record"],
       }),
     );
     const messages: string[] = [];
@@ -383,12 +369,12 @@ test("warnAboutDisabledSkills without reportMalformed stays quiet about invalid 
 
 test("setPluginEnabled adds a stanza when none exists", () => {
   const out = setPluginEnabled("", "agentic-skill-router@local", true);
-  assert.equal(out, "[plugins.\"agentic-skill-router@local\"]\nenabled = true\n");
+  assert.equal(out, '[plugins."agentic-skill-router@local"]\nenabled = true\n');
 });
 
 test("setPluginEnabled preserves preceding content with a blank-line gap", () => {
   const out = setPluginEnabled(
-    "model = \"gpt-5\"\n\n[plugins.\"other@local\"]\nenabled = true\n",
+    'model = "gpt-5"\n\n[plugins."other@local"]\nenabled = true\n',
     "agentic-skill-router@local",
     true,
   );
@@ -399,13 +385,11 @@ test("setPluginEnabled preserves preceding content with a blank-line gap", () =>
 
 test("setPluginEnabled flips an existing enabled flag in place", () => {
   const out = setPluginEnabled(
-    "[plugins.\"agentic-skill-router@local\"]\nenabled = true\n\n[other]\nx = 1\n",
+    '[plugins."agentic-skill-router@local"]\nenabled = true\n\n[other]\nx = 1\n',
     "agentic-skill-router@local",
     false,
   );
-  const stanzaLines = out
-    .split(/\r?\n/)
-    .filter((l) => /^enabled\s*=/.test(l));
+  const stanzaLines = out.split(/\r?\n/).filter((l) => /^enabled\s*=/.test(l));
   assert.deepEqual(stanzaLines, ["enabled = false"]);
   assert.match(out, /\[other\]/);
   assert.match(out, /x = 1/);

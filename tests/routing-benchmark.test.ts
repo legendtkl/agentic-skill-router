@@ -47,21 +47,33 @@ test("metadata router benchmark smoke test", async () => {
       description: "管理飞书任务和待办",
       aliases: ["飞书任务"],
     }),
-    fixtureSkill("bytedance-es", "Query Elasticsearch via Kibana console API, execute ES DSL queries, and get ES index mapping.", {
-      name: "bytedance-es",
-      description: "Query Elasticsearch via Kibana console API, execute ES DSL queries, and get ES index mapping.",
-      aliases: ["Elasticsearch", "ES"],
-      tools: ["Kibana console API", "Elasticsearch DSL"],
-      intents: ["execute_es_dsl", "get_index_mapping"],
-    }),
-    fixtureSkill("bytedcli", "Unified skill for the bytedcli command surface. Covers auth/tokens, ES, Cache, BMQ, Log, APM, and many internal platforms."),
-    fixtureSkill("bytedance-auth", "Operate bytedcli authentication flows: login, logout, status, user info, SSO JWT, and ByteCloud Auth token.", {
-      name: "bytedance-auth",
-      description: "Operate bytedcli authentication flows: login, logout, status, user info, SSO JWT, and ByteCloud Auth token.",
-      aliases: ["bytedcli auth"],
-      tools: ["bytedcli auth"],
-      intents: ["login", "logout", "status", "get_user_info", "prepare_sso_jwt"],
-    }),
+    fixtureSkill(
+      "bytedance-es",
+      "Query Elasticsearch via Kibana console API, execute ES DSL queries, and get ES index mapping.",
+      {
+        name: "bytedance-es",
+        description: "Query Elasticsearch via Kibana console API, execute ES DSL queries, and get ES index mapping.",
+        aliases: ["Elasticsearch", "ES"],
+        tools: ["Kibana console API", "Elasticsearch DSL"],
+        intents: ["execute_es_dsl", "get_index_mapping"],
+      },
+    ),
+    fixtureSkill(
+      "bytedcli",
+      "Unified skill for the bytedcli command surface. Covers auth/tokens, ES, Cache, BMQ, Log, APM, and many internal platforms.",
+    ),
+    fixtureSkill(
+      "bytedance-auth",
+      "Operate bytedcli authentication flows: login, logout, status, user info, SSO JWT, and ByteCloud Auth token.",
+      {
+        name: "bytedance-auth",
+        description:
+          "Operate bytedcli authentication flows: login, logout, status, user info, SSO JWT, and ByteCloud Auth token.",
+        aliases: ["bytedcli auth"],
+        tools: ["bytedcli auth"],
+        intents: ["login", "logout", "status", "get_user_info", "prepare_sso_jwt"],
+      },
+    ),
   ];
 
   for (const item of cases) {

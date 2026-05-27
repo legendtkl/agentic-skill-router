@@ -13,13 +13,7 @@ export const DEFAULT_CONFIG: Config = {
 };
 
 /** Keys the CLI accepts via `config set <key> <value>`. */
-export const CONFIG_KEYS = [
-  "unusedForDays",
-  "routeMode",
-  "keepNames",
-  "keepIds",
-  "usageSinceDays",
-] as const;
+export const CONFIG_KEYS = ["unusedForDays", "routeMode", "keepNames", "keepIds", "usageSinceDays"] as const;
 export type ConfigKey = (typeof CONFIG_KEYS)[number];
 
 /** Valid values for `routeMode`. Kept in sync with {@link parseRouteMode}. */
@@ -56,7 +50,7 @@ export async function loadConfig(path: string = configPath()): Promise<Config> {
   } catch {
     throw new Error(`config file at ${path} is not valid JSON`);
   }
-  const obj = (parsed && typeof parsed === "object") ? (parsed as Record<string, unknown>) : {};
+  const obj = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
   const cfg: Config = { ...DEFAULT_CONFIG };
   if (typeof obj.unusedForDays === "number" && Number.isFinite(obj.unusedForDays) && obj.unusedForDays >= 0) {
     cfg.unusedForDays = Math.floor(obj.unusedForDays);
@@ -68,9 +62,9 @@ export async function loadConfig(path: string = configPath()): Promise<Config> {
   const keepIds = parseStringArray(obj["keepIds"]);
   if (keepIds) cfg.keepIds = keepIds;
   if (
-    typeof obj["usageSinceDays"] === "number"
-    && Number.isFinite(obj["usageSinceDays"])
-    && (obj["usageSinceDays"] as number) > 0
+    typeof obj["usageSinceDays"] === "number" &&
+    Number.isFinite(obj["usageSinceDays"]) &&
+    (obj["usageSinceDays"] as number) > 0
   ) {
     cfg.usageSinceDays = Math.floor(obj["usageSinceDays"] as number);
   }
@@ -87,11 +81,7 @@ export async function loadConfig(path: string = configPath()): Promise<Config> {
  *
  * Pure: callers pass `now` for testability.
  */
-export function resolveUsageSince(opts: {
-  config: Config;
-  env?: NodeJS.ProcessEnv;
-  now?: Date;
-}): Date | null {
+export function resolveUsageSince(opts: { config: Config; env?: NodeJS.ProcessEnv; now?: Date }): Date | null {
   const env = opts.env ?? process.env;
   const now = opts.now ?? new Date();
   const raw = env["AGENTIC_SKILL_ROUTER_USAGE_SINCE"];
@@ -120,7 +110,9 @@ function parseStringArray(value: unknown): string[] | null {
 }
 
 export function parseRouteMode(value: unknown): RouteMode | null {
-  return value === "lexical" || value === "metadata" || value === "body" || value === "dci" || value === "auto" ? value : null;
+  return value === "lexical" || value === "metadata" || value === "body" || value === "dci" || value === "auto"
+    ? value
+    : null;
 }
 
 /**
@@ -141,17 +133,18 @@ export function parseDuration(spec: string): number {
   if (!Number.isFinite(n) || n < 0) throw new Error(`invalid duration: ${spec}`);
   const unit = (m[2] ?? "d") as "d" | "w" | "m" | "y";
   switch (unit) {
-    case "d": return n;
-    case "w": return n * 7;
-    case "m": return n * 30;
-    case "y": return n * 365;
+    case "d":
+      return n;
+    case "w":
+      return n * 7;
+    case "m":
+      return n * 30;
+    case "y":
+      return n * 365;
   }
 }
 
-export function resolveUnusedForDays(opts: {
-  cliFlag?: string | undefined;
-  config: Config;
-}): number {
+export function resolveUnusedForDays(opts: { cliFlag?: string | undefined; config: Config }): number {
   if (opts.cliFlag !== undefined && opts.cliFlag !== "") {
     return parseDuration(opts.cliFlag);
   }
@@ -192,10 +185,7 @@ export async function loadRawConfigObject(path: string = configPath()): Promise<
  * includes randomUUID() so two writers in the same millisecond cannot collide
  * on the temp path.
  */
-export async function saveRawConfigObject(
-  config: Record<string, unknown>,
-  path: string = configPath(),
-): Promise<void> {
+export async function saveRawConfigObject(config: Record<string, unknown>, path: string = configPath()): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await atomicWriteJson(path, config, { mode: 0o600, durable: true });
 }
@@ -223,7 +213,9 @@ export function parseConfigValue(key: ConfigKey, value: string): unknown {
     case "routeMode": {
       const parsed = parseRouteMode(value);
       if (!parsed) {
-        throw new ConfigValueError(`routeMode must be one of: ${ROUTE_MODES.join(", ")} (got ${JSON.stringify(value)})`);
+        throw new ConfigValueError(
+          `routeMode must be one of: ${ROUTE_MODES.join(", ")} (got ${JSON.stringify(value)})`,
+        );
       }
       return parsed;
     }
@@ -239,9 +231,7 @@ export function parseConfigValue(key: ConfigKey, value: string): unknown {
       }
       const n = Number(trimmed);
       if (!Number.isInteger(n) || n < 0) {
-        throw new ConfigValueError(
-          `usageSinceDays must be a non-negative integer (got ${JSON.stringify(value)})`,
-        );
+        throw new ConfigValueError(`usageSinceDays must be a non-negative integer (got ${JSON.stringify(value)})`);
       }
       return n;
     }
@@ -312,10 +302,7 @@ interface LockOwner {
  *
  * This is a same-machine guard; it is not a multi-host concurrency primitive.
  */
-export async function withLockedConfigUpdate<T>(
-  path: string,
-  fn: () => Promise<T>,
-): Promise<T> {
+export async function withLockedConfigUpdate<T>(path: string, fn: () => Promise<T>): Promise<T> {
   await mkdir(dirname(path), { recursive: true });
   const lockPath = `${path}.lock`;
   const started = Date.now();

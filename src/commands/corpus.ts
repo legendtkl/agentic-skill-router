@@ -33,9 +33,12 @@ import { loadState, recordRoutedSkill, saveState, statePathForHost, withStateLoc
 export async function cmdCorpus(argv: string[], hostName: HostName): Promise<number> {
   const [subcommand, ...rest] = argv;
   switch (subcommand) {
-    case "search": return cmdCorpusSearch(rest, hostName);
-    case "inspect": return cmdCorpusInspect(rest, hostName);
-    case "select": return cmdCorpusSelect(rest, hostName);
+    case "search":
+      return cmdCorpusSearch(rest, hostName);
+    case "inspect":
+      return cmdCorpusInspect(rest, hostName);
+    case "select":
+      return cmdCorpusSelect(rest, hostName);
     case undefined:
     case "-h":
     case "--help":
@@ -92,15 +95,18 @@ async function cmdCorpusSelect(argv: string[], hostName: HostName): Promise<numb
         const statePath = statePathForHost(host.name);
         await withStateLock(statePath, async () => {
           const state = await loadState(statePath, host.name);
-          await saveState(recordRoutedSkill(state, {
-            id: selected.id,
-            pluginKey: selected.pluginKey,
-            skillMdPath: selected.skillMdPath,
-            name: selected.name,
-            query,
-            confidence,
-            routedAt: new Date().toISOString(),
-          }), statePath);
+          await saveState(
+            recordRoutedSkill(state, {
+              id: selected.id,
+              pluginKey: selected.pluginKey,
+              skillMdPath: selected.skillMdPath,
+              name: selected.name,
+              query,
+              confidence,
+              routedAt: new Date().toISOString(),
+            }),
+            statePath,
+          );
         });
         recorded = true;
       } catch (err) {
@@ -154,9 +160,10 @@ async function cmdCorpusSearch(argv: string[], hostName: HostName): Promise<numb
 
   const host = createHost(hostName);
   const searchOpts = { any, all, ranker, ...(limit === undefined ? {} : { limit }) };
-  const result = ranker === "bm25"
-    ? searchSkillCorpusBm25Index(await loadCorpusBm25Index(host), searchOpts)
-    : searchSkillCorpus((await loadCorpusSkills(host)).skills, searchOpts);
+  const result =
+    ranker === "bm25"
+      ? searchSkillCorpusBm25Index(await loadCorpusBm25Index(host), searchOpts)
+      : searchSkillCorpus((await loadCorpusSkills(host)).skills, searchOpts);
   if (values.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
     return 0;
@@ -227,10 +234,7 @@ const DEFAULT_CORPUS_CACHE_TTL_MS = 30_000;
 
 async function loadCorpusSkills(host: Host): Promise<LoadedCorpus> {
   if (process.env["AGENTIC_SKILL_ROUTER_CORPUS_CACHE"] === "0") {
-    const [fingerprint, skills] = await Promise.all([
-      corpusFingerprint(host),
-      host.listSkills(),
-    ]);
+    const [fingerprint, skills] = await Promise.all([corpusFingerprint(host), host.listSkills()]);
     return { fingerprint, skills: sanitizeCorpusSkills(skills) };
   }
   const cachePath = corpusCachePath(host.name);
@@ -422,7 +426,7 @@ async function readJsonFile(path: string): Promise<unknown | null> {
 }
 
 async function readCorpusCache(path: string): Promise<CorpusCacheFile | null> {
-  const parsed = await readJsonFile(path) as Partial<CorpusCacheFile> | null;
+  const parsed = (await readJsonFile(path)) as Partial<CorpusCacheFile> | null;
   if (!parsed) return null;
   try {
     if (parsed.version !== CORPUS_CACHE_VERSION) return null;
@@ -437,7 +441,7 @@ async function readCorpusCache(path: string): Promise<CorpusCacheFile | null> {
 }
 
 async function readCorpusBm25IndexCache(path: string): Promise<CorpusBm25IndexCacheFile | null> {
-  const parsed = await readJsonFile(path) as Partial<CorpusBm25IndexCacheFile> | null;
+  const parsed = (await readJsonFile(path)) as Partial<CorpusBm25IndexCacheFile> | null;
   if (!parsed) return null;
   try {
     if (parsed.version !== CORPUS_BM25_INDEX_CACHE_VERSION) return null;
@@ -454,11 +458,7 @@ async function readCorpusBm25IndexCache(path: string): Promise<CorpusBm25IndexCa
   }
 }
 
-async function readFreshCorpusFromBm25IndexCache(
-  host: Host,
-  now: number,
-  ttlMs: number,
-): Promise<LoadedCorpus | null> {
+async function readFreshCorpusFromBm25IndexCache(host: Host, now: number, ttlMs: number): Promise<LoadedCorpus | null> {
   const cached = await readCorpusBm25IndexCache(corpusBm25IndexCachePath(host.name));
   if (!isCorpusBm25IndexCacheForHost(cached, host.name) || now - cached.createdAtMs >= ttlMs) {
     return null;

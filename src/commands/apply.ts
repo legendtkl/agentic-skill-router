@@ -67,15 +67,14 @@ export async function cmdDisable(argv: string[], hostName: HostName): Promise<nu
         const lines = await Promise.all(
           skippedSymlinks.map(async (t) => {
             const realTarget = await resolveLinkedTarget(t.skillMdPath);
-            const linkedPart = realTarget && realTarget !== t.skillMdPath
-              ? `${t.skillMdPath} -> ${realTarget}`
-              : t.skillMdPath;
+            const linkedPart =
+              realTarget && realTarget !== t.skillMdPath ? `${t.skillMdPath} -> ${realTarget}` : t.skillMdPath;
             return `  ${t.id}  (linked target: ${linkedPart})`;
           }),
         );
         console.error(
           `note: skipping ${skippedSymlinks.length} out-of-root symlink skill(s) from --all-suggested; ` +
-          `pass --allow-symlink-target-mutation to include them:\n${lines.join("\n")}`,
+            `pass --allow-symlink-target-mutation to include them:\n${lines.join("\n")}`,
         );
       }
     }
@@ -137,7 +136,8 @@ export async function cmdDisable(argv: string[], hostName: HostName): Promise<nu
     process.stdout.write(JSON.stringify(results, null, 2) + "\n");
   } else {
     console.log(`disabled ${results.length} skill(s). Restart ${displayHost(host.name)} for changes to take effect.`);
-    for (const r of results) console.log(`  ${r.id}${r.alreadyDisabled ? "  (already disabled, state refreshed)" : ""}`);
+    for (const r of results)
+      console.log(`  ${r.id}${r.alreadyDisabled ? "  (already disabled, state refreshed)" : ""}`);
   }
   return 0;
 }
@@ -224,8 +224,7 @@ export async function cmdEnable(argv: string[], hostName: HostName): Promise<num
             })
             .join("\n");
           console.error(
-            `ambiguous skill id "${target}" matches ${keys.size} instances; ` +
-            `re-run with one of:\n${lines}`,
+            `ambiguous skill id "${target}" matches ${keys.size} instances; ` + `re-run with one of:\n${lines}`,
           );
           return 2;
         }
@@ -310,9 +309,8 @@ function isOutOfRootMutableSymlink(skill: Skill): boolean {
 async function warnIfSymlinkMutation(skill: Skill, operation: "disable" | "enable"): Promise<void> {
   if (!isOutOfRootMutableSymlink(skill)) return;
   const realTarget = await resolveLinkedTarget(skill.skillMdPath);
-  const linkedPart = realTarget && realTarget !== skill.skillMdPath
-    ? `${skill.skillMdPath} -> ${realTarget}`
-    : skill.skillMdPath;
+  const linkedPart =
+    realTarget && realTarget !== skill.skillMdPath ? `${skill.skillMdPath} -> ${realTarget}` : skill.skillMdPath;
   console.error(
     `warning: ${skill.id} is a symlink outside this host's skills root; ${operation} will modify the linked target (${linkedPart})`,
   );
@@ -320,9 +318,8 @@ async function warnIfSymlinkMutation(skill: Skill, operation: "disable" | "enabl
 
 async function symlinkMutationRefusal(skill: Skill, operation: "disable" | "enable"): Promise<string> {
   const realTarget = await resolveLinkedTarget(skill.skillMdPath);
-  const linkedPart = realTarget && realTarget !== skill.skillMdPath
-    ? `${skill.skillMdPath} -> ${realTarget}`
-    : skill.skillMdPath;
+  const linkedPart =
+    realTarget && realTarget !== skill.skillMdPath ? `${skill.skillMdPath} -> ${realTarget}` : skill.skillMdPath;
   return (
     `refusing to ${operation} ${skill.id}: skill resolves to a symlink target outside this host's skills root ` +
     `(linked target: ${linkedPart}). ` +

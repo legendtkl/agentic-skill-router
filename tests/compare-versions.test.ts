@@ -32,26 +32,12 @@ test("compareVersions: stable > prerelease", () => {
 });
 
 test("compareVersions: prerelease ordering alpha < beta.1 < beta.2 < rc.1 < 1.0.0", () => {
-  const ordered = [
-    "1.0.0-alpha",
-    "1.0.0-beta.1",
-    "1.0.0-beta.2",
-    "1.0.0-rc.1",
-    "1.0.0",
-  ];
+  const ordered = ["1.0.0-alpha", "1.0.0-beta.1", "1.0.0-beta.2", "1.0.0-rc.1", "1.0.0"];
   for (let i = 0; i < ordered.length - 1; i++) {
     const lo = ordered[i]!;
     const hi = ordered[i + 1]!;
-    assert.equal(
-      sign(compareVersions(lo, hi)),
-      -1,
-      `expected ${lo} < ${hi}`,
-    );
-    assert.equal(
-      sign(compareVersions(hi, lo)),
-      1,
-      `expected ${hi} > ${lo}`,
-    );
+    assert.equal(sign(compareVersions(lo, hi)), -1, `expected ${lo} < ${hi}`);
+    assert.equal(sign(compareVersions(hi, lo)), 1, `expected ${hi} > ${lo}`);
   }
 });
 
@@ -81,10 +67,7 @@ test("compareVersions: build metadata is ignored for ordering", () => {
   assert.equal(sign(compareVersions("1.0.0", "1.0.0+build.1")), 0);
   assert.equal(sign(compareVersions("1.0.0+build.1", "1.0.0+build.2")), 0);
   // Build metadata also ignored on prerelease versions.
-  assert.equal(
-    sign(compareVersions("1.0.0-beta.1+build.7", "1.0.0-beta.1")),
-    0,
-  );
+  assert.equal(sign(compareVersions("1.0.0-beta.1+build.7", "1.0.0-beta.1")), 0);
 });
 
 test("compareVersions: build metadata does not alter ordering across versions", () => {
@@ -105,11 +88,7 @@ test("compareVersions: full semver canonical example chain", () => {
     "1.0.0",
   ];
   for (let i = 0; i < chain.length - 1; i++) {
-    assert.equal(
-      sign(compareVersions(chain[i]!, chain[i + 1]!)),
-      -1,
-      `expected ${chain[i]} < ${chain[i + 1]}`,
-    );
+    assert.equal(sign(compareVersions(chain[i]!, chain[i + 1]!)), -1, `expected ${chain[i]} < ${chain[i + 1]}`);
   }
 });
 
@@ -164,18 +143,13 @@ test("compareVersions: transitive across strict semver, partial semver, and prer
     for (const y of items) {
       const xy = sign(compareVersions(x, y));
       const yx = sign(compareVersions(y, x));
-      assert.equal(
-        xy + yx,
-        0,
-        `anti-symmetry failed for (${x}, ${y}): xy=${xy}, yx=${yx}`,
-      );
+      assert.equal(xy + yx, 0, `anti-symmetry failed for (${x}, ${y}): xy=${xy}, yx=${yx}`);
     }
   }
   const sorted = [...items].sort((a, b) => compareVersions(a, b));
   assert.equal(sorted[0], "1.0.0-alpha", `prerelease must sort first: ${sorted.join(", ")}`);
   assert.ok(
-    (sorted[1] === "1.0.0" && sorted[2] === "1.0") ||
-      (sorted[1] === "1.0" && sorted[2] === "1.0.0"),
+    (sorted[1] === "1.0.0" && sorted[2] === "1.0") || (sorted[1] === "1.0" && sorted[2] === "1.0.0"),
     `the two stable equivalents must sort after the prerelease: ${sorted.join(", ")}`,
   );
 
@@ -211,11 +185,7 @@ test("compareVersions: transitive across heterogeneous parsed and unparsable inp
     for (const y of items) {
       const xy = sign(compareVersions(x, y));
       const yx = sign(compareVersions(y, x));
-      assert.equal(
-        xy + yx,
-        0,
-        `anti-symmetry failed for (${x}, ${y}): xy=${xy}, yx=${yx}`,
-      );
+      assert.equal(xy + yx, 0, `anti-symmetry failed for (${x}, ${y}): xy=${xy}, yx=${yx}`);
     }
   }
   for (const x of items) {

@@ -74,7 +74,7 @@ async function unregister() {
   try {
     parsed = JSON.parse(await readFile(installedJsonPath, "utf8"));
   } catch (err) {
-    if (err && /** @type {NodeJS.ErrnoException} */(err).code === "ENOENT") return;
+    if (err && /** @type {NodeJS.ErrnoException} */ (err).code === "ENOENT") return;
     throw err;
   }
   if (!isPlainObject(parsed) || !isPlainObject(parsed.plugins)) return;
@@ -90,7 +90,7 @@ async function disable() {
   try {
     settings = JSON.parse(await readFile(settingsPath, "utf8"));
   } catch (err) {
-    if (err && /** @type {NodeJS.ErrnoException} */(err).code === "ENOENT") return;
+    if (err && /** @type {NodeJS.ErrnoException} */ (err).code === "ENOENT") return;
     throw err;
   }
   if (!isPlainObject(settings) || !isPlainObject(settings.enabledPlugins)) return;

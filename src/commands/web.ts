@@ -184,7 +184,7 @@ export async function startWebServer(opts: WebServerOptions): Promise<StartWebSe
   });
 
   const address = server.address();
-  const actualPort = typeof address === "object" && address ? address.port : opts.port ?? 8787;
+  const actualPort = typeof address === "object" && address ? address.port : (opts.port ?? 8787);
   if (enforceOriginChecks) {
     // Refresh expected host set with the actual bound port for ephemeral-port cases.
     security.expectedHosts = computeExpectedHosts(bind, actualPort);
@@ -645,11 +645,7 @@ function isWithinAllowlist(canonical: string, projectRootAllowlist: string[]): b
   return false;
 }
 
-function assertProjectPathAllowed(
-  canonical: string,
-  projectRootAllowlist: string[],
-  originalResolved: string,
-): void {
+function assertProjectPathAllowed(canonical: string, projectRootAllowlist: string[], originalResolved: string): void {
   if (projectRootAllowlist.length === 0) {
     throw new WebHttpError(
       403,
@@ -730,10 +726,7 @@ function assertAncestorsAllowed(
  * string. A realpath failure (broken symlink, missing file) is treated
  * as a rejection because we cannot prove containment.
  */
-async function assertProjectSkillTargetAllowed(
-  target: Skill,
-  projectRootAllowlist: string[],
-): Promise<void> {
+async function assertProjectSkillTargetAllowed(target: Skill, projectRootAllowlist: string[]): Promise<void> {
   if (!target.skillMdPath || target.skillMdPath === "") {
     // Defense-in-depth: builtin skills (empty path) should already be
     // blocked by `assertCanMutate`; refuse if anything slipped through.
@@ -823,7 +816,7 @@ async function findRepoRootLike(start: string): Promise<string | null> {
 }
 
 function filterScope(skills: Skill[], scope: WebScope): Skill[] {
-  return skills.filter((skill) => scope === "project" ? skill.source === "project" : skill.source !== "project");
+  return skills.filter((skill) => (scope === "project" ? skill.source === "project" : skill.source !== "project"));
 }
 
 function parseScope(value: string | null): WebScope {
@@ -850,11 +843,16 @@ function parsePort(value: string | undefined): number | null | undefined {
 
 function sourceRank(source: string): number {
   switch (source) {
-    case "user": return 0;
-    case "plugin": return 1;
-    case "project": return 2;
-    case "builtin": return 3;
-    default: return 4;
+    case "user":
+      return 0;
+    case "plugin":
+      return 1;
+    case "project":
+      return 2;
+    case "builtin":
+      return 3;
+    default:
+      return 4;
   }
 }
 
@@ -934,7 +932,10 @@ function waitForShutdown(server: Server): Promise<void> {
 }
 
 class WebHttpError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
     super(message);
     this.name = "WebHttpError";
   }

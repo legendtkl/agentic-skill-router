@@ -37,7 +37,8 @@ const version = pluginManifest.version;
 const codexHome = process.env["CODEX_HOME"] || join(homedir(), ".codex");
 const cacheRoot = join(codexHome, "plugins/cache", MARKETPLACE, PLUGIN_NAME);
 const installPath = join(cacheRoot, version);
-const runtimeCacheRoot = process.env["AGENTIC_SKILL_ROUTER_RUNTIME_ROOT"] || join(homedir(), ".agentic-skill-router", "runtime");
+const runtimeCacheRoot =
+  process.env["AGENTIC_SKILL_ROUTER_RUNTIME_ROOT"] || join(homedir(), ".agentic-skill-router", "runtime");
 const runtimePath = join(runtimeCacheRoot, version);
 const runtimeBin = join(runtimePath, "bin", "agentic-skill-router");
 const configPath = join(codexHome, "config.toml");
@@ -79,7 +80,7 @@ async function enablePlugin() {
   try {
     config = await readFile(configPath, "utf8");
   } catch (err) {
-    if (err && /** @type {NodeJS.ErrnoException} */(err).code !== "ENOENT") throw err;
+    if (err && /** @type {NodeJS.ErrnoException} */ (err).code !== "ENOENT") throw err;
   }
   const next = setPluginEnabled(config, PLUGIN_KEY, true);
   await atomicWrite(configPath, next);
@@ -93,7 +94,7 @@ async function installSlashCommand() {
   try {
     existing = await readFile(promptPath, "utf8");
   } catch (err) {
-    if (err && /** @type {NodeJS.ErrnoException} */(err).code !== "ENOENT") throw err;
+    if (err && /** @type {NodeJS.ErrnoException} */ (err).code !== "ENOENT") throw err;
   }
 
   if (existing !== undefined && !isManagedUnchanged(existing)) {
@@ -101,8 +102,8 @@ async function installSlashCommand() {
     await copyFile(promptPath, backupPath);
     process.stderr.write(
       `! ${promptPath} has local edits; keeping your version.\n` +
-      `  A backup of the current file was written to ${backupPath}.\n` +
-      `  To install the latest managed slash command, remove or rename the file and re-run install.\n`,
+        `  A backup of the current file was written to ${backupPath}.\n` +
+        `  To install the latest managed slash command, remove or rename the file and re-run install.\n`,
     );
     log(`  skipped slash command /agentic-skill-router:skills (user-modified)`);
     return;

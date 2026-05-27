@@ -234,12 +234,7 @@ export async function enableSkillFromState(
     let disabledPath = inRoot.disabledPath;
     let liveBefore = inRootLiveBefore;
     let disabledBefore = inRootDisabledBefore;
-    if (
-      !inRootLiveBefore &&
-      !inRootDisabledBefore &&
-      rec.discoveredViaSymlink &&
-      rec.canonicalSkillMdPath
-    ) {
+    if (!inRootLiveBefore && !inRootDisabledBefore && rec.discoveredViaSymlink && rec.canonicalSkillMdPath) {
       const canonicalLive = rec.canonicalSkillMdPath.endsWith(DISABLED_SUFFIX)
         ? rec.canonicalSkillMdPath.slice(0, -DISABLED_SUFFIX.length)
         : rec.canonicalSkillMdPath;
@@ -325,12 +320,7 @@ export async function enableSkillFromState(
             ? realTarget.slice(0, -DISABLED_SUFFIX.length)
             : realTarget;
           if (currentCanonical !== rec.canonicalSkillMdPath) {
-            throw new SkillSymlinkTargetMismatchError(
-              rec.id,
-              probePath,
-              rec.canonicalSkillMdPath,
-              currentCanonical,
-            );
+            throw new SkillSymlinkTargetMismatchError(rec.id, probePath, rec.canonicalSkillMdPath, currentCanonical);
           }
         }
       }
@@ -432,7 +422,7 @@ function resolveDisableRecord(state: State, idOrInstanceKey: string): DisableRec
     .join("\n");
   throw new Error(
     `ambiguous skill id "${idOrInstanceKey}" matches ${byId.length} disabled instances; ` +
-    `re-run with one of:\n${examples}`,
+      `re-run with one of:\n${examples}`,
   );
 }
 
@@ -658,9 +648,7 @@ export async function reapplyMissing(deps: ApplyDeps = {}): Promise<ReapplyResul
               ? canonicalLive.slice(0, -DISABLED_SUFFIX.length)
               : canonicalLive;
             if (currentCanonical !== rec.canonicalSkillMdPath) {
-              symlinkMismatches.push(
-                `${rec.id}: ${rec.canonicalSkillMdPath} -> ${currentCanonical}`,
-              );
+              symlinkMismatches.push(`${rec.id}: ${rec.canonicalSkillMdPath} -> ${currentCanonical}`);
               continue;
             }
           }
@@ -733,10 +721,7 @@ interface PendingResolution {
  *   - both absent → SKILL.md vanished; remove the now-stale disable record.
  *   - both present → split-brain; leave the journal entry untouched.
  */
-async function reconcilePendingOp(
-  pending: PendingOp,
-  state: State,
-): Promise<PendingResolution> {
+async function reconcilePendingOp(pending: PendingOp, state: State): Promise<PendingResolution> {
   // The pending op's own `instanceKey` is the canonical journal key. The
   // validator synthesizes it from `(id, disabledPath)` for legacy entries that
   // predate the field, so it is always populated here.
@@ -758,16 +743,16 @@ async function reconcilePendingOp(
   // instead. Otherwise (legacy record, missing canonical, or in-root skill)
   // fall back to the original symlink-path behavior — the legacy shape
   // predates the canonical guard and we have no other ground truth.
-  const recordForPaths = pending.op === "disable"
-    ? (pending.record ?? state.disabledSkills.find((r) => r.instanceKey === pendingInstanceKey))
-    : state.disabledSkills.find((r) => r.instanceKey === pendingInstanceKey);
-  const canonicalLive = recordForPaths?.discoveredViaSymlink && recordForPaths.canonicalSkillMdPath
-    ? recordForPaths.canonicalSkillMdPath
-    : null;
+  const recordForPaths =
+    pending.op === "disable"
+      ? (pending.record ?? state.disabledSkills.find((r) => r.instanceKey === pendingInstanceKey))
+      : state.disabledSkills.find((r) => r.instanceKey === pendingInstanceKey);
+  const canonicalLive =
+    recordForPaths?.discoveredViaSymlink && recordForPaths.canonicalSkillMdPath
+      ? recordForPaths.canonicalSkillMdPath
+      : null;
   const checkLivePath = canonicalLive ?? pending.livePath;
-  const checkDisabledPath = canonicalLive
-    ? canonicalLive + DISABLED_SUFFIX
-    : pending.disabledPath;
+  const checkDisabledPath = canonicalLive ? canonicalLive + DISABLED_SUFFIX : pending.disabledPath;
   const liveExists = await fileExists(checkLivePath);
   const disabledExists = await fileExists(checkDisabledPath);
 
@@ -785,9 +770,10 @@ async function reconcilePendingOp(
       // We prefer the canonical disabled-marker path when we have one, since
       // the symlink at `pending.disabledPath` may already be retargeted and
       // would resolve to the wrong file.
-      const record = baseRecord && baseRecord.discoveredViaSymlink && !baseRecord.canonicalSkillMdPath
-        ? await backfillCanonical(baseRecord, checkDisabledPath)
-        : baseRecord;
+      const record =
+        baseRecord && baseRecord.discoveredViaSymlink && !baseRecord.canonicalSkillMdPath
+          ? await backfillCanonical(baseRecord, checkDisabledPath)
+          : baseRecord;
       const withRecord = record ? addDisableRecord(state, record) : state;
       return { state: removePendingOp(withRecord, pendingInstanceKey), commit: "committed" };
     }
@@ -840,26 +826,25 @@ async function reconcilePendingOp(
  * These could be left over from a crash where the rename succeeded but the
  * state save did not, or from a previous tool the user used.
  */
-export async function findOrphanMarkers(
-  skillRoots: string[],
-  deps: ApplyDeps = {},
-): Promise<string[]> {
+export async function findOrphanMarkers(skillRoots: string[], deps: ApplyDeps = {}): Promise<string[]> {
   const state = await loadState(deps.statePath, deps.host);
   const known = new Set<string>();
   for (const r of state.disabledSkills) {
-    const p = r.skillMdPath.endsWith(DISABLED_SUFFIX)
-      ? r.skillMdPath
-      : r.skillMdPath + DISABLED_SUFFIX;
+    const p = r.skillMdPath.endsWith(DISABLED_SUFFIX) ? r.skillMdPath : r.skillMdPath + DISABLED_SUFFIX;
     known.add(p);
   }
   const orphans: string[] = [];
   for (const root of skillRoots) {
     let entries;
-    try { entries = await readdir(root, { withFileTypes: true }); } catch { continue; }
+    try {
+      entries = await readdir(root, { withFileTypes: true });
+    } catch {
+      continue;
+    }
     for (const ent of entries) {
       if (ent.name.startsWith(".")) continue;
       const candidate = join(root, ent.name, `SKILL.md${DISABLED_SUFFIX}`);
-      if (await fileExists(candidate) && !known.has(candidate)) {
+      if ((await fileExists(candidate)) && !known.has(candidate)) {
         orphans.push(candidate);
       }
     }
@@ -926,9 +911,7 @@ async function fileExists(path: string): Promise<boolean> {
 async function canonicalSkillFile(path: string): Promise<string | null> {
   const resolved = await tryRealpath(path);
   if (resolved === null) return null;
-  return resolved.endsWith(DISABLED_SUFFIX)
-    ? resolved.slice(0, -DISABLED_SUFFIX.length)
-    : resolved;
+  return resolved.endsWith(DISABLED_SUFFIX) ? resolved.slice(0, -DISABLED_SUFFIX.length) : resolved;
 }
 
 function pathsForSkill(skill: Skill): { livePath: string; disabledPath: string } {
@@ -953,7 +936,7 @@ async function enableSkillPaths(
   preloadedState?: State,
   overrideId?: string,
 ): Promise<{ state: State; alreadyEnabled: boolean }> {
-  const state = preloadedState ?? await loadState(deps.statePath, deps.host);
+  const state = preloadedState ?? (await loadState(deps.statePath, deps.host));
   const disabledExists = await fileExists(disabledPath);
   const liveExists = await fileExists(livePath);
 
@@ -982,7 +965,7 @@ async function enableSkillPaths(
   // (P1.B).
   let canonicalRenameSource: string | null = null;
   if (matchingRecord?.canonicalSkillMdPath) {
-    const targetPath = disabledExists ? disabledPath : (liveExists ? livePath : null);
+    const targetPath = disabledExists ? disabledPath : liveExists ? livePath : null;
     if (targetPath) {
       const currentResolved = await tryRealpath(targetPath);
       if (currentResolved) {

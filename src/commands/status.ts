@@ -22,20 +22,26 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
   const orphanMarkers = await findOrphanMarkers(await host.skillRoots(), { statePath, host: host.name });
 
   if (values.json) {
-    process.stdout.write(JSON.stringify({
-      disabledCount: state.disabledSkills.length,
-      reapplied: reapplyResult.reapplied,
-      orphaned: reapplyResult.orphaned,
-      conflicted: reapplyResult.conflicted,
-      recoveredCommits: reapplyResult.recoveredCommits,
-      recoveredRollbacks: reapplyResult.recoveredRollbacks,
-      skipped: reapplyResult.skipped,
-      symlinkMismatches: reapplyResult.symlinkMismatches,
-      orphanMarkers,
-      disabled: state.disabledSkills,
-      pendingOps: state.pendingOps ?? [],
-      routed: state.routedSkills ?? [],
-    }, null, 2) + "\n");
+    process.stdout.write(
+      JSON.stringify(
+        {
+          disabledCount: state.disabledSkills.length,
+          reapplied: reapplyResult.reapplied,
+          orphaned: reapplyResult.orphaned,
+          conflicted: reapplyResult.conflicted,
+          recoveredCommits: reapplyResult.recoveredCommits,
+          recoveredRollbacks: reapplyResult.recoveredRollbacks,
+          skipped: reapplyResult.skipped,
+          symlinkMismatches: reapplyResult.symlinkMismatches,
+          orphanMarkers,
+          disabled: state.disabledSkills,
+          pendingOps: state.pendingOps ?? [],
+          routed: state.routedSkills ?? [],
+        },
+        null,
+        2,
+      ) + "\n",
+    );
     return reapplyResult.conflicted.length > 0 || reapplyResult.symlinkMismatches.length > 0 ? 1 : 0;
   }
   console.log(`disabled skills: ${state.disabledSkills.length}`);
@@ -46,7 +52,9 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
     console.log(`\nrecovered (in-flight ops committed from journal): ${reapplyResult.recoveredCommits.join(", ")}`);
   }
   if (reapplyResult.recoveredRollbacks.length > 0) {
-    console.log(`\nrolled back (in-flight ops with no completed rename): ${reapplyResult.recoveredRollbacks.join(", ")}`);
+    console.log(
+      `\nrolled back (in-flight ops with no completed rename): ${reapplyResult.recoveredRollbacks.join(", ")}`,
+    );
   }
   if (reapplyResult.reapplied.length > 0) {
     console.log(`\nreapplied (upstream restored these): ${reapplyResult.reapplied.join(", ")}`);
@@ -56,9 +64,8 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
       `\nskipped (out-of-root symlink, manual repair required) — \`skills status\` will not silently rename files outside this host's skills root:`,
     );
     for (const s of reapplyResult.skipped) {
-      const linkedPart = s.linkedTarget && s.linkedTarget !== s.livePath
-        ? `${s.livePath} -> ${s.linkedTarget}`
-        : s.livePath;
+      const linkedPart =
+        s.linkedTarget && s.linkedTarget !== s.livePath ? `${s.livePath} -> ${s.linkedTarget}` : s.livePath;
       console.log(`  ${s.id}  (linked target: ${linkedPart})`);
       if (s.fixCommand) {
         console.log(`    fix: ${s.fixCommand}`);
@@ -71,17 +78,25 @@ export async function cmdStatus(argv: string[], hostName: HostName): Promise<num
     }
   }
   if (reapplyResult.orphaned.length > 0) {
-    console.log(`\norphaned records (SKILL.md gone entirely; run \`enable <id>\` to clean state): ${reapplyResult.orphaned.join(", ")}`);
+    console.log(
+      `\norphaned records (SKILL.md gone entirely; run \`enable <id>\` to clean state): ${reapplyResult.orphaned.join(", ")}`,
+    );
   }
   if (reapplyResult.conflicted.length > 0) {
     console.log(`\n⚠ CONFLICTED — both SKILL.md and SKILL.md.agentic-skill-router-disabled present:`);
     for (const id of reapplyResult.conflicted) console.log(`  ${id}`);
-    console.log(`Manually delete one file (typically the .agentic-skill-router-disabled to fully enable, or the SKILL.md to fully disable) and re-run \`status\`.`);
+    console.log(
+      `Manually delete one file (typically the .agentic-skill-router-disabled to fully enable, or the SKILL.md to fully disable) and re-run \`status\`.`,
+    );
   }
   if (reapplyResult.symlinkMismatches.length > 0) {
-    console.log(`\n⚠ SYMLINK RETARGETED — recorded canonical target no longer matches current realpath; manual repair required:`);
+    console.log(
+      `\n⚠ SYMLINK RETARGETED — recorded canonical target no longer matches current realpath; manual repair required:`,
+    );
     for (const line of reapplyResult.symlinkMismatches) console.log(`  ${line}`);
-    console.log(`Restore the symlink to its original target, or remove the stale disable record from state and re-disable the new target explicitly.`);
+    console.log(
+      `Restore the symlink to its original target, or remove the stale disable record from state and re-disable the new target explicitly.`,
+    );
   }
   if (orphanMarkers.length > 0) {
     console.log(`\norphan disabled markers (no state record; left from a previous tool or crash):`);

@@ -64,15 +64,18 @@ export async function cmdRoute(argv: string[], hostName: HostName): Promise<numb
       const statePath = statePathForHost(host.name);
       await withStateLock(statePath, async () => {
         const state = await loadState(statePath, host.name);
-        await saveState(recordRoutedSkill(state, {
-          id: selected.skill.id,
-          pluginKey: selected.skill.pluginKey,
-          skillMdPath: selected.skill.skillMdPath,
-          name: selected.skill.name,
-          query,
-          confidence: selected.confidence,
-          routedAt: new Date().toISOString(),
-        }), statePath);
+        await saveState(
+          recordRoutedSkill(state, {
+            id: selected.skill.id,
+            pluginKey: selected.skill.pluginKey,
+            skillMdPath: selected.skill.skillMdPath,
+            name: selected.skill.name,
+            query,
+            confidence: selected.confidence,
+            routedAt: new Date().toISOString(),
+          }),
+          statePath,
+        );
       });
       recorded = true;
     } catch (err) {
@@ -107,12 +110,7 @@ export async function cmdRoute(argv: string[], hostName: HostName): Promise<numb
   return 0;
 }
 
-async function routeByMode(
-  skills: Skill[],
-  query: string,
-  mode: RouteMode,
-  opts: { topK?: number },
-) {
+async function routeByMode(skills: Skill[], query: string, mode: RouteMode, opts: { topK?: number }) {
   if (mode === "lexical") return routeDisabledSkills(skills, query, opts);
   if (mode === "metadata") return routeDisabledSkillsMetadata(skills, query, opts);
   if (mode === "body") {

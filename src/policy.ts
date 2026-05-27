@@ -30,11 +30,7 @@ export interface PolicyOptions {
   keepIds?: readonly string[] | undefined;
 }
 
-export function suggest(
-  skills: Skill[],
-  usage: Map<string, UsageStat>,
-  opts: PolicyOptions,
-): Suggestion[] {
+export function suggest(skills: Skill[], usage: Map<string, UsageStat>, opts: PolicyOptions): Suggestion[] {
   const now = opts.now ?? new Date();
   const cutoff = new Date(now.getTime() - opts.unusedForDays * 24 * 60 * 60 * 1000);
   const keepNames = new Set(opts.keepNames ?? []);
@@ -42,10 +38,10 @@ export function suggest(
   const out: Suggestion[] = [];
 
   for (const skill of skills) {
-    if (!canMutateSkill(skill)) continue;     // builtins / unsafe-to-mutate
-    if (skill.isDisabled) continue;           // already disabled
-    if (skill.isPluginDisabled) continue;     // whole plugin off, no point per-skill
-    if (skill.conflict) continue;             // split-brain — resolve first
+    if (!canMutateSkill(skill)) continue; // builtins / unsafe-to-mutate
+    if (skill.isDisabled) continue; // already disabled
+    if (skill.isPluginDisabled) continue; // whole plugin off, no point per-skill
+    if (skill.conflict) continue; // split-brain — resolve first
     // Protect agentic-skill-router's own routing skill (only the plugin instance, not
     // user-authored skills that happen to share the name).
     if (isSkillRouterOwnSkill(skill)) continue;

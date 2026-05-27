@@ -93,11 +93,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
     return 2;
   }
 
-  const decoded = decodeInitInputs(
-    positionals,
-    values.agent as string | undefined,
-    values.scope as string | undefined,
-  );
+  const decoded = decodeInitInputs(positionals, values.agent as string | undefined, values.scope as string | undefined);
   if (decoded.extra.length > 0) {
     process.stderr.write("usage: agentic-skill-router init [codex|claude-code] [project|global]\n");
     return 2;
@@ -278,9 +274,7 @@ async function validateClaudeMdFormat(path: string): Promise<void> {
   findAllFenceSpans(existing, path);
 }
 
-async function upsertClaudeMdBlock(
-  path: string,
-): Promise<"created" | "replaced" | "appended"> {
+async function upsertClaudeMdBlock(path: string): Promise<"created" | "replaced" | "appended"> {
   let existing: string | null = null;
   try {
     existing = await readFile(path, "utf8");
@@ -305,11 +299,7 @@ async function upsertClaudeMdBlock(
   const spans = findAllFenceSpans(existing, path);
 
   if (spans.length === 0) {
-    const separator = existing.endsWith(eol + eol)
-      ? ""
-      : existing.endsWith(eol)
-        ? eol
-        : eol + eol;
+    const separator = existing.endsWith(eol + eol) ? "" : existing.endsWith(eol) ? eol : eol + eol;
     const next = existing + separator + block;
     if (next !== existing) await writeFile(path, next);
     return "appended";
@@ -322,11 +312,7 @@ async function upsertClaudeMdBlock(
   for (let i = spans.length - 1; i >= 1; i -= 1) {
     const span = spans[i]!;
     let removeStart = span.start;
-    if (
-      removeStart >= 2 &&
-      next.charAt(removeStart - 2) === "\r" &&
-      next.charAt(removeStart - 1) === "\n"
-    ) {
+    if (removeStart >= 2 && next.charAt(removeStart - 2) === "\r" && next.charAt(removeStart - 1) === "\n") {
       removeStart -= 2;
     } else if (removeStart >= 1 && next.charAt(removeStart - 1) === "\n") {
       removeStart -= 1;
@@ -396,9 +382,7 @@ function escapeForRegex(value: string): string {
 
 function skillRootFor(agent: InitAgent, scope: InitScope, projectRoot: string): string {
   if (scope === "project") {
-    return agent === "codex"
-      ? join(projectRoot, ".agents")
-      : join(projectRoot, ".claude");
+    return agent === "codex" ? join(projectRoot, ".agents") : join(projectRoot, ".claude");
   }
   if (agent === "codex") {
     return process.env["AGENTS_HOME"] ?? join(homedir(), ".agents");
@@ -505,8 +489,8 @@ async function findPackageRoot(start: string): Promise<string> {
   let current = resolve(start);
   while (true) {
     if (
-      await fileExists(join(current, "package.json")) ||
-      await fileExists(join(current, "skills", "agentic-skill-router-skills", "SKILL.md"))
+      (await fileExists(join(current, "package.json"))) ||
+      (await fileExists(join(current, "skills", "agentic-skill-router-skills", "SKILL.md")))
     ) {
       return current;
     }

@@ -78,7 +78,7 @@ export function projectSkill(s: Skill, usage: Map<string, UsageStat>, inventory?
     canDisable: s.canDisable,
     conflict: s.conflict,
     outOfRoot: s.outOfRoot ?? false,
-    skipped: s.outOfRoot ? "out-of-root" as const : null,
+    skipped: s.outOfRoot ? ("out-of-root" as const) : null,
     description: s.description,
     lastUsed: u?.lastUsed?.toISOString() ?? null,
     callCount: u?.callCount ?? 0,
@@ -126,7 +126,7 @@ export function projectRoute(
     mode: result.mode,
     routeMode: result.routeMode,
     ...(routeModeAlias ? { routeModeAlias } : {}),
-    action: result.selected ? "read-skill-file" as const : "no-confident-match" as const,
+    action: result.selected ? ("read-skill-file" as const) : ("no-confident-match" as const),
     recorded,
     warnings,
     selected: result.selected ? { ...projectMatch(result.selected), action: "read-skill-file" as const } : null,
@@ -181,7 +181,8 @@ export function parseConfidence(value: string | undefined): Confidence | null {
  * the configured default. Returns `null` when an explicit value is invalid.
  */
 export function resolveRouteMode(cliValue: string | undefined, configValue: RouteMode): RouteMode | null {
-  if (cliValue === undefined || cliValue === "") return parseRouteMode(process.env["AGENTIC_SKILL_ROUTER_ROUTE_MODE"]) ?? configValue;
+  if (cliValue === undefined || cliValue === "")
+    return parseRouteMode(process.env["AGENTIC_SKILL_ROUTER_ROUTE_MODE"]) ?? configValue;
   return parseRouteMode(cliValue);
 }
 
@@ -193,7 +194,15 @@ export function stringValues(value: unknown): string[] {
 
 // ────────────────── text printers ──────────────────
 
-export function printDciMatches(matches: Array<{ ref?: string; id: string; score: number; reason: string; snippets: Array<{ line: number; text: string }> }>): void {
+export function printDciMatches(
+  matches: Array<{
+    ref?: string;
+    id: string;
+    score: number;
+    reason: string;
+    snippets: Array<{ line: number; text: string }>;
+  }>,
+): void {
   if (matches.length === 0) {
     console.log("no disabled-skill corpus candidates found.");
     return;
@@ -207,7 +216,12 @@ export function printDciMatches(matches: Array<{ ref?: string; id: string; score
   }
 }
 
-export function printDciFind(result: { ref: string; id: string; action: string; snippets: Array<{ line: number; text: string }> }): void {
+export function printDciFind(result: {
+  ref: string;
+  id: string;
+  action: string;
+  snippets: Array<{ line: number; text: string }>;
+}): void {
   if (result.snippets.length === 0) {
     console.log(`no matches in ${result.ref}  ${result.id}`);
     return;
@@ -283,12 +297,17 @@ export function printSkillTable(skills: Skill[], usage: Map<string, UsageStat>):
     return {
       id: s.id,
       source: s.source,
-      disabled: s.conflict ? "CONFLICT"
-        : s.outOfRoot ? "out-of-root"
-        : s.isDisabled ? "yes"
-        : s.isPluginDisabled ? "plugin-off"
-        : !s.canDisable ? "builtin"
-        : "no",
+      disabled: s.conflict
+        ? "CONFLICT"
+        : s.outOfRoot
+          ? "out-of-root"
+          : s.isDisabled
+            ? "yes"
+            : s.isPluginDisabled
+              ? "plugin-off"
+              : !s.canDisable
+                ? "builtin"
+                : "no",
       last: u?.lastUsed?.toISOString().slice(0, 10) ?? "—",
       calls: String(u?.callCount ?? 0),
     };
@@ -305,7 +324,9 @@ export function printSkillTable(skills: Skill[], usage: Map<string, UsageStat>):
   console.log(header);
   console.log("─".repeat(header.length));
   for (const r of rows) {
-    console.log(`${pad(r.id, widths.id)}  ${pad(r.source, widths.source)}  ${pad(r.disabled, widths.disabled)}  ${pad(r.last, widths.last)}  ${pad(r.calls, widths.calls)}`);
+    console.log(
+      `${pad(r.id, widths.id)}  ${pad(r.source, widths.source)}  ${pad(r.disabled, widths.disabled)}  ${pad(r.last, widths.last)}  ${pad(r.calls, widths.calls)}`,
+    );
   }
 }
 

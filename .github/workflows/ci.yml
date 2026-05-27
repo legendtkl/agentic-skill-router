@@ -25,6 +25,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check:assets
+      - run: npm run lint
+      - run: npm run format:check
+      - name: security (audit-level=high, non-fatal)
+        run: npm run security || true
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

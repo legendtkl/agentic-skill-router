@@ -83,10 +83,11 @@ test("collectUsageStats skips unreadable transcript files", async () => {
   const sessionDir = join(projectsDir, "proj");
   const readable = join(sessionDir, "readable.jsonl");
   const unreadable = join(sessionDir, "unreadable.jsonl");
-  const mkLine = (skill: string) => `${JSON.stringify({
-    timestamp: "2026-04-10T08:00:00.000Z",
-    message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
-  })}\n`;
+  const mkLine = (skill: string) =>
+    `${JSON.stringify({
+      timestamp: "2026-04-10T08:00:00.000Z",
+      message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
+    })}\n`;
   await mkdir(sessionDir, { recursive: true });
   await writeFile(readable, mkLine("foo"), "utf8");
   await writeFile(unreadable, mkLine("bar"), "utf8");
@@ -116,10 +117,11 @@ test("collectUsageStats skips unreadable transcript subdirs and warns", async (t
   const unreadableDir = join(projectsDir, "unreadable");
   const readableSession = join(readableDir, "session.jsonl");
   const buriedSession = join(unreadableDir, "session.jsonl");
-  const mkLine = (skill: string) => `${JSON.stringify({
-    timestamp: "2026-04-10T08:00:00.000Z",
-    message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
-  })}\n`;
+  const mkLine = (skill: string) =>
+    `${JSON.stringify({
+      timestamp: "2026-04-10T08:00:00.000Z",
+      message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
+    })}\n`;
   await mkdir(readableDir, { recursive: true });
   await mkdir(unreadableDir, { recursive: true });
   await writeFile(readableSession, mkLine("foo"), "utf8");
@@ -211,9 +213,7 @@ test("lookupUsage: short-name conflict yields no attribution for either skill", 
   // marketplaces should not share the bare "codex:rescue" transcript record.
   const a = mkPlugin("rescue", "codex@market-a");
   const b = mkPlugin("rescue", "codex@market-b");
-  const usage = new Map<string, UsageStat>([
-    ["codex:rescue", mkUsage("codex:rescue", "2026-04-20T00:00:00Z", 7)],
-  ]);
+  const usage = new Map<string, UsageStat>([["codex:rescue", mkUsage("codex:rescue", "2026-04-20T00:00:00Z", 7)]]);
   assert.equal(lookupUsage(a, usage, [a, b]), undefined);
   assert.equal(lookupUsage(b, usage, [a, b]), undefined);
 });
@@ -221,9 +221,7 @@ test("lookupUsage: short-name conflict yields no attribution for either skill", 
 test("lookupUsageStrict: short-name conflict yields no attribution for either skill", () => {
   const a = mkPlugin("rescue", "codex@market-a");
   const b = mkPlugin("rescue", "codex@market-b");
-  const usage = new Map<string, UsageStat>([
-    ["codex:rescue", mkUsage("codex:rescue", "2026-04-20T00:00:00Z", 7)],
-  ]);
+  const usage = new Map<string, UsageStat>([["codex:rescue", mkUsage("codex:rescue", "2026-04-20T00:00:00Z", 7)]]);
   assert.equal(lookupUsageStrict(a, usage, [a, b]), undefined);
   assert.equal(lookupUsageStrict(b, usage, [a, b]), undefined);
 });
@@ -232,9 +230,7 @@ test("lookupUsage: full plugin-key form attributes only to the matching skill", 
   const a = mkPlugin("rescue", "codex@market-a");
   const b = mkPlugin("rescue", "codex@market-b");
   // Transcript carried the full id, so attribution is unambiguous.
-  const usage = new Map<string, UsageStat>([
-    [a.id, mkUsage(a.id, "2026-04-20T00:00:00Z", 3)],
-  ]);
+  const usage = new Map<string, UsageStat>([[a.id, mkUsage(a.id, "2026-04-20T00:00:00Z", 3)]]);
   const ua = lookupUsage(a, usage, [a, b]);
   const ub = lookupUsage(b, usage, [a, b]);
   assert.ok(ua, "a should be attributed via full key");
@@ -245,9 +241,7 @@ test("lookupUsage: full plugin-key form attributes only to the matching skill", 
 test("lookupUsageStrict: full plugin-key form attributes only to the matching skill", () => {
   const a = mkPlugin("rescue", "codex@market-a");
   const b = mkPlugin("rescue", "codex@market-b");
-  const usage = new Map<string, UsageStat>([
-    [a.id, mkUsage(a.id, "2026-04-20T00:00:00Z", 3)],
-  ]);
+  const usage = new Map<string, UsageStat>([[a.id, mkUsage(a.id, "2026-04-20T00:00:00Z", 3)]]);
   const ua = lookupUsageStrict(a, usage, [a, b]);
   const ub = lookupUsageStrict(b, usage, [a, b]);
   assert.ok(ua);
@@ -273,9 +267,7 @@ test("lookupUsage: full key beats short-name when both are present", () => {
 test("lookupUsage: non-conflicting plugin still uses short-form attribution", () => {
   const a = mkPlugin("rescue", "codex@market-a");
   // No sibling under "codex@*" with same name, so "codex:rescue" is safe.
-  const usage = new Map<string, UsageStat>([
-    ["codex:rescue", mkUsage("codex:rescue", "2026-04-20T00:00:00Z", 4)],
-  ]);
+  const usage = new Map<string, UsageStat>([["codex:rescue", mkUsage("codex:rescue", "2026-04-20T00:00:00Z", 4)]]);
   const ua = lookupUsage(a, usage, [a]);
   assert.ok(ua);
   assert.equal(ua!.callCount, 4);

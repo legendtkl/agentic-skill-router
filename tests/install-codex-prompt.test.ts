@@ -6,12 +6,7 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import {
-  attachManagedMarker,
-  extractManagedMarker,
-  isManagedUnchanged,
-  sha256Hex,
-} from "../scripts/prompt-marker.mjs";
+import { attachManagedMarker, extractManagedMarker, isManagedUnchanged, sha256Hex } from "../scripts/prompt-marker.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(__dirname);
@@ -85,15 +80,11 @@ test("install preserves a user-edited prompt and writes a backup", async () => {
     const userVersion = "user owned prompt body\nwith local edits\n";
     await writeFile(promptPath, userVersion);
 
-    const result = await execFileAsync(
-      process.execPath,
-      ["scripts/install-codex.mjs"],
-      {
-        cwd: REPO_ROOT,
-        env: codexInstallEnv(root, codexHome),
-        maxBuffer: 4 * 1024 * 1024,
-      },
-    );
+    const result = await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
+      cwd: REPO_ROOT,
+      env: codexInstallEnv(root, codexHome),
+      maxBuffer: 4 * 1024 * 1024,
+    });
 
     assert.equal(await readFile(promptPath, "utf8"), userVersion);
     const backupPath = `${promptPath}.user-modified.bak`;
@@ -143,15 +134,11 @@ test("uninstall preserves a user-edited prompt file", async () => {
     const userVersion = "user owned prompt body\n";
     await writeFile(promptPath, userVersion);
 
-    const result = await execFileAsync(
-      process.execPath,
-      ["scripts/uninstall-codex.mjs"],
-      {
-        cwd: REPO_ROOT,
-        env: codexInstallEnv(root, codexHome),
-        maxBuffer: 4 * 1024 * 1024,
-      },
-    );
+    const result = await execFileAsync(process.execPath, ["scripts/uninstall-codex.mjs"], {
+      cwd: REPO_ROOT,
+      env: codexInstallEnv(root, codexHome),
+      maxBuffer: 4 * 1024 * 1024,
+    });
 
     assert.ok(await pathExists(promptPath));
     assert.equal(await readFile(promptPath, "utf8"), userVersion);

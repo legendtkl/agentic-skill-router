@@ -26,7 +26,7 @@ export async function routeDisabledSkillsAuto(
       routeMode: "auto",
       diagnostics: {
         metadata: metadataDiagnostics,
-        auto: { escalated: false, reason: null, selectedSource: metadata.selected ? "metadata" as const : null },
+        auto: { escalated: false, reason: null, selectedSource: metadata.selected ? ("metadata" as const) : null },
       },
     };
   }
@@ -71,7 +71,8 @@ function metadataEscalationReason(result: SkillRouteResult): string | null {
   const second = result.matches.find((match) => match.skill.id !== selected.skill.id);
   if (
     isMetadataUmbrellaSkill(selected.skill) &&
-    (!selected.signals.matchedName || (second && second.signals.cueHitCount >= selected.signals.cueHitCount + 3 && second.score >= 0.3))
+    (!selected.signals.matchedName ||
+      (second && second.signals.cueHitCount >= selected.signals.cueHitCount + 3 && second.score >= 0.3))
   ) {
     return "metadata-selected-umbrella-skill";
   }
@@ -99,7 +100,12 @@ function diagnosticsFor(result: SkillRouteResult): NonNullable<RouteDiagnostics[
   };
 }
 
-function projectDiagnosticMatch(match: SkillRouteMatch): { id: string; confidence: Confidence; score: number; reason: string } {
+function projectDiagnosticMatch(match: SkillRouteMatch): {
+  id: string;
+  confidence: Confidence;
+  score: number;
+  reason: string;
+} {
   return {
     id: match.skill.id,
     confidence: match.confidence,

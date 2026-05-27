@@ -168,188 +168,195 @@ interface StatusJson {
   routed: Array<{ id: string; routeCount: number; lastQuery: string }>;
 }
 
-test(
-  "[agentic-skill-router-cli] Codex OpenAI skills e2e installs curated skills, disables a subset, and routes 20 queries",
-  async () => {
-    assert.ok(CODEX_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.includes(OPENAI_SKILLS_REPO)));
-    assert.ok(CODEX_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.startsWith("HOME=")));
-    assert.equal(ROUTE_CASES.length, 20);
+test("[agentic-skill-router-cli] Codex OpenAI skills e2e installs curated skills, disables a subset, and routes 20 queries", async () => {
+  assert.ok(CODEX_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.includes(OPENAI_SKILLS_REPO)));
+  assert.ok(CODEX_OPENAI_E2E_INSTALL_COMMANDS.some((command) => command.startsWith("HOME=")));
+  assert.equal(ROUTE_CASES.length, 20);
 
-    const fresh = await makeFreshCodexEnvironment();
-    try {
-      assert.equal(fresh.env.CODEX_HOME, undefined);
-      assert.equal(fresh.env.AGENTS_HOME, undefined);
-      assert.equal(fresh.env.AGENTIC_SKILL_ROUTER_HOST, undefined);
-      await installSkillRouterForCodex(fresh.env);
-      const installedOpenAiSkillCount = await installOpenAiCuratedSkillsFromGithub(
-        fresh.workdir,
-        fresh.codexHome,
-        fresh.env,
+  const fresh = await makeFreshCodexEnvironment();
+  try {
+    assert.equal(fresh.env.CODEX_HOME, undefined);
+    assert.equal(fresh.env.AGENTS_HOME, undefined);
+    assert.equal(fresh.env.AGENTIC_SKILL_ROUTER_HOST, undefined);
+    await installSkillRouterForCodex(fresh.env);
+    const installedOpenAiSkillCount = await installOpenAiCuratedSkillsFromGithub(
+      fresh.workdir,
+      fresh.codexHome,
+      fresh.env,
+    );
+    assert.equal(installedOpenAiSkillCount, EXPECTED_OPENAI_CURATED_SKILL_COUNT);
+
+    const routerBin = await installedCodexRouterBin(fresh.codexHome);
+    assert.equal(await fileExists(routerBin), true);
+    const config = await readFile(join(fresh.codexHome, "config.toml"), "utf8");
+    assert.match(config, /\[plugins\."agentic-skill-router@local"\]\nenabled = true/);
+
+    const listedEnvelope = await runRouterJson<{ skills: SkillListItem[] }>(
+      routerBin,
+      ["skills", "list", "--json"],
+      fresh.env,
+    );
+    const listed = listedEnvelope.skills;
+    const codexOpenAiSkills = listed.filter((item) => item.id.startsWith("user:codex:"));
+    assert.equal(codexOpenAiSkills.length, installedOpenAiSkillCount);
+    assert.equal(codexOpenAiSkills.length, EXPECTED_OPENAI_CURATED_SKILL_COUNT);
+    for (const skill of DISABLED_OPENAI_SKILLS) {
+      assert.ok(
+        listed.some((item) => item.id === `user:codex:${skill}`),
+        `expected ${skill} to be installed`,
       );
-      assert.equal(installedOpenAiSkillCount, EXPECTED_OPENAI_CURATED_SKILL_COUNT);
+    }
+    assert.ok(!listed.some((item) => item.id === "user:codex:skill-installer"));
+    assert.ok(!listed.some((item) => item.id.startsWith("builtin:codex-system:")));
+    assert.ok(listed.some((item) => item.id === "plugin:agentic-skill-router@local:agentic-skill-router-skills"));
 
-      const routerBin = await installedCodexRouterBin(fresh.codexHome);
-      assert.equal(await fileExists(routerBin), true);
-      const config = await readFile(join(fresh.codexHome, "config.toml"), "utf8");
-      assert.match(config, /\[plugins\."agentic-skill-router@local"\]\nenabled = true/);
+    await runRouter(
+      routerBin,
+      [
+        "skills",
+        "disable",
+        ...DISABLED_OPENAI_SKILLS.map((skill) => `user:codex:${skill}`),
+        "--yes",
+        "--reason=codex-openai-e2e",
+        "--json",
+      ],
+      fresh.env,
+    );
+    for (const skill of DISABLED_OPENAI_SKILLS) {
+      const skillDir = join(fresh.codexHome, "skills", skill);
+      assert.equal(await fileExists(join(skillDir, "SKILL.md")), false);
+      assert.equal(await fileExists(join(skillDir, "SKILL.md.agentic-skill-router-disabled")), true);
+    }
 
-      const listedEnvelope = await runRouterJson<{ skills: SkillListItem[] }>(routerBin, ["skills", "list", "--json"], fresh.env);
-      const listed = listedEnvelope.skills;
-      const codexOpenAiSkills = listed.filter((item) => item.id.startsWith("user:codex:"));
-      assert.equal(codexOpenAiSkills.length, installedOpenAiSkillCount);
-      assert.equal(codexOpenAiSkills.length, EXPECTED_OPENAI_CURATED_SKILL_COUNT);
-      for (const skill of DISABLED_OPENAI_SKILLS) {
-        assert.ok(listed.some((item) => item.id === `user:codex:${skill}`), `expected ${skill} to be installed`);
-      }
-      assert.ok(!listed.some((item) => item.id === "user:codex:skill-installer"));
-      assert.ok(!listed.some((item) => item.id.startsWith("builtin:codex-system:")));
-      assert.ok(listed.some((item) => item.id === "plugin:agentic-skill-router@local:agentic-skill-router-skills"));
+    const status = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
+    assert.equal(status.disabledCount, DISABLED_OPENAI_SKILLS.length);
+    assert.deepEqual(
+      status.disabled.map((record) => record.id).sort(),
+      DISABLED_OPENAI_SKILLS.map((skill) => `user:codex:${skill}`).sort(),
+    );
 
-      await runRouter(
+    for (const routeCase of ROUTE_CASES) {
+      const expected = `user:codex:${routeCase.skill}`;
+      const routed = await runRouterJson<RouteJson>(
         routerBin,
-        [
-          "skills",
-          "disable",
-          ...DISABLED_OPENAI_SKILLS.map((skill) => `user:codex:${skill}`),
-          "--yes",
-          "--reason=codex-openai-e2e",
-          "--json",
-        ],
+        ["skills", "route", "--query", routeCase.query, "--json"],
         fresh.env,
       );
-      for (const skill of DISABLED_OPENAI_SKILLS) {
-        const skillDir = join(fresh.codexHome, "skills", skill);
-        assert.equal(await fileExists(join(skillDir, "SKILL.md")), false);
-        assert.equal(await fileExists(join(skillDir, "SKILL.md.agentic-skill-router-disabled")), true);
-      }
-
-      const status = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
-      assert.equal(status.disabledCount, DISABLED_OPENAI_SKILLS.length);
-      assert.deepEqual(
-        status.disabled.map((record) => record.id).sort(),
-        DISABLED_OPENAI_SKILLS.map((skill) => `user:codex:${skill}`).sort(),
-      );
-
-      for (const routeCase of ROUTE_CASES) {
-        const expected = `user:codex:${routeCase.skill}`;
-        const routed = await runRouterJson<RouteJson>(
-          routerBin,
-          ["skills", "route", "--query", routeCase.query, "--json"],
-          fresh.env,
-        );
-        assert.equal(routed.action, "read-skill-file");
-        assert.equal(routed.recorded, true);
-        assert.equal(routed.selected?.id, expected);
-        assert.match(routed.selected?.skillMdPath ?? "", /SKILL\.md\.agentic-skill-router-disabled$/);
-        assert.ok(routed.matches.some((match) => match.id === expected));
-      }
-
-      const finalStatus = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
-      for (const routeCase of ROUTE_CASES) {
-        const record = finalStatus.routed.find((item) => item.id === `user:codex:${routeCase.skill}`);
-        assert.equal(record?.routeCount, 1);
-        assert.equal(record?.lastQuery, routeCase.query);
-      }
-    } finally {
-      await fresh.cleanup();
-    }
-  },
-);
-
-test(
-  "[codex-cli] Codex CLI agent e2e routes disabled skills and reads their matched skill files",
-  async (t) => {
-    const codexBin = await findExecutable("codex");
-    if (!codexBin) {
-      t.skip("codex executable not found on PATH");
-      return;
+      assert.equal(routed.action, "read-skill-file");
+      assert.equal(routed.recorded, true);
+      assert.equal(routed.selected?.id, expected);
+      assert.match(routed.selected?.skillMdPath ?? "", /SKILL\.md\.agentic-skill-router-disabled$/);
+      assert.ok(routed.matches.some((match) => match.id === expected));
     }
 
-    const authPath = await localCodexAuthPath();
-    if (!authPath) {
-      t.skip("local Codex auth.json not found");
-      return;
+    const finalStatus = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
+    for (const routeCase of ROUTE_CASES) {
+      const record = finalStatus.routed.find((item) => item.id === `user:codex:${routeCase.skill}`);
+      assert.equal(record?.routeCount, 1);
+      assert.equal(record?.lastQuery, routeCase.query);
     }
+  } finally {
+    await fresh.cleanup();
+  }
+});
 
-    const fresh = await makeFreshCodexEnvironment();
-    try {
-      await copyFile(authPath, join(fresh.codexHome, "auth.json"));
-      await installSkillRouterForCodex(fresh.env);
-      await appendCodexRouterWorkflowSentinels(fresh.codexHome);
-      assert.equal(
-        await installOpenAiCuratedSkillsFromGithub(fresh.workdir, fresh.codexHome, fresh.env),
-        EXPECTED_OPENAI_CURATED_SKILL_COUNT,
-      );
-      await appendCodexE2eSentinels(fresh.codexHome);
+test("[codex-cli] Codex CLI agent e2e routes disabled skills and reads their matched skill files", async (t) => {
+  const codexBin = await findExecutable("codex");
+  if (!codexBin) {
+    t.skip("codex executable not found on PATH");
+    return;
+  }
 
-      const routerBin = await installedCodexRouterBin(fresh.codexHome);
-      await runRouter(
-        routerBin,
-        [
-          "skills",
-          "disable",
-          ...DISABLED_OPENAI_SKILLS.map((skill) => `user:codex:${skill}`),
-          "--yes",
-          "--reason=codex-agent-openai-e2e",
-          "--json",
-        ],
-        fresh.env,
-      );
+  const authPath = await localCodexAuthPath();
+  if (!authPath) {
+    t.skip("local Codex auth.json not found");
+    return;
+  }
 
-      const probePath = await writeCodexAgentProbe(fresh.projectCwd);
-      const finalMessagePath = join(fresh.root, "codex-agent-final.json");
-      const prompt = [
-        "/agentic-skill-router:skills",
-        "Run the agentic-skill-router Codex integration check.",
-        `First, read the slash command prompt sentinel line named "Codex slash command sentinel" and keep its value.`,
-        `Then use the installed agentic-skill-router-skills workflow, read its SKILL.md, and keep the value from the line named "Codex workflow sentinel".`,
-        "Run this exact local probe command, passing the workflow sentinel value as the single argument:",
-        `node ${JSON.stringify(probePath)} "<workflow-sentinel-value>"`,
-        "The probe calls agentic-skill-router for 20 disabled OpenAI skill queries, reads each returned selected.skillMdPath, and extracts the Codex E2E sentinel line.",
-        "Return only minified JSON in this exact shape: {\"slashSentinel\":\"...\",\"workflowSentinel\":\"...\",\"probe\":<probe stdout JSON>}.",
-        "Do not infer or fabricate sentinel values.",
-      ].join("\n");
+  const fresh = await makeFreshCodexEnvironment();
+  try {
+    await copyFile(authPath, join(fresh.codexHome, "auth.json"));
+    await installSkillRouterForCodex(fresh.env);
+    await appendCodexRouterWorkflowSentinels(fresh.codexHome);
+    assert.equal(
+      await installOpenAiCuratedSkillsFromGithub(fresh.workdir, fresh.codexHome, fresh.env),
+      EXPECTED_OPENAI_CURATED_SKILL_COUNT,
+    );
+    await appendCodexE2eSentinels(fresh.codexHome);
 
-      const codexResult = await spawnFileNoStdin(
-        codexBin,
-        [
-          "-a",
-          "never",
-          "exec",
-          "--json",
-          "--ephemeral",
-          "--skip-git-repo-check",
-          "-C",
-          fresh.projectCwd,
-          "-s",
-          "danger-full-access",
-          "--output-last-message",
-          finalMessagePath,
-          prompt,
-        ],
-        {
-          env: fresh.env,
-          maxBuffer: 50 * 1024 * 1024,
-          timeout: CODEX_AGENT_TIMEOUT_MS,
-        },
-      );
+    const routerBin = await installedCodexRouterBin(fresh.codexHome);
+    await runRouter(
+      routerBin,
+      [
+        "skills",
+        "disable",
+        ...DISABLED_OPENAI_SKILLS.map((skill) => `user:codex:${skill}`),
+        "--yes",
+        "--reason=codex-agent-openai-e2e",
+        "--json",
+      ],
+      fresh.env,
+    );
 
-      assert.equal(
-        await fileExists(finalMessagePath),
-        true,
-        `Codex did not write final output.\nstdout:\n${codexResult.stdout}\nstderr:\n${codexResult.stderr}`,
-      );
-      const finalMessage = await readFile(finalMessagePath, "utf8");
-      const parsed = parseCodexSentinelResponse(finalMessage);
-      assert.equal(parsed.slashSentinel, CODEX_SLASH_SENTINEL);
-      assert.equal(parsed.workflowSentinel, CODEX_WORKFLOW_SENTINEL);
-      assert.deepEqual(parsed.probe.sentinels, ROUTE_CASES.map((routeCase) => routeCase.sentinel));
-      assert.deepEqual(parsed.probe.selectedIds, ROUTE_CASES.map((routeCase) => `user:codex:${routeCase.skill}`));
-    } finally {
-      await fresh.cleanup();
-    }
-  },
-);
+    const probePath = await writeCodexAgentProbe(fresh.projectCwd);
+    const finalMessagePath = join(fresh.root, "codex-agent-final.json");
+    const prompt = [
+      "/agentic-skill-router:skills",
+      "Run the agentic-skill-router Codex integration check.",
+      `First, read the slash command prompt sentinel line named "Codex slash command sentinel" and keep its value.`,
+      `Then use the installed agentic-skill-router-skills workflow, read its SKILL.md, and keep the value from the line named "Codex workflow sentinel".`,
+      "Run this exact local probe command, passing the workflow sentinel value as the single argument:",
+      `node ${JSON.stringify(probePath)} "<workflow-sentinel-value>"`,
+      "The probe calls agentic-skill-router for 20 disabled OpenAI skill queries, reads each returned selected.skillMdPath, and extracts the Codex E2E sentinel line.",
+      'Return only minified JSON in this exact shape: {"slashSentinel":"...","workflowSentinel":"...","probe":<probe stdout JSON>}.',
+      "Do not infer or fabricate sentinel values.",
+    ].join("\n");
+
+    const codexResult = await spawnFileNoStdin(
+      codexBin,
+      [
+        "-a",
+        "never",
+        "exec",
+        "--json",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "-C",
+        fresh.projectCwd,
+        "-s",
+        "danger-full-access",
+        "--output-last-message",
+        finalMessagePath,
+        prompt,
+      ],
+      {
+        env: fresh.env,
+        maxBuffer: 50 * 1024 * 1024,
+        timeout: CODEX_AGENT_TIMEOUT_MS,
+      },
+    );
+
+    assert.equal(
+      await fileExists(finalMessagePath),
+      true,
+      `Codex did not write final output.\nstdout:\n${codexResult.stdout}\nstderr:\n${codexResult.stderr}`,
+    );
+    const finalMessage = await readFile(finalMessagePath, "utf8");
+    const parsed = parseCodexSentinelResponse(finalMessage);
+    assert.equal(parsed.slashSentinel, CODEX_SLASH_SENTINEL);
+    assert.equal(parsed.workflowSentinel, CODEX_WORKFLOW_SENTINEL);
+    assert.deepEqual(
+      parsed.probe.sentinels,
+      ROUTE_CASES.map((routeCase) => routeCase.sentinel),
+    );
+    assert.deepEqual(
+      parsed.probe.selectedIds,
+      ROUTE_CASES.map((routeCase) => `user:codex:${routeCase.skill}`),
+    );
+  } finally {
+    await fresh.cleanup();
+  }
+});
 
 async function makeFreshCodexEnvironment(): Promise<FreshCodexEnvironment> {
   const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-codex-openai-e2e-"));
@@ -477,7 +484,11 @@ if (!workflowSkill.includes(\`Codex workflow sentinel: \${expectedWorkflowSentin
   throw new Error("workflow sentinel argument did not match installed agentic-skill-router-skills SKILL.md");
 }
 
-const queries = ${JSON.stringify(ROUTE_CASES.map((routeCase) => routeCase.query), null, 2)};
+const queries = ${JSON.stringify(
+    ROUTE_CASES.map((routeCase) => routeCase.query),
+    null,
+    2,
+  )};
 const sentinels = [];
 const selectedIds = [];
 
@@ -557,7 +568,16 @@ async function localCodexAuthPath(): Promise<string | null> {
 async function installedCodexRouterBin(codexHome: string): Promise<string> {
   const manifestRaw = await readFile(join(REPO_ROOT, "plugins", "codex", ".codex-plugin", "plugin.json"), "utf8");
   const manifest = JSON.parse(manifestRaw) as { version: string };
-  return join(codexHome, "plugins", "cache", "local", "agentic-skill-router", manifest.version, "bin", "agentic-skill-router");
+  return join(
+    codexHome,
+    "plugins",
+    "cache",
+    "local",
+    "agentic-skill-router",
+    manifest.version,
+    "bin",
+    "agentic-skill-router",
+  );
 }
 
 async function installedCodexRouterSkillPath(codexHome: string): Promise<string> {
@@ -576,7 +596,11 @@ async function installedCodexRouterSkillPath(codexHome: string): Promise<string>
   );
 }
 
-async function runRouter(bin: string, args: string[], env: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string }> {
+async function runRouter(
+  bin: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ stdout: string; stderr: string }> {
   const result = await execFileAsync(bin, args, { env, maxBuffer: MAX_BUFFER });
   return { stdout: result.stdout, stderr: result.stderr };
 }
@@ -587,7 +611,9 @@ async function runRouterJson<T>(bin: string, args: string[], env: NodeJS.Process
     return JSON.parse(stdout) as T;
   } catch (err) {
     const tail = stdout.slice(-500);
-    throw new Error(`failed to parse agentic-skill-router JSON output (${stdout.length} chars): ${(err as Error).message}\n${tail}`);
+    throw new Error(
+      `failed to parse agentic-skill-router JSON output (${stdout.length} chars): ${(err as Error).message}\n${tail}`,
+    );
   }
 }
 

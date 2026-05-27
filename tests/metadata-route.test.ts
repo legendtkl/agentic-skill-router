@@ -108,17 +108,25 @@ test("metadata route prefers specific metadata over umbrella skills", () => {
     "bytedcli",
     "Unified skill for the bytedcli command surface. Covers ES, Cache, BMQ, TCC, RDS, Hive, Dorado, Aeolus, Codebase, Devflow, TOS, ENV, Neptune, Log, APM, and many internal platforms.",
   );
-  const es = skill("bytedance-es", "Query Elasticsearch via Kibana console API, execute ES DSL queries, and get ES index mapping.", {
-    metadata: {
-      name: "bytedance-es",
-      description: "Query Elasticsearch via Kibana console API, execute ES DSL queries, and get ES index mapping.",
-      aliases: ["Elasticsearch", "ES"],
-      tools: ["Kibana console API", "Elasticsearch DSL"],
-      intents: ["get_index_mapping", "execute_es_dsl"],
+  const es = skill(
+    "bytedance-es",
+    "Query Elasticsearch via Kibana console API, execute ES DSL queries, and get ES index mapping.",
+    {
+      metadata: {
+        name: "bytedance-es",
+        description: "Query Elasticsearch via Kibana console API, execute ES DSL queries, and get ES index mapping.",
+        aliases: ["Elasticsearch", "ES"],
+        tools: ["Kibana console API", "Elasticsearch DSL"],
+        intents: ["get_index_mapping", "execute_es_dsl"],
+      },
     },
-  });
+  );
 
-  const result = routeDisabledSkillsMetadata([umbrella, es], "通过 Kibana console API 执行 Elasticsearch DSL 查询并获取 index mapping", { topK: 3 });
+  const result = routeDisabledSkillsMetadata(
+    [umbrella, es],
+    "通过 Kibana console API 执行 Elasticsearch DSL 查询并获取 index mapping",
+    { topK: 3 },
+  );
 
   assert.equal(result.selected?.skill.id, "user:codex:bytedance-es");
   assert.ok(result.matches[0]?.score ?? 0 > (result.matches[1]?.score ?? 0));

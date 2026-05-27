@@ -171,7 +171,10 @@ function normalizeLiteralBlock(lines: string[]): string {
 }
 
 function normalizeFoldedBlock(lines: string[]): string {
-  return stripCommonIndent(lines).map((line) => line.trim()).filter(Boolean).join(" ");
+  return stripCommonIndent(lines)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ");
 }
 
 function stripCommonIndent(lines: string[]): string[] {
@@ -189,7 +192,7 @@ function parseInlineArray(raw: string): string[] | null {
   if (body === "") return [];
   const out: string[] = [];
   let current = "";
-  let quote: "'" | "\"" | null = null;
+  let quote: "'" | '"' | null = null;
   let escaped = false;
   for (const ch of body) {
     if (escaped) {
@@ -207,7 +210,7 @@ function parseInlineArray(raw: string): string[] | null {
       if (ch === quote) quote = null;
       continue;
     }
-    if (ch === "'" || ch === "\"") {
+    if (ch === "'" || ch === '"') {
       quote = ch;
       current += ch;
       continue;
@@ -226,7 +229,7 @@ function parseInlineArray(raw: string): string[] | null {
 
 function hasUnquotedFlowMappingBraces(raw: string): boolean {
   const body = raw.slice(1, -1);
-  let quote: "'" | "\"" | null = null;
+  let quote: "'" | '"' | null = null;
   let escaped = false;
   for (const ch of body) {
     if (escaped) {
@@ -241,7 +244,7 @@ function hasUnquotedFlowMappingBraces(raw: string): boolean {
       if (ch === quote) quote = null;
       continue;
     }
-    if (ch === "'" || ch === "\"") {
+    if (ch === "'" || ch === '"') {
       quote = ch;
       continue;
     }

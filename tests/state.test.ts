@@ -105,10 +105,7 @@ test("removeDisableRecord drops the matching entry by instanceKey", () => {
     disabledAt: "2026-01-01T00:00:00Z",
     reason: "x",
   };
-  const after = removeDisableRecord(
-    { schema: 1, host: "claude-code", disabledSkills: [a] },
-    a.instanceKey,
-  );
+  const after = removeDisableRecord({ schema: 1, host: "claude-code", disabledSkills: [a] }, a.instanceKey);
   assert.equal(after.disabledSkills.length, 0);
 });
 
@@ -182,19 +179,26 @@ test("withStateLock serializes concurrent read-modify-write mutations", async ()
   const { path, cleanup } = await tempPath();
   try {
     await saveState({ schema: 1, host: "codex", disabledSkills: [] }, path);
-    await Promise.all([0, 1].map((idx) => withStateLock(path, async () => {
-      const state = await loadState(path, "codex");
-      await new Promise((resolve) => setTimeout(resolve, idx === 0 ? 25 : 0));
-      await saveState(recordRoutedSkill(state, {
-        id: "user:codex:mail",
-        pluginKey: null,
-        skillMdPath: "/tmp/mail/SKILL.md.agentic-skill-router-disabled",
-        name: "mail",
-        query: `q${idx}`,
-        confidence: "high",
-        routedAt: `2026-05-21T00:00:0${idx}.000Z`,
-      }), path);
-    })));
+    await Promise.all(
+      [0, 1].map((idx) =>
+        withStateLock(path, async () => {
+          const state = await loadState(path, "codex");
+          await new Promise((resolve) => setTimeout(resolve, idx === 0 ? 25 : 0));
+          await saveState(
+            recordRoutedSkill(state, {
+              id: "user:codex:mail",
+              pluginKey: null,
+              skillMdPath: "/tmp/mail/SKILL.md.agentic-skill-router-disabled",
+              name: "mail",
+              query: `q${idx}`,
+              confidence: "high",
+              routedAt: `2026-05-21T00:00:0${idx}.000Z`,
+            }),
+            path,
+          );
+        }),
+      ),
+    );
 
     const state = await loadState(path, "codex");
     assert.equal(state.routedSkills?.[0]?.routeCount, 2);
@@ -212,9 +216,13 @@ test("withStateLock recovers expired legacy lock directories", async () => {
     await utimes(lockPath, old, old);
 
     let ran = false;
-    await withStateLock(path, async () => {
-      ran = true;
-    }, { timeoutMs: 500, staleMs: 1 });
+    await withStateLock(
+      path,
+      async () => {
+        ran = true;
+      },
+      { timeoutMs: 500, staleMs: 1 },
+    );
 
     assert.equal(ran, true);
     await assert.rejects(() => stat(lockPath), /ENOENT/);
@@ -228,17 +236,24 @@ test("withStateLock recovers lock metadata from a dead owner process", async () 
   try {
     const lockPath = `${path}.lock`;
     await mkdir(lockPath);
-    await writeFile(join(lockPath, "owner.json"), JSON.stringify({
-      pid: 99_999_999,
-      createdAt: new Date().toISOString(),
-      host: "codex",
-      token: "dead-owner",
-    }) + "\n");
+    await writeFile(
+      join(lockPath, "owner.json"),
+      JSON.stringify({
+        pid: 99_999_999,
+        createdAt: new Date().toISOString(),
+        host: "codex",
+        token: "dead-owner",
+      }) + "\n",
+    );
 
     let ran = false;
-    await withStateLock(path, async () => {
-      ran = true;
-    }, { timeoutMs: 500, staleMs: 60_000 });
+    await withStateLock(
+      path,
+      async () => {
+        ran = true;
+      },
+      { timeoutMs: 500, staleMs: 60_000 },
+    );
 
     assert.equal(ran, true);
     await assert.rejects(() => stat(lockPath), /ENOENT/);
@@ -253,30 +268,43 @@ test("withStateLock recovers an orphaned stale-recovery lock", async () => {
     const lockPath = `${path}.lock`;
     const recoveryLockPath = `${lockPath}.recovering`;
     await mkdir(lockPath);
-    await writeFile(join(lockPath, "owner.json"), JSON.stringify({
-      pid: 99_999_999,
-      createdAt: new Date().toISOString(),
-      host: "codex",
-      token: "dead-owner",
-    }) + "\n");
+    await writeFile(
+      join(lockPath, "owner.json"),
+      JSON.stringify({
+        pid: 99_999_999,
+        createdAt: new Date().toISOString(),
+        host: "codex",
+        token: "dead-owner",
+      }) + "\n",
+    );
     await mkdir(recoveryLockPath);
-    await writeFile(join(recoveryLockPath, "owner.json"), JSON.stringify({
-      pid: 99_999_999,
-      createdAt: new Date().toISOString(),
-      host: "state-lock-recovery",
-      token: "dead-recovery",
-    }) + "\n");
+    await writeFile(
+      join(recoveryLockPath, "owner.json"),
+      JSON.stringify({
+        pid: 99_999_999,
+        createdAt: new Date().toISOString(),
+        host: "state-lock-recovery",
+        token: "dead-recovery",
+      }) + "\n",
+    );
 
     let ran = false;
-    await withStateLock(path, async () => {
-      ran = true;
-    }, { timeoutMs: 500, staleMs: 60_000 });
+    await withStateLock(
+      path,
+      async () => {
+        ran = true;
+      },
+      { timeoutMs: 500, staleMs: 60_000 },
+    );
 
     assert.equal(ran, true);
     await assert.rejects(() => stat(lockPath), /ENOENT/);
     await assert.rejects(() => stat(recoveryLockPath), /ENOENT/);
     const files = await readdir(dirname(path));
-    assert.equal(files.some((file) => file.includes(".reaped.")), false);
+    assert.equal(
+      files.some((file) => file.includes(".reaped.")),
+      false,
+    );
   } finally {
     await cleanup();
   }
@@ -291,12 +319,15 @@ test("withStateLock preserves stale locks while another recovery owner is live",
     const old = new Date(Date.now() - 60_000);
     await utimes(lockPath, old, old);
     await mkdir(recoveryLockPath);
-    await writeFile(join(recoveryLockPath, "owner.json"), JSON.stringify({
-      pid: process.pid,
-      createdAt: new Date().toISOString(),
-      host: "state-lock-recovery",
-      token: "live-recovery",
-    }) + "\n");
+    await writeFile(
+      join(recoveryLockPath, "owner.json"),
+      JSON.stringify({
+        pid: process.pid,
+        createdAt: new Date().toISOString(),
+        host: "state-lock-recovery",
+        token: "live-recovery",
+      }) + "\n",
+    );
 
     await assert.rejects(
       () => withStateLock(path, async () => {}, { timeoutMs: 100, staleMs: 1 }),
@@ -314,12 +345,15 @@ test("withStateLock preserves live-owner locks and keeps timeout behavior", asyn
   try {
     const lockPath = `${path}.lock`;
     await mkdir(lockPath);
-    await writeFile(join(lockPath, "owner.json"), JSON.stringify({
-      pid: process.pid,
-      createdAt: new Date(Date.now() - 60_000).toISOString(),
-      host: "codex",
-      token: "live-owner",
-    }) + "\n");
+    await writeFile(
+      join(lockPath, "owner.json"),
+      JSON.stringify({
+        pid: process.pid,
+        createdAt: new Date(Date.now() - 60_000).toISOString(),
+        host: "codex",
+        token: "live-owner",
+      }) + "\n",
+    );
 
     await assert.rejects(
       () => withStateLock(path, async () => {}, { timeoutMs: 100, staleMs: 1 }),
@@ -495,7 +529,10 @@ test("saveState writes per-process unique tmp file (no shared .tmp)", async () =
     const files = await readdir(dirname(path));
     // Only the final state.json should remain — no leftover tmp file
     assert.equal(files.includes("state.json"), true);
-    assert.equal(files.some((f) => f.endsWith(".tmp")), false);
+    assert.equal(
+      files.some((f) => f.endsWith(".tmp")),
+      false,
+    );
   } finally {
     await cleanup();
   }

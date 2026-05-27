@@ -158,9 +158,7 @@ function classify(testCase, result) {
 
   // Top-1 accuracy is meaningful only for positive cases. Negative cases score
   // top-1 by matching the "no selection" outcome.
-  const top1Hit = expectsSelect
-    ? selectedId !== null && selectedId === expected
-    : selectedId === null;
+  const top1Hit = expectsSelect ? selectedId !== null && selectedId === expected : selectedId === null;
 
   // Top-3 recall is the named metric, so it must ALWAYS measure the first
   // three returned matches regardless of the route call's --topK. The route
@@ -169,15 +167,12 @@ function classify(testCase, result) {
   // the metric stays "true top-3" even if the user passed --topK=1 or 5.
   // For negative cases we don't credit recall (it would be meaningless).
   const top3Ids = topIds.slice(0, 3);
-  const top3Hit = expectsSelect
-    ? expected !== null && top3Ids.includes(expected)
-    : null;
+  const top3Hit = expectsSelect ? expected !== null && top3Ids.includes(expected) : null;
 
   // Ambiguous reject: positive case where top-1 is correct but selected was
   // null (router saw the candidate but refused to commit). Useful to see how
   // often the ambiguity margins cost us a selection.
-  const ambiguousReject = expectsSelect && selectedId === null &&
-    expected !== null && top1 === expected;
+  const ambiguousReject = expectsSelect && selectedId === null && expected !== null && top1 === expected;
 
   // No-select precision tracks the negative cases — did we correctly refrain
   // from selecting?
@@ -216,16 +211,12 @@ function summarize(mode, rows) {
   // (every hit is a metadata hit). For `lexical` and `dci`, every hit is from
   // that mode by definition, so the rate carries no information — report n/a.
   const metadataExposed = mode === "auto" || mode === "metadata";
-  const metadataHits = metadataExposed
-    ? rows.filter((r) => r.routedSource === "metadata").length
-    : 0;
+  const metadataHits = metadataExposed ? rows.filter((r) => r.routedSource === "metadata").length : 0;
 
   // dciEscalationRate only applies to `auto`, where metadata can escalate to
   // DCI. The other modes have no escalation concept — report n/a.
   const dciEscalationExposed = mode === "auto";
-  const dciEscalations = dciEscalationExposed
-    ? rows.filter((r) => r.escalated === true).length
-    : 0;
+  const dciEscalations = dciEscalationExposed ? rows.filter((r) => r.escalated === true).length : 0;
 
   return {
     cases: rows.length,
@@ -250,7 +241,9 @@ function renderMarkdown(mode, fixtureRelPath, rows, summary, opts) {
   // Surface both knobs: the user-requested --topK (route call width) and the
   // effective top-3 slice used for the recall metric. They are intentionally
   // decoupled so the metric remains "true top-3" regardless of --topK.
-  lines.push(`Route topK: ${opts.routeTopK} (--topK=${opts.userTopK}; top-3 recall always measures the first 3 matches)`);
+  lines.push(
+    `Route topK: ${opts.routeTopK} (--topK=${opts.userTopK}; top-3 recall always measures the first 3 matches)`,
+  );
   lines.push("");
   lines.push("## Metrics");
   lines.push("");
@@ -380,7 +373,9 @@ async function main() {
     return;
   }
 
-  process.stdout.write(`${renderMarkdown(opts.mode, fixtureRelPath, rows, summary, { userTopK: opts.topK, routeTopK })}\n`);
+  process.stdout.write(
+    `${renderMarkdown(opts.mode, fixtureRelPath, rows, summary, { userTopK: opts.topK, routeTopK })}\n`,
+  );
   process.stdout.write("\n## JSON summary\n\n");
   process.stdout.write("```json\n");
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);

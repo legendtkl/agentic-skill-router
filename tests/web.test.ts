@@ -170,7 +170,7 @@ test("web API lists global skills by default and project skills for a supplied p
         try {
           const globalRes = await fetch(`${url}/api/skills?scope=global`);
           assert.equal(globalRes.status, 200);
-          const globalData = await globalRes.json() as SkillsResponse;
+          const globalData = (await globalRes.json()) as SkillsResponse;
           assert.equal(globalData.host, "claude-code");
           assert.equal(globalData.scope, "global");
           assert.equal(globalData.projectPath, null);
@@ -186,14 +186,17 @@ test("web API lists global skills by default and project skills for a supplied p
             `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(fixture.projectRoot)}`,
           );
           assert.equal(projectRes.status, 200);
-          const projectData = await projectRes.json() as SkillsResponse;
+          const projectData = (await projectRes.json()) as SkillsResponse;
           assert.equal(projectData.host, "claude-code");
           assert.equal(projectData.scope, "project");
           assert.equal(projectData.projectPath, fixture.projectRoot);
-          assert.deepEqual(projectData.skills.map((skill) => skill.id), ["project:claude:.:project-skill"]);
+          assert.deepEqual(
+            projectData.skills.map((skill) => skill.id),
+            ["project:claude:.:project-skill"],
+          );
           const codexRes = await fetch(`${url}/api/skills?agent=codex&scope=global`);
           assert.equal(codexRes.status, 200);
-          const codexData = await codexRes.json() as SkillsResponse;
+          const codexData = (await codexRes.json()) as SkillsResponse;
           assert.equal(codexData.host, "codex");
           assert.ok(codexData.skills.some((skill) => skill.id === "user:codex:codex-skill"));
           assert.ok(!codexData.skills.some((skill) => skill.id === "user:global-skill"));
@@ -223,7 +226,7 @@ test("web API disables a selected skill by instance key", async () => {
         try {
           const token = await readMutationToken(url);
           const listRes = await fetch(`${url}/api/skills?scope=global`);
-          const listData = await listRes.json() as SkillsResponse;
+          const listData = (await listRes.json()) as SkillsResponse;
           const target = listData.skills.find((skill) => skill.id === "user:global-skill");
           assert.ok(target);
 
@@ -236,13 +239,13 @@ test("web API disables a selected skill by instance key", async () => {
             }),
           });
           assert.equal(disableRes.status, 200);
-          const disableData = await disableRes.json() as { skill: SkillRecord };
+          const disableData = (await disableRes.json()) as { skill: SkillRecord };
           assert.equal(disableData.skill.isDisabled, true);
 
           await stat(join(fixture.claudeHome, "skills", "global-skill", "SKILL.md.agentic-skill-router-disabled"));
 
           const codexListRes = await fetch(`${url}/api/skills?agent=codex&scope=global`);
-          const codexListData = await codexListRes.json() as SkillsResponse;
+          const codexListData = (await codexListRes.json()) as SkillsResponse;
           const codexTarget = codexListData.skills.find((skill) => skill.id === "user:codex:codex-skill");
           assert.ok(codexTarget);
 
@@ -256,13 +259,13 @@ test("web API disables a selected skill by instance key", async () => {
             }),
           });
           assert.equal(codexDisableRes.status, 200);
-          const codexDisableData = await codexDisableRes.json() as { skill: SkillRecord };
+          const codexDisableData = (await codexDisableRes.json()) as { skill: SkillRecord };
           assert.equal(codexDisableData.skill.isDisabled, true);
 
           await stat(join(fixture.codexHome, "skills", "codex-skill", "SKILL.md.agentic-skill-router-disabled"));
 
           const linkedListRes = await fetch(`${url}/api/skills?scope=global`);
-          const linkedListData = await linkedListRes.json() as SkillsResponse;
+          const linkedListData = (await linkedListRes.json()) as SkillsResponse;
           const linkedTarget = linkedListData.skills.find((skill) => skill.id === "user:linked-skill");
           assert.ok(linkedTarget);
           assert.equal(linkedTarget!.type, "symlink");
@@ -277,7 +280,7 @@ test("web API disables a selected skill by instance key", async () => {
             }),
           });
           assert.equal(linkedDisableRes.status, 200);
-          const linkedDisableData = await linkedDisableRes.json() as { skill: SkillRecord };
+          const linkedDisableData = (await linkedDisableRes.json()) as { skill: SkillRecord };
           assert.equal(linkedDisableData.skill.isDisabled, true);
           await stat(join(fixture.externalSkillsRoot, "linked-skill", "SKILL.md.agentic-skill-router-disabled"));
 
@@ -317,7 +320,7 @@ test("web API requires mutation token and JSON content type", async () => {
         try {
           const token = await readMutationToken(url);
           const listRes = await fetch(`${url}/api/skills?scope=global`);
-          const listData = await listRes.json() as SkillsResponse;
+          const listData = (await listRes.json()) as SkillsResponse;
           const target = listData.skills.find((skill) => skill.id === "user:global-skill");
           assert.ok(target);
 
@@ -430,7 +433,7 @@ test("startWebServer with --dangerously-bind-public warns, requires basic auth, 
             headers: { ...authHeaders, "x-agentic-skill-router-token": token },
           });
           assert.equal(withToken.status, 200);
-          const data = await withToken.json() as SkillsResponse;
+          const data = (await withToken.json()) as SkillsResponse;
           assert.ok(data.skills.some((skill) => skill.id === "user:global-skill"));
         } finally {
           await closeServer(server);
@@ -471,7 +474,7 @@ test("public-bound mutation requests require a matching Origin header", async ()
             headers: { ...authHeaders, "x-agentic-skill-router-token": token },
           });
           assert.equal(listRes.status, 200);
-          const listData = await listRes.json() as SkillsResponse;
+          const listData = (await listRes.json()) as SkillsResponse;
           const target = listData.skills.find((skill) => skill.id === "user:global-skill");
           assert.ok(target);
 
@@ -485,7 +488,7 @@ test("public-bound mutation requests require a matching Origin header", async ()
             body: JSON.stringify({ scope: "global", instanceKey: target!.instanceKey }),
           });
           assert.equal(badOrigin.status, 403);
-          const badBody = await badOrigin.json() as { error: string };
+          const badBody = (await badOrigin.json()) as { error: string };
           assert.match(badBody.error, /Origin/);
 
           // Cross-port Origin (same hostname, different port) must also be rejected.
@@ -589,7 +592,7 @@ test("wildcard public bind accepts mutations whose Origin matches a real interfa
             headers: { ...authHeaders, "x-agentic-skill-router-token": token },
           });
           assert.equal(listRes.status, 200);
-          const listData = await listRes.json() as SkillsResponse;
+          const listData = (await listRes.json()) as SkillsResponse;
           const target = listData.skills.find((skill) => skill.id === "user:global-skill");
           assert.ok(target);
 
@@ -632,7 +635,7 @@ test("loopback-bound mutation requests still succeed without Origin/Referer", as
           const token = await readMutationToken(url);
           const listRes = await fetch(`${url}/api/skills?scope=global`);
           assert.equal(listRes.status, 200);
-          const listData = await listRes.json() as SkillsResponse;
+          const listData = (await listRes.json()) as SkillsResponse;
           const target = listData.skills.find((skill) => skill.id === "user:global-skill");
           assert.ok(target);
 
@@ -671,7 +674,7 @@ test("web API rejects protected skill mutations as client errors", async () => {
         try {
           const token = await readMutationToken(url);
           const listRes = await fetch(`${url}/api/skills?scope=global`);
-          const listData = await listRes.json() as SkillsResponse;
+          const listData = (await listRes.json()) as SkillsResponse;
           const target = listData.skills.find((skill) => skill.id === "builtin:init");
           assert.ok(target);
 
@@ -684,11 +687,11 @@ test("web API rejects protected skill mutations as client errors", async () => {
             }),
           });
           assert.equal(disableRes.status, 403);
-          const body = await disableRes.json() as { error: string };
+          const body = (await disableRes.json()) as { error: string };
           assert.match(body.error, /protected/);
 
           const codexListRes = await fetch(`${url}/api/skills?agent=codex&scope=global`);
-          const codexListData = await codexListRes.json() as SkillsResponse;
+          const codexListData = (await codexListRes.json()) as SkillsResponse;
           const adminSymlink = codexListData.skills.find((skill) => skill.id === "builtin:codex-admin:admin-linked");
           assert.ok(adminSymlink);
           assert.equal(adminSymlink!.type, "symlink");
@@ -705,7 +708,7 @@ test("web API rejects protected skill mutations as client errors", async () => {
             }),
           });
           assert.equal(adminDisableRes.status, 403);
-          const adminBody = await adminDisableRes.json() as { error: string };
+          const adminBody = (await adminDisableRes.json()) as { error: string };
           assert.match(adminBody.error, /protected/);
           await stat(join(fixture.externalSkillsRoot, "admin-linked", "SKILL.md"));
         } finally {
@@ -738,7 +741,7 @@ test("web API rejects projectPath outside the default cwd allowlist", async () =
             `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(fixture.projectRoot)}`,
           );
           assert.equal(res.status, 403);
-          const body = await res.json() as { error: string };
+          const body = (await res.json()) as { error: string };
           assert.match(body.error, /outside the allowed project roots/);
           assert.match(body.error, /Allowed roots:/);
         } finally {
@@ -779,14 +782,14 @@ test("web API accepts a projectPath inside the configured allowlist and rejects 
             `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(fixture.projectRoot)}`,
           );
           assert.equal(allowed.status, 200);
-          const allowedData = await allowed.json() as SkillsResponse;
+          const allowedData = (await allowed.json()) as SkillsResponse;
           assert.equal(allowedData.scope, "project");
 
           const rejected = await fetch(
             `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(outsideRoot)}`,
           );
           assert.equal(rejected.status, 403);
-          const body = await rejected.json() as { error: string };
+          const body = (await rejected.json()) as { error: string };
           assert.match(body.error, /outside the allowed project roots/);
         } finally {
           await closeServer(server);
@@ -823,11 +826,9 @@ test("web API allows a projectPath nested under an allowlisted root", async () =
           projectRoots: [fixture.projectRoot],
         });
         try {
-          const res = await fetch(
-            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(nestedProject)}`,
-          );
+          const res = await fetch(`${url}/api/skills?scope=project&projectPath=${encodeURIComponent(nestedProject)}`);
           assert.equal(res.status, 200);
-          const data = await res.json() as SkillsResponse;
+          const data = (await res.json()) as SkillsResponse;
           assert.equal(data.scope, "project");
           assert.equal(data.projectPath, nestedProject);
         } finally {
@@ -866,11 +867,9 @@ test("web API rejects sibling paths sharing a prefix with an allowlisted root", 
           projectRoots: [fixture.projectRoot],
         });
         try {
-          const res = await fetch(
-            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(siblingRoot)}`,
-          );
+          const res = await fetch(`${url}/api/skills?scope=project&projectPath=${encodeURIComponent(siblingRoot)}`);
           assert.equal(res.status, 403);
-          const body = await res.json() as { error: string };
+          const body = (await res.json()) as { error: string };
           assert.match(body.error, /outside the allowed project roots/);
         } finally {
           await closeServer(server);
@@ -922,11 +921,9 @@ test("web API rejects projectPath whose missing leaf hides a symlink jump outsid
         });
         try {
           const requested = join(allowedRoot, "link", "missing");
-          const res = await fetch(
-            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(requested)}`,
-          );
+          const res = await fetch(`${url}/api/skills?scope=project&projectPath=${encodeURIComponent(requested)}`);
           assert.equal(res.status, 403);
-          const body = await res.json() as { error: string };
+          const body = (await res.json()) as { error: string };
           assert.match(body.error, /outside the allowed project roots/);
         } finally {
           await closeServer(server);
@@ -973,11 +970,9 @@ test("web API blocks project discovery from walking ancestors above the allowlis
           projectRoots: [allowedSub],
         });
         try {
-          const res = await fetch(
-            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedSub)}`,
-          );
+          const res = await fetch(`${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedSub)}`);
           assert.equal(res.status, 403);
-          const body = await res.json() as { error: string };
+          const body = (await res.json()) as { error: string };
           assert.match(body.error, /outside the allowed project roots/);
         } finally {
           await closeServer(server);
@@ -1020,11 +1015,9 @@ test("web API accepts a non-git allowlisted project root (no parent scan happens
           projectRoots: [allowedRoot],
         });
         try {
-          const res = await fetch(
-            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`,
-          );
+          const res = await fetch(`${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`);
           assert.equal(res.status, 200);
-          const data = await res.json() as SkillsResponse;
+          const data = (await res.json()) as SkillsResponse;
           assert.equal(data.scope, "project");
           assert.ok(
             data.skills.some((skill) => skill.id.includes("nogit-skill")),
@@ -1096,7 +1089,7 @@ test("web API hands the canonical cwd to the host to close symlink-swap TOCTOU w
             `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`,
           );
           assert.equal(allowedRes.status, 200);
-          const allowedData = await allowedRes.json() as SkillsResponse;
+          const allowedData = (await allowedRes.json()) as SkillsResponse;
           assert.ok(
             allowedData.skills.some((skill) => skill.id.includes("legit-skill")),
             `expected legit-skill: ${allowedData.skills.map((s) => s.id).join(", ")}`,
@@ -1147,11 +1140,9 @@ test("web API accepts a projectPath whose entire ancestor walk stays within the 
           projectRoots: [repoRoot],
         });
         try {
-          const res = await fetch(
-            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(nested)}`,
-          );
+          const res = await fetch(`${url}/api/skills?scope=project&projectPath=${encodeURIComponent(nested)}`);
           assert.equal(res.status, 200);
-          const data = await res.json() as SkillsResponse;
+          const data = (await res.json()) as SkillsResponse;
           assert.equal(data.scope, "project");
           assert.ok(
             data.skills.some((skill) => skill.id.includes("top-skill")),
@@ -1211,11 +1202,9 @@ test("web API rejects a project root whose .claude/skills container is a symlink
           projectRoots: [allowedRoot],
         });
         try {
-          const res = await fetch(
-            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`,
-          );
+          const res = await fetch(`${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`);
           assert.equal(res.status, 403);
-          const body = await res.json() as { error: string };
+          const body = (await res.json()) as { error: string };
           assert.match(body.error, /outside the allowed project roots/);
           // The outside SKILL.md must still be intact (no rename leak).
           await stat(join(outsideRoot, "skills", "evil-skill", "SKILL.md"));
@@ -1273,11 +1262,9 @@ test("web API rejects a project-scope mutation whose skill SKILL.md resolves out
 
           // List response must include the skill (so the user can see
           // and act on it manually) but must mark it outOfRoot.
-          const listRes = await fetch(
-            `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`,
-          );
+          const listRes = await fetch(`${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`);
           assert.equal(listRes.status, 200);
-          const listData = await listRes.json() as SkillsResponse;
+          const listData = (await listRes.json()) as SkillsResponse;
           const target = listData.skills.find((skill) => skill.id.endsWith(":evil"));
           assert.ok(target, `expected evil skill in: ${listData.skills.map((s) => s.id).join(", ")}`);
           assert.equal(target!.outOfRoot, true);
@@ -1295,7 +1282,7 @@ test("web API rejects a project-scope mutation whose skill SKILL.md resolves out
             }),
           });
           assert.equal(disableRes.status, 403);
-          const body = await disableRes.json() as { error: string };
+          const body = (await disableRes.json()) as { error: string };
           assert.match(body.error, /outside the allowed project roots/);
 
           // The outside SKILL.md must still be intact (no rename leak).
@@ -1403,10 +1390,7 @@ test("computeVirtualWindow slices a synthetic 500-item list correctly", async ()
   assert.equal(mid.last, mid.first + visiblePerViewport + overscan * 2);
   assert.equal(mid.topHeight, mid.first * rowHeight);
   assert.equal(mid.bottomHeight, (total - mid.last) * rowHeight);
-  assert.equal(
-    mid.topHeight + (mid.last - mid.first) * rowHeight + mid.bottomHeight,
-    total * rowHeight,
-  );
+  assert.equal(mid.topHeight + (mid.last - mid.first) * rowHeight + mid.bottomHeight, total * rowHeight);
 
   // Bottom of the list: `last` clamps to `total` and the bottom spacer is 0.
   const bottomScroll = (total - visiblePerViewport) * rowHeight + 1;
@@ -1545,7 +1529,10 @@ test("computeVirtualWindow degenerate: viewportHeight=0 with overscan=0 yields e
     scrollTop: 0,
     overscan: 6,
   });
-  assert.ok(withOverscan.last > withOverscan.first, "default overscan keeps the window non-empty when viewportHeight=0");
+  assert.ok(
+    withOverscan.last > withOverscan.first,
+    "default overscan keeps the window non-empty when viewportHeight=0",
+  );
   assert.equal(withOverscan.first, 0);
   assert.equal(withOverscan.last, 5);
 });

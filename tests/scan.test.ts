@@ -26,10 +26,7 @@ async function makeFakeClaudeHome(): Promise<{ home: string; cleanup: () => Prom
   //  - drop      (disabled by us)
   const pluginPath = join(home, "plugins/cache/official/myplugin/1.0.0");
   await mkdir(join(pluginPath, "skills/keep"), { recursive: true });
-  await writeFile(
-    join(pluginPath, "skills/keep/SKILL.md"),
-    "---\nname: keep\ndescription: should appear\n---\n",
-  );
+  await writeFile(join(pluginPath, "skills/keep/SKILL.md"), "---\nname: keep\ndescription: should appear\n---\n");
   await mkdir(join(pluginPath, "skills/drop"), { recursive: true });
   await writeFile(
     join(pluginPath, "skills/drop/SKILL.md.agentic-skill-router-disabled"),
@@ -51,10 +48,7 @@ async function makeFakeClaudeHome(): Promise<{ home: string; cleanup: () => Prom
   );
 
   // settings.json with the plugin enabled
-  await writeFile(
-    join(home, "settings.json"),
-    JSON.stringify({ enabledPlugins: { "myplugin@official": true } }),
-  );
+  await writeFile(join(home, "settings.json"), JSON.stringify({ enabledPlugins: { "myplugin@official": true } }));
 
   return { home, cleanup: () => rm(home, { recursive: true, force: true }) };
 }
@@ -141,22 +135,20 @@ test("CLI list --json discovers Claude project skill roots from AGENTIC_SKILL_RO
   const { cwd, cleanup: cleanupProject } = await makeFakeProject();
   try {
     const cli = join(REPO_ROOT, "src", "cli.ts");
-    const result = await execFileAsync(
-      process.execPath,
-      ["--import", "tsx", cli, "skills", "list", "--json"],
-      {
-        env: {
-          ...process.env,
-          CLAUDE_HOME: home,
-          AGENTIC_SKILL_ROUTER_CWD: cwd,
-        },
+    const result = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "list", "--json"], {
+      env: {
+        ...process.env,
+        CLAUDE_HOME: home,
+        AGENTIC_SKILL_ROUTER_CWD: cwd,
       },
-    );
-    const listed = (JSON.parse(result.stdout) as { skills: Array<{ id: string; description: string; source: string }> }).skills;
+    });
+    const listed = (JSON.parse(result.stdout) as { skills: Array<{ id: string; description: string; source: string }> })
+      .skills;
 
     assert.ok(
       listed.some(
-        (s) => s.id === "project:claude:.:root-skill" && s.description === "root project skill" && s.source === "project",
+        (s) =>
+          s.id === "project:claude:.:root-skill" && s.description === "root project skill" && s.source === "project",
       ),
     );
     assert.ok(
@@ -177,10 +169,7 @@ test("plugin disabled in enabledPlugins surfaces as isPluginDisabled", async () 
   const { home, cleanup } = await makeFakeClaudeHome();
   try {
     // Override settings to disable the plugin
-    await writeFile(
-      join(home, "settings.json"),
-      JSON.stringify({ enabledPlugins: { "myplugin@official": false } }),
-    );
+    await writeFile(join(home, "settings.json"), JSON.stringify({ enabledPlugins: { "myplugin@official": false } }));
     const host = new ClaudeCodeHost({ claudeHome: home });
     const skills = await host.listSkills();
     const keep = skills.find((s) => s.id === "plugin:myplugin@official:keep");
@@ -223,10 +212,7 @@ test("disable on builtin skill throws", async () => {
     const skills = await host.listSkills();
     const init = skills.find((s) => s.id === "builtin:init");
     assert.ok(init);
-    await assert.rejects(
-      () => disableSkill(init!, "x", { statePath, host: host.name }),
-      /Cannot disable builtin/,
-    );
+    await assert.rejects(() => disableSkill(init!, "x", { statePath, host: host.name }), /Cannot disable builtin/);
   } finally {
     await cleanup();
   }
@@ -423,18 +409,14 @@ test("CLI list --json surfaces frontmatterWarnings only when non-empty", async (
       ].join("\n"),
     );
     await mkdir(join(home, "skills", "clean-cli"), { recursive: true });
-    await writeFile(
-      join(home, "skills", "clean-cli", "SKILL.md"),
-      "---\nname: clean-cli\ndescription: ok\n---\n",
-    );
+    await writeFile(join(home, "skills", "clean-cli", "SKILL.md"), "---\nname: clean-cli\ndescription: ok\n---\n");
 
     const cli = join(REPO_ROOT, "src", "cli.ts");
-    const result = await execFileAsync(
-      process.execPath,
-      ["--import", "tsx", cli, "skills", "list", "--json"],
-      { env: { ...process.env, CLAUDE_HOME: home, AGENTIC_SKILL_ROUTER_CWD: home } },
-    );
-    const listed = (JSON.parse(result.stdout) as { skills: Array<{ id: string; frontmatterWarnings?: string[] }> }).skills;
+    const result = await execFileAsync(process.execPath, ["--import", "tsx", cli, "skills", "list", "--json"], {
+      env: { ...process.env, CLAUDE_HOME: home, AGENTIC_SKILL_ROUTER_CWD: home },
+    });
+    const listed = (JSON.parse(result.stdout) as { skills: Array<{ id: string; frontmatterWarnings?: string[] }> })
+      .skills;
     const nested = listed.find((s) => s.id === "user:nested-cli");
     const clean = listed.find((s) => s.id === "user:clean-cli");
     assert.ok(nested);

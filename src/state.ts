@@ -51,9 +51,7 @@ function isPlainObject(x: unknown): x is Record<string, unknown> {
  * after an upstream uninstall) and we still need a stable identifier.
  */
 function canonicalizeSkillPath(skillMdPath: string): string {
-  return skillMdPath.endsWith(DISABLED_SUFFIX)
-    ? skillMdPath.slice(0, -DISABLED_SUFFIX.length)
-    : skillMdPath;
+  return skillMdPath.endsWith(DISABLED_SUFFIX) ? skillMdPath.slice(0, -DISABLED_SUFFIX.length) : skillMdPath;
 }
 
 /**
@@ -206,12 +204,12 @@ export async function loadState(path: string = STATE_PATH, host: HostName = "cla
       await copyFile(path, bak);
       process.stderr.write(
         `warning: ${dropped} malformed disable record(s) in ${path} were ignored. ` +
-        `Original snapshotted to ${bak}.\n`,
+          `Original snapshotted to ${bak}.\n`,
       );
     } catch (err) {
       process.stderr.write(
         `warning: ${dropped} malformed disable record(s) in ${path} were ignored. ` +
-        `Failed to snapshot original to ${bak}: ${(err as Error).message}\n`,
+          `Failed to snapshot original to ${bak}: ${(err as Error).message}\n`,
       );
     }
   }
@@ -303,12 +301,16 @@ async function tryAcquireLockDirectory(lockPath: string, host: string): Promise<
   try {
     await writeFile(
       join(lockPath, STATE_LOCK_METADATA),
-      JSON.stringify({
-        pid: process.pid,
-        createdAt: new Date().toISOString(),
-        host,
-        token,
-      }, null, 2) + "\n",
+      JSON.stringify(
+        {
+          pid: process.pid,
+          createdAt: new Date().toISOString(),
+          host,
+          token,
+        },
+        null,
+        2,
+      ) + "\n",
       { mode: 0o600 },
     );
   } catch (err) {

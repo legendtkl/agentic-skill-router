@@ -91,10 +91,7 @@ test("init target without scope defaults to project in non-interactive mode", as
   const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-default-scope-"));
   try {
     const project = join(root, "project");
-    const { stdout, stderr } = await runInit(
-      ["codex", "--cwd", project, "--json"],
-      sandboxEnv(root),
-    );
+    const { stdout, stderr } = await runInit(["codex", "--cwd", project, "--json"], sandboxEnv(root));
     assert.equal(stderr, "");
     const parsed = JSON.parse(stdout) as { scope: string; skillMdPath: string };
     assert.equal(parsed.scope, "project");
@@ -107,10 +104,7 @@ test("init target without scope defaults to project in non-interactive mode", as
 test("init accepts scope positional when agent is supplied by option", async () => {
   const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-agent-option-"));
   try {
-    const { stdout, stderr } = await runInit(
-      ["--agent", "codex", "global", "--json"],
-      sandboxEnv(root),
-    );
+    const { stdout, stderr } = await runInit(["--agent", "codex", "global", "--json"], sandboxEnv(root));
     assert.equal(stderr, "");
     const parsed = JSON.parse(stdout) as { agent: string; scope: string; skillMdPath: string };
     assert.equal(parsed.agent, "codex");
@@ -173,10 +167,7 @@ test("init claude-code project creates CLAUDE.md routing block when missing", as
   const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-claudemd-create-"));
   try {
     const project = join(root, "project");
-    const { stdout, stderr } = await runInit(
-      ["claude-code", "project", "--cwd", project, "--json"],
-      sandboxEnv(root),
-    );
+    const { stdout, stderr } = await runInit(["claude-code", "project", "--cwd", project, "--json"], sandboxEnv(root));
     assert.equal(stderr, "");
     const parsed = JSON.parse(stdout) as { claudeMdPath?: string; claudeMdAction?: string };
     assert.equal(parsed.claudeMdAction, "created");
@@ -199,10 +190,7 @@ test("init claude-code global appends routing block without touching existing CL
     const original = "# My personal Claude rules\n\nAlways respond in markdown.\n";
     await writeFile(claudeMdPath, original);
 
-    const { stdout, stderr } = await runInit(
-      ["claude-code", "global", "--json"],
-      env,
-    );
+    const { stdout, stderr } = await runInit(["claude-code", "global", "--json"], env);
     assert.equal(stderr, "");
     const parsed = JSON.parse(stdout) as { claudeMdPath?: string; claudeMdAction?: string };
     assert.equal(parsed.claudeMdAction, "appended");
@@ -235,10 +223,7 @@ test("init claude-code global replaces an existing routing block in place", asyn
     ].join("\n");
     await writeFile(claudeMdPath, stale);
 
-    const { stdout, stderr } = await runInit(
-      ["claude-code", "global", "--json"],
-      env,
-    );
+    const { stdout, stderr } = await runInit(["claude-code", "global", "--json"], env);
     assert.equal(stderr, "");
     const parsed = JSON.parse(stdout) as { claudeMdAction?: string };
     assert.equal(parsed.claudeMdAction, "replaced");
@@ -526,26 +511,15 @@ test("init claude-code picks dominant EOL on mixed-EOL files", async () => {
     await mkdir(dirname(claudeMdPath), { recursive: true });
     // 5 bare-LF terminators, 1 CRLF terminator → LF must win.
     const mostlyLf =
-      "# header\n" +
-      "rule one\n" +
-      "rule two\n" +
-      "stray windows line\r\n" +
-      "rule four\n" +
-      "rule five\n";
+      "# header\n" + "rule one\n" + "rule two\n" + "stray windows line\r\n" + "rule four\n" + "rule five\n";
     await writeFile(claudeMdPath, mostlyLf);
 
     await runInit(["claude-code", "global", "--json"], env);
     const body = await readFile(claudeMdPath, "utf8");
 
     const blockSlice = body.slice(body.indexOf("<!-- agentic-skill-router:claude-md:begin -->"));
-    assert.ok(
-      !blockSlice.includes("\r\n"),
-      "appended block on a mostly-LF file must use LF, not CRLF",
-    );
-    assert.ok(
-      body.includes("stray windows line\r\n"),
-      "the original stray CRLF line must not be normalized away",
-    );
+    assert.ok(!blockSlice.includes("\r\n"), "appended block on a mostly-LF file must use LF, not CRLF");
+    assert.ok(body.includes("stray windows line\r\n"), "the original stray CRLF line must not be normalized away");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -555,10 +529,7 @@ test("init codex never writes CLAUDE.md", async () => {
   const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-claudemd-codex-"));
   try {
     const project = join(root, "project");
-    const { stdout, stderr } = await runInit(
-      ["codex", "project", "--cwd", project, "--json"],
-      sandboxEnv(root),
-    );
+    const { stdout, stderr } = await runInit(["codex", "project", "--cwd", project, "--json"], sandboxEnv(root));
     assert.equal(stderr, "");
     const parsed = JSON.parse(stdout) as { claudeMdPath?: string; claudeMdAction?: string };
     assert.equal(parsed.claudeMdAction, undefined);

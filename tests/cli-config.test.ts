@@ -40,10 +40,7 @@ async function makeFixture(): Promise<Fixture> {
   };
 }
 
-function runCli(
-  args: string[],
-  env: NodeJS.ProcessEnv,
-): Promise<{ stdout: string; stderr: string }> {
+function runCli(args: string[], env: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string }> {
   return execFileAsync(process.execPath, ["--import", "tsx", CLI_PATH, ...args], { env });
 }
 
@@ -116,10 +113,7 @@ test("skills config get text output includes default markers", async () => {
 test("skills config set unusedForDays writes file and config get reflects it", async () => {
   const fx = await makeFixture();
   try {
-    const { stdout, stderr } = await runCli(
-      ["skills", "config", "set", "unusedForDays", "60"],
-      fx.env,
-    );
+    const { stdout, stderr } = await runCli(["skills", "config", "set", "unusedForDays", "60"], fx.env);
     assert.equal(stderr, "");
     assert.match(stdout, /set unusedForDays = 60/);
 
@@ -140,10 +134,7 @@ test("skills config set unusedForDays writes file and config get reflects it", a
 test("skills config set routeMode writes a valid mode", async () => {
   const fx = await makeFixture();
   try {
-    const { stdout, stderr } = await runCli(
-      ["skills", "config", "set", "routeMode", "metadata"],
-      fx.env,
-    );
+    const { stdout, stderr } = await runCli(["skills", "config", "set", "routeMode", "metadata"], fx.env);
     assert.equal(stderr, "");
     assert.match(stdout, /set routeMode = "metadata"/);
 
@@ -162,11 +153,7 @@ test("skills config set routeMode invalid rejects, exits 1, file unchanged", asy
     await writeFile(fx.configPath, JSON.stringify({ unusedForDays: 90, routeMode: "auto" }, null, 2) + "\n");
     const before = await readFile(fx.configPath, "utf8");
 
-    const result = await runCliExpectExit(
-      ["skills", "config", "set", "routeMode", "bogus"],
-      fx.env,
-      1,
-    );
+    const result = await runCliExpectExit(["skills", "config", "set", "routeMode", "bogus"], fx.env, 1);
     assert.match(result.stderr, /routeMode must be one of/);
 
     // File is unchanged byte-for-byte.
@@ -183,11 +170,7 @@ test("skills config set unusedForDays with non-integer rejects, exits 1, file un
     await writeFile(fx.configPath, JSON.stringify({ unusedForDays: 30 }, null, 2) + "\n");
     const before = await readFile(fx.configPath, "utf8");
 
-    const result = await runCliExpectExit(
-      ["skills", "config", "set", "unusedForDays", "abc"],
-      fx.env,
-      1,
-    );
+    const result = await runCliExpectExit(["skills", "config", "set", "unusedForDays", "abc"], fx.env, 1);
     assert.match(result.stderr, /unusedForDays must be a non-negative integer/);
 
     const after = await readFile(fx.configPath, "utf8");
@@ -202,11 +185,7 @@ test("skills config set unusedForDays with negative value rejects", async () => 
   try {
     // `-5` looks like a short option to node:util.parseArgs strict mode, so
     // we have to disambiguate with `--`. The CLI must still reject the value.
-    const result = await runCliExpectExit(
-      ["skills", "config", "set", "unusedForDays", "--", "-5"],
-      fx.env,
-      1,
-    );
+    const result = await runCliExpectExit(["skills", "config", "set", "unusedForDays", "--", "-5"], fx.env, 1);
     assert.match(result.stderr, /unusedForDays must be a non-negative integer/);
     assert.equal(existsSync(fx.configPath), false, "no file should be written on bad value");
   } finally {
@@ -217,11 +196,7 @@ test("skills config set unusedForDays with negative value rejects", async () => 
 test("skills config set unknown key rejects with exit 2", async () => {
   const fx = await makeFixture();
   try {
-    const result = await runCliExpectExit(
-      ["skills", "config", "set", "unknownKey", "foo"],
-      fx.env,
-      2,
-    );
+    const result = await runCliExpectExit(["skills", "config", "set", "unknownKey", "foo"], fx.env, 2);
     assert.match(result.stderr, /unknown config key: unknownKey/);
     assert.match(result.stderr, /Known keys:/);
     assert.equal(existsSync(fx.configPath), false, "no file should be written on unknown key");
@@ -233,11 +208,7 @@ test("skills config set unknown key rejects with exit 2", async () => {
 test("skills config set without value exits 2", async () => {
   const fx = await makeFixture();
   try {
-    const result = await runCliExpectExit(
-      ["skills", "config", "set", "routeMode"],
-      fx.env,
-      2,
-    );
+    const result = await runCliExpectExit(["skills", "config", "set", "routeMode"], fx.env, 2);
     assert.match(result.stderr, /specify <key> <value>/);
   } finally {
     await fx.cleanup();
@@ -247,10 +218,7 @@ test("skills config set without value exits 2", async () => {
 test("skills config set keepNames accepts JSON array", async () => {
   const fx = await makeFixture();
   try {
-    const { stdout, stderr } = await runCli(
-      ["skills", "config", "set", "keepNames", '["foo","bar"]'],
-      fx.env,
-    );
+    const { stdout, stderr } = await runCli(["skills", "config", "set", "keepNames", '["foo","bar"]'], fx.env);
     assert.equal(stderr, "");
     assert.match(stdout, /set keepNames = \["foo","bar"\]/);
 
@@ -265,11 +233,7 @@ test("skills config set keepNames accepts JSON array", async () => {
 test("skills config set keepIds rejects non-JSON-array value", async () => {
   const fx = await makeFixture();
   try {
-    const result = await runCliExpectExit(
-      ["skills", "config", "set", "keepIds", "user:foo"],
-      fx.env,
-      1,
-    );
+    const result = await runCliExpectExit(["skills", "config", "set", "keepIds", "user:foo"], fx.env, 1);
     assert.match(result.stderr, /keepIds must be a JSON array of strings/);
     assert.equal(existsSync(fx.configPath), false);
   } finally {
@@ -281,15 +245,9 @@ test("skills config set preserves unknown sibling keys", async () => {
   const fx = await makeFixture();
   try {
     // Pre-seed with a future / unknown key the CLI doesn't know about.
-    await writeFile(
-      fx.configPath,
-      JSON.stringify({ unusedForDays: 30, futureKey: "preserve me" }, null, 2) + "\n",
-    );
+    await writeFile(fx.configPath, JSON.stringify({ unusedForDays: 30, futureKey: "preserve me" }, null, 2) + "\n");
 
-    const { stdout } = await runCli(
-      ["skills", "config", "set", "routeMode", "lexical"],
-      fx.env,
-    );
+    const { stdout } = await runCli(["skills", "config", "set", "routeMode", "lexical"], fx.env);
     assert.match(stdout, /set routeMode = "lexical"/);
 
     const raw = await readFile(fx.configPath, "utf8");
@@ -315,11 +273,7 @@ test("skills config unknown subcommand exits 2", async () => {
 test("skills config set rejects extra trailing argument", async () => {
   const fx = await makeFixture();
   try {
-    const result = await runCliExpectExit(
-      ["skills", "config", "set", "unusedForDays", "60", "extra"],
-      fx.env,
-      2,
-    );
+    const result = await runCliExpectExit(["skills", "config", "set", "unusedForDays", "60", "extra"], fx.env, 2);
     assert.match(result.stderr, /unexpected extra argument/);
   } finally {
     await fx.cleanup();
@@ -331,10 +285,7 @@ test("skills config set rejects extra trailing argument", async () => {
 test("skills config set usageSinceDays writes value and config get reflects it", async () => {
   const fx = await makeFixture();
   try {
-    const { stdout, stderr } = await runCli(
-      ["skills", "config", "set", "usageSinceDays", "14"],
-      fx.env,
-    );
+    const { stdout, stderr } = await runCli(["skills", "config", "set", "usageSinceDays", "14"], fx.env);
     assert.equal(stderr, "");
     assert.match(stdout, /set usageSinceDays = 14/);
 
@@ -361,10 +312,11 @@ test("skills list honors usageSinceDays in config and reports diagnostics", asyn
     const newSession = join(sessionsDir, "new", "session.jsonl");
     await mkdir(join(sessionsDir, "old"), { recursive: true });
     await mkdir(join(sessionsDir, "new"), { recursive: true });
-    const mkLine = (skill: string, ts: string) => JSON.stringify({
-      timestamp: ts,
-      message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
-    });
+    const mkLine = (skill: string, ts: string) =>
+      JSON.stringify({
+        timestamp: ts,
+        message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] },
+      });
     await writeFile(oldSession, mkLine("old-skill", "2020-01-01T00:00:00Z") + "\n");
     await writeFile(newSession, mkLine("new-skill", new Date().toISOString()) + "\n");
     const longAgo = new Date(Date.now() - 365 * 86_400_000);

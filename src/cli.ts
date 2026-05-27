@@ -28,17 +28,28 @@ export async function run(argv: string[]): Promise<number> {
     if (!hostName) return usage(2);
     if (command === "skills") {
       switch (subcommand) {
-        case "list": return await cmdList(rest, hostName);
-        case "suggest": return await cmdSuggest(rest, hostName);
-        case "route": return await cmdRoute(rest, hostName);
-        case "corpus": return await cmdCorpus(rest, hostName);
-        case "dci": return await cmdDci(rest, hostName);
-        case "body": return await cmdDci(rest, hostName);
-        case "disable": return await cmdDisable(rest, hostName);
-        case "enable": return await cmdEnable(rest, hostName);
-        case "status": return await cmdStatus(rest, hostName);
-        case "config": return await cmdConfig(rest);
-        case "web": return await cmdWeb(rest, hostName);
+        case "list":
+          return await cmdList(rest, hostName);
+        case "suggest":
+          return await cmdSuggest(rest, hostName);
+        case "route":
+          return await cmdRoute(rest, hostName);
+        case "corpus":
+          return await cmdCorpus(rest, hostName);
+        case "dci":
+          return await cmdDci(rest, hostName);
+        case "body":
+          return await cmdDci(rest, hostName);
+        case "disable":
+          return await cmdDisable(rest, hostName);
+        case "enable":
+          return await cmdEnable(rest, hostName);
+        case "status":
+          return await cmdStatus(rest, hostName);
+        case "config":
+          return await cmdConfig(rest);
+        case "web":
+          return await cmdWeb(rest, hostName);
         case undefined:
         case "-h":
         case "--help":

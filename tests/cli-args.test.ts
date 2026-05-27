@@ -114,21 +114,18 @@ async function expectUnknownOption(
     `stderr should mention the command path ${expected.commandName}; got: ${stderr}`,
   );
   if (expected.suggestion !== undefined) {
-    assert.ok(
-      stderr.includes(expected.suggestion),
-      `stderr should suggest ${expected.suggestion}; got: ${stderr}`,
-    );
+    assert.ok(stderr.includes(expected.suggestion), `stderr should suggest ${expected.suggestion}; got: ${stderr}`);
   }
 }
 
 test("skills list rejects unknown option with exit code 2 and suggestion", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectUnknownOption(
-      ["skills", "list", "--jsoon"],
-      fake.env,
-      { option: "--jsoon", suggestion: "--json", commandName: "agentic-skill-router skills list" },
-    );
+    await expectUnknownOption(["skills", "list", "--jsoon"], fake.env, {
+      option: "--jsoon",
+      suggestion: "--json",
+      commandName: "agentic-skill-router skills list",
+    });
     // Happy path still works.
     const ok = await runCli(["skills", "list", "--json"], fake.env);
     const parsed = JSON.parse(ok.stdout) as { skills: Array<{ id: string }>; usageDiagnostics: unknown };
@@ -142,11 +139,11 @@ test("skills list rejects unknown option with exit code 2 and suggestion", async
 test("skills suggest rejects unknown option with exit code 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectUnknownOption(
-      ["skills", "suggest", "--unsed-for=30d"],
-      fake.env,
-      { option: "--unsed-for", suggestion: "--unused-for", commandName: "agentic-skill-router skills suggest" },
-    );
+    await expectUnknownOption(["skills", "suggest", "--unsed-for=30d"], fake.env, {
+      option: "--unsed-for",
+      suggestion: "--unused-for",
+      commandName: "agentic-skill-router skills suggest",
+    });
     const ok = await runCli(["skills", "suggest", "--unused-for=365d", "--json"], fake.env);
     const parsedSuggest = JSON.parse(ok.stdout) as { suggestions: unknown[]; usageDiagnostics: unknown };
     assert.ok(Array.isArray(parsedSuggest.suggestions));
@@ -159,16 +156,16 @@ test("skills suggest rejects unknown option with exit code 2", async () => {
 test("skills route rejects --qurey but still accepts positional query", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectUnknownOption(
-      ["skills", "route", "--qurey", "lark mail", "--json"],
-      fake.env,
-      { option: "--qurey", suggestion: "--query", commandName: "agentic-skill-router skills route" },
-    );
-    await expectUnknownOption(
-      ["skills", "route", "--query=lark mail", "--jsoon"],
-      fake.env,
-      { option: "--jsoon", suggestion: "--json", commandName: "agentic-skill-router skills route" },
-    );
+    await expectUnknownOption(["skills", "route", "--qurey", "lark mail", "--json"], fake.env, {
+      option: "--qurey",
+      suggestion: "--query",
+      commandName: "agentic-skill-router skills route",
+    });
+    await expectUnknownOption(["skills", "route", "--query=lark mail", "--jsoon"], fake.env, {
+      option: "--jsoon",
+      suggestion: "--json",
+      commandName: "agentic-skill-router skills route",
+    });
     // Happy path: positional query.
     const ok = await runCli(["skills", "route", "lark", "mail", "office", "--json", "--no-record"], fake.env);
     const parsed = JSON.parse(ok.stdout) as { query: string };
@@ -181,11 +178,11 @@ test("skills route rejects --qurey but still accepts positional query", async ()
 test("skills dci search rejects unknown option", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectUnknownOption(
-      ["skills", "dci", "search", "--qurey=lark"],
-      fake.env,
-      { option: "--qurey", suggestion: "--query", commandName: "agentic-skill-router skills dci search" },
-    );
+    await expectUnknownOption(["skills", "dci", "search", "--qurey=lark"], fake.env, {
+      option: "--qurey",
+      suggestion: "--query",
+      commandName: "agentic-skill-router skills dci search",
+    });
     // Happy path: positional query for DCI search.
     const ok = await runCli(["skills", "dci", "search", "lark mail", "--metadata-only", "--json"], fake.env);
     const parsed = JSON.parse(ok.stdout) as {
@@ -207,22 +204,16 @@ test("skills dci search rejects unknown option", async () => {
 test("skills corpus search and inspect expose agentic metadata primitives", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectUnknownOption(
-      ["skills", "corpus", "search", "--anny=lark"],
-      fake.env,
-      { option: "--anny", suggestion: "--any", commandName: "agentic-skill-router skills corpus search" },
-    );
+    await expectUnknownOption(["skills", "corpus", "search", "--anny=lark"], fake.env, {
+      option: "--anny",
+      suggestion: "--any",
+      commandName: "agentic-skill-router skills corpus search",
+    });
 
-    const search = await runCli([
-      "skills",
-      "corpus",
-      "search",
-      "--any=lark",
-      "--all=mail",
-      "--ranker=bm25",
-      "--limit=5",
-      "--json",
-    ], fake.env);
+    const search = await runCli(
+      ["skills", "corpus", "search", "--any=lark", "--all=mail", "--ranker=bm25", "--limit=5", "--json"],
+      fake.env,
+    );
     const parsed = JSON.parse(search.stdout) as {
       mode: string;
       ranker: string;
@@ -287,13 +278,16 @@ test("skills corpus inspect can resolve a fresh bm25 index snapshot", async () =
       canDisable: true,
       conflict: false,
     };
-    await writeFile(join(fake.stateDir, "corpus-bm25-index-codex.json"), JSON.stringify({
-      version: 1,
-      host: "codex",
-      createdAtMs: Date.now(),
-      fingerprint: "external-corpus-snapshot",
-      index: buildSkillCorpusBm25Index([cachedSkill]),
-    }));
+    await writeFile(
+      join(fake.stateDir, "corpus-bm25-index-codex.json"),
+      JSON.stringify({
+        version: 1,
+        host: "codex",
+        createdAtMs: Date.now(),
+        fingerprint: "external-corpus-snapshot",
+        index: buildSkillCorpusBm25Index([cachedSkill]),
+      }),
+    );
 
     const inspect = await runCli(["skills", "corpus", "inspect", "sr-cached", "--json"], fake.env);
     const parsed = JSON.parse(inspect.stdout) as {
@@ -311,11 +305,10 @@ test("skills corpus inspect can resolve a fresh bm25 index snapshot", async () =
 test("skills dci budget rejects unknown option", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectUnknownOption(
-      ["skills", "dci", "budget", "--verbse"],
-      fake.env,
-      { option: "--verbse", commandName: "agentic-skill-router skills dci budget" },
-    );
+    await expectUnknownOption(["skills", "dci", "budget", "--verbse"], fake.env, {
+      option: "--verbse",
+      commandName: "agentic-skill-router skills dci budget",
+    });
     const ok = await runCli(["skills", "dci", "budget", "--json"], fake.env);
     assert.ok(ok.stdout.includes("maxQueries"));
   } finally {
@@ -326,11 +319,11 @@ test("skills dci budget rejects unknown option", async () => {
 test("skills disable rejects unknown option but still accepts positional id", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectUnknownOption(
-      ["skills", "disable", fake.disabledSkillId, "--yess"],
-      fake.env,
-      { option: "--yess", suggestion: "--yes", commandName: "agentic-skill-router skills disable" },
-    );
+    await expectUnknownOption(["skills", "disable", fake.disabledSkillId, "--yess"], fake.env, {
+      option: "--yess",
+      suggestion: "--yes",
+      commandName: "agentic-skill-router skills disable",
+    });
     // Happy path: positional id still flows through. Without --yes, exit code 1
     // (would-disable preview). That confirms parsing accepted both arguments.
     let preview: unknown;
@@ -349,11 +342,11 @@ test("skills disable rejects unknown option but still accepts positional id", as
 test("skills enable rejects unknown option", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectUnknownOption(
-      ["skills", "enable", fake.disabledSkillId, "--jsoon"],
-      fake.env,
-      { option: "--jsoon", suggestion: "--json", commandName: "agentic-skill-router skills enable" },
-    );
+    await expectUnknownOption(["skills", "enable", fake.disabledSkillId, "--jsoon"], fake.env, {
+      option: "--jsoon",
+      suggestion: "--json",
+      commandName: "agentic-skill-router skills enable",
+    });
     // Happy path: enabling the already-disabled marker works.
     const ok = await runCli(["skills", "enable", fake.disabledSkillId, "--json"], fake.env);
     const parsed = JSON.parse(ok.stdout) as Array<{ id: string }>;
@@ -378,7 +371,9 @@ test("skills disable on out-of-root symlink refuses without --allow-symlink-targ
     await symlink(externalSkillDir, join(fake.codexHome, "skills", "linked-skill"));
 
     const listed = await runCli(["skills", "list", "--json"], fake.env);
-    const parsed = JSON.parse(listed.stdout) as { skills: Array<{ id: string; outOfRoot: boolean; canDisable: boolean }> };
+    const parsed = JSON.parse(listed.stdout) as {
+      skills: Array<{ id: string; outOfRoot: boolean; canDisable: boolean }>;
+    };
     const linked = parsed.skills.find((skill) => skill.id === "user:codex:linked-skill");
     assert.ok(linked);
     assert.equal(linked!.outOfRoot, true);
@@ -483,15 +478,9 @@ test("skills disable --all-suggested --yes never mutates out-of-root symlinks an
 
     const inRootDir = join(fake.codexHome, "skills", "in-root-stale");
     await mkdir(inRootDir, { recursive: true });
-    await writeFile(
-      join(inRootDir, "SKILL.md"),
-      "---\nname: in-root-stale\ndescription: in-root stale skill\n---\n",
-    );
+    await writeFile(join(inRootDir, "SKILL.md"), "---\nname: in-root-stale\ndescription: in-root stale skill\n---\n");
 
-    await runCli(
-      ["skills", "disable", "--all-suggested", "--yes", "--unused-for=1d"],
-      fake.env,
-    );
+    await runCli(["skills", "disable", "--all-suggested", "--yes", "--unused-for=1d"], fake.env);
 
     // The external (out-of-root) target must NOT have been renamed.
     await stat(join(externalSkillDir, "SKILL.md"));
@@ -524,7 +513,10 @@ test("skills disable still rejects builtin out-of-root symlink skills", async ()
     }
     assert.ok(caught);
     assert.equal((caught as { code?: number }).code, 1);
-    assert.match((caught as { stderr?: string }).stderr ?? "", /resolves outside the skills root|Cannot disable builtin/);
+    assert.match(
+      (caught as { stderr?: string }).stderr ?? "",
+      /resolves outside the skills root|Cannot disable builtin/,
+    );
     await stat(join(externalSkillDir, "SKILL.md"));
   } finally {
     await fake.cleanup();
@@ -546,10 +538,7 @@ test("skills status never silently re-disables out-of-root symlink targets after
     await mkdir(externalSkillDir, { recursive: true });
     const externalLive = join(externalSkillDir, "SKILL.md");
     const externalDisabled = externalLive + ".agentic-skill-router-disabled";
-    await writeFile(
-      externalLive,
-      "---\nname: linked-skill\ndescription: linked user skill\n---\n",
-    );
+    await writeFile(externalLive, "---\nname: linked-skill\ndescription: linked user skill\n---\n");
     await symlink(externalSkillDir, join(fake.codexHome, "skills", "linked-skill"));
 
     // 1) Explicitly opt in to disabling the symlink target. This is the only
@@ -564,10 +553,7 @@ test("skills status never silently re-disables out-of-root symlink targets after
     // 2) Simulate an external process restoring the live SKILL.md (e.g. a
     //    plugin reinstall that re-creates the file behind our back).
     await rm(externalDisabled);
-    await writeFile(
-      externalLive,
-      "---\nname: linked-skill\ndescription: linked user skill (restored)\n---\n",
-    );
+    await writeFile(externalLive, "---\nname: linked-skill\ndescription: linked user skill (restored)\n---\n");
 
     // 3) Run `skills status`. The fix: it must NOT rename the live SKILL.md
     //    behind the symlink. Status itself does not take a symlink flag —
@@ -614,10 +600,7 @@ test("skills status never silently re-disables out-of-root symlink targets after
     } catch {
       disabledMarkerAbsent = true;
     }
-    assert.ok(
-      disabledMarkerAbsent,
-      "skills status must not have re-renamed the out-of-root symlink target",
-    );
+    assert.ok(disabledMarkerAbsent, "skills status must not have re-renamed the out-of-root symlink target");
 
     // 5) Text output mentions the skip section and the fix command so a user
     //    running `skills status` without --json sees actionable guidance.
@@ -654,10 +637,7 @@ test("skills status still reapplies in-root skills with the same state", async (
 
     // Simulate upstream restoring the live SKILL.md behind our back.
     await rm(disabledLark);
-    await writeFile(
-      liveLark,
-      "---\nname: lark-mail\ndescription: Lark mail workflows for office automation\n---\n",
-    );
+    await writeFile(liveLark, "---\nname: lark-mail\ndescription: Lark mail workflows for office automation\n---\n");
 
     const status = await runCli(["skills", "status", "--json"], fake.env);
     const parsed = JSON.parse(status.stdout) as {
@@ -691,11 +671,11 @@ test("skills status still reapplies in-root skills with the same state", async (
 test("skills status rejects unknown option", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectUnknownOption(
-      ["skills", "status", "--jsoon"],
-      fake.env,
-      { option: "--jsoon", suggestion: "--json", commandName: "agentic-skill-router skills status" },
-    );
+    await expectUnknownOption(["skills", "status", "--jsoon"], fake.env, {
+      option: "--jsoon",
+      suggestion: "--json",
+      commandName: "agentic-skill-router skills status",
+    });
     const ok = await runCli(["skills", "status", "--json"], fake.env);
     const parsed = JSON.parse(ok.stdout) as { disabledCount: number };
     assert.equal(typeof parsed.disabledCount, "number");
@@ -719,7 +699,11 @@ async function expectParseArgsUsageError(
   const e = caught as { code?: number; stderr?: string };
   assert.equal(e.code, 2, `expected exit code 2, got ${e.code} for ${args.join(" ")}`);
   const stderr = e.stderr ?? "";
-  assert.match(stderr, expected.stderrMatch, `stderr should match ${expected.stderrMatch} for ${args.join(" ")}; got: ${stderr}`);
+  assert.match(
+    stderr,
+    expected.stderrMatch,
+    `stderr should match ${expected.stderrMatch} for ${args.join(" ")}; got: ${stderr}`,
+  );
   assert.ok(
     stderr.includes(expected.commandName),
     `stderr should mention the command path ${expected.commandName}; got: ${stderr}`,
@@ -734,14 +718,10 @@ async function expectParseArgsUsageError(
 test("skills list rejects --json=1 (boolean flag with value) with exit code 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectParseArgsUsageError(
-      ["skills", "list", "--json=1"],
-      fake.env,
-      {
-        stderrMatch: /does not take an argument/i,
-        commandName: "agentic-skill-router skills list",
-      },
-    );
+    await expectParseArgsUsageError(["skills", "list", "--json=1"], fake.env, {
+      stderrMatch: /does not take an argument/i,
+      commandName: "agentic-skill-router skills list",
+    });
   } finally {
     await fake.cleanup();
   }
@@ -752,14 +732,10 @@ test("skills route rejects --query with missing value with exit code 2", async (
   try {
     // --query at end of argv with no value triggers
     // ERR_PARSE_ARGS_INVALID_OPTION_VALUE ("argument missing").
-    await expectParseArgsUsageError(
-      ["skills", "route", "--query"],
-      fake.env,
-      {
-        stderrMatch: /argument missing/i,
-        commandName: "agentic-skill-router skills route",
-      },
-    );
+    await expectParseArgsUsageError(["skills", "route", "--query"], fake.env, {
+      stderrMatch: /argument missing/i,
+      commandName: "agentic-skill-router skills route",
+    });
   } finally {
     await fake.cleanup();
   }
@@ -770,14 +746,10 @@ test("skills list rejects unexpected positional with exit code 2", async () => {
   try {
     // `skills list` does not set allowPositionals, so extra positionals
     // trigger ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL.
-    await expectParseArgsUsageError(
-      ["skills", "list", "unexpected-arg"],
-      fake.env,
-      {
-        stderrMatch: /does not take positional arguments|unexpected argument/i,
-        commandName: "agentic-skill-router skills list",
-      },
-    );
+    await expectParseArgsUsageError(["skills", "list", "unexpected-arg"], fake.env, {
+      stderrMatch: /does not take positional arguments|unexpected argument/i,
+      commandName: "agentic-skill-router skills list",
+    });
   } finally {
     await fake.cleanup();
   }
@@ -786,31 +758,30 @@ test("skills list rejects unexpected positional with exit code 2", async () => {
 test("skills dci grep / find / open / inspect / read / select reject unknown option", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectUnknownOption(
-      ["skills", "dci", "grep", "--pttn=foo"],
-      fake.env,
-      { option: "--pttn", commandName: "agentic-skill-router skills dci grep" },
-    );
-    await expectUnknownOption(
-      ["skills", "dci", "find", fake.disabledSkillId, "--pattern=foo", "--regx"],
-      fake.env,
-      { option: "--regx", suggestion: "--regex", commandName: "agentic-skill-router skills dci find" },
-    );
-    await expectUnknownOption(
-      ["skills", "dci", "open", fake.disabledSkillId, "--lne=10"],
-      fake.env,
-      { option: "--lne", suggestion: "--line", commandName: "agentic-skill-router skills dci open" },
-    );
-    await expectUnknownOption(
-      ["skills", "dci", "inspect", fake.disabledSkillId, "--jsoon"],
-      fake.env,
-      { option: "--jsoon", suggestion: "--json", commandName: "agentic-skill-router skills dci inspect" },
-    );
-    await expectUnknownOption(
-      ["skills", "dci", "read", fake.disabledSkillId, "--max-chrs=10"],
-      fake.env,
-      { option: "--max-chrs", suggestion: "--max-chars", commandName: "agentic-skill-router skills dci read" },
-    );
+    await expectUnknownOption(["skills", "dci", "grep", "--pttn=foo"], fake.env, {
+      option: "--pttn",
+      commandName: "agentic-skill-router skills dci grep",
+    });
+    await expectUnknownOption(["skills", "dci", "find", fake.disabledSkillId, "--pattern=foo", "--regx"], fake.env, {
+      option: "--regx",
+      suggestion: "--regex",
+      commandName: "agentic-skill-router skills dci find",
+    });
+    await expectUnknownOption(["skills", "dci", "open", fake.disabledSkillId, "--lne=10"], fake.env, {
+      option: "--lne",
+      suggestion: "--line",
+      commandName: "agentic-skill-router skills dci open",
+    });
+    await expectUnknownOption(["skills", "dci", "inspect", fake.disabledSkillId, "--jsoon"], fake.env, {
+      option: "--jsoon",
+      suggestion: "--json",
+      commandName: "agentic-skill-router skills dci inspect",
+    });
+    await expectUnknownOption(["skills", "dci", "read", fake.disabledSkillId, "--max-chrs=10"], fake.env, {
+      option: "--max-chrs",
+      suggestion: "--max-chars",
+      commandName: "agentic-skill-router skills dci read",
+    });
     await expectUnknownOption(
       ["skills", "dci", "select", fake.disabledSkillId, "--query=x", "--confidence=high", "--reson=test"],
       fake.env,
@@ -828,10 +799,7 @@ test("skills dci grep / find / open / inspect / read / select reject unknown opt
 // consume the JSON. They also assert that the JSON lands cleanly on
 // stdout (no stray banner / debug noise that would break `JSON.parse`).
 
-async function runOk(
-  args: string[],
-  env: NodeJS.ProcessEnv,
-): Promise<{ stdout: string; stderr: string }> {
+async function runOk(args: string[], env: NodeJS.ProcessEnv): Promise<{ stdout: string; stderr: string }> {
   return runCli(args, env);
 }
 
@@ -840,13 +808,25 @@ test("skills list --json emits parseable envelope with skills array and usageDia
   try {
     const { stdout, stderr } = await runOk(["skills", "list", "--json"], fake.env);
     assert.equal(stderr, "", `stderr must be empty on success; got: ${stderr}`);
-    const parsed = JSON.parse(stdout) as { skills: Array<Record<string, unknown>>; usageDiagnostics: Record<string, unknown> };
+    const parsed = JSON.parse(stdout) as {
+      skills: Array<Record<string, unknown>>;
+      usageDiagnostics: Record<string, unknown>;
+    };
     assert.ok(parsed && typeof parsed === "object", "list --json must be an envelope object");
     assert.ok(Array.isArray(parsed.skills), "list --json must expose a `skills` array");
     assert.ok(parsed.skills.length >= 2, `expected fixture to expose >=2 skills, got ${parsed.skills.length}`);
     const requiredKeys = [
-      "id", "name", "source", "isDisabled", "isPluginDisabled",
-      "canDisable", "conflict", "outOfRoot", "description", "lastUsed", "callCount",
+      "id",
+      "name",
+      "source",
+      "isDisabled",
+      "isPluginDisabled",
+      "canDisable",
+      "conflict",
+      "outOfRoot",
+      "description",
+      "lastUsed",
+      "callCount",
     ];
     for (const entry of parsed.skills) {
       for (const key of requiredKeys) {
@@ -880,7 +860,17 @@ test("skills route --json emits parseable object with selected/matches schema", 
     );
     assert.equal(stderr, "", `stderr must be empty on success; got: ${stderr}`);
     const parsed = JSON.parse(stdout) as Record<string, unknown>;
-    for (const key of ["query", "mode", "routeMode", "action", "recorded", "warnings", "selected", "matches", "diagnostics"]) {
+    for (const key of [
+      "query",
+      "mode",
+      "routeMode",
+      "action",
+      "recorded",
+      "warnings",
+      "selected",
+      "matches",
+      "diagnostics",
+    ]) {
       assert.ok(key in parsed, `route --json missing required key ${key}: ${JSON.stringify(parsed)}`);
     }
     assert.equal(parsed.query, "lark mail office");
@@ -904,14 +894,8 @@ test("skills route --mode=body and --mode=dci return identical selection (#111)"
   const fake = await makeFakeCodexUser();
   try {
     const query = "lark mail office";
-    const body = await runOk(
-      ["skills", "route", "--query", query, "--mode=body", "--json", "--no-record"],
-      fake.env,
-    );
-    const dci = await runOk(
-      ["skills", "route", "--query", query, "--mode=dci", "--json", "--no-record"],
-      fake.env,
-    );
+    const body = await runOk(["skills", "route", "--query", query, "--mode=body", "--json", "--no-record"], fake.env);
+    const dci = await runOk(["skills", "route", "--query", query, "--mode=dci", "--json", "--no-record"], fake.env);
     const parsedBody = JSON.parse(body.stdout) as Record<string, unknown>;
     const parsedDci = JSON.parse(dci.stdout) as Record<string, unknown>;
 
@@ -959,15 +943,35 @@ test("skills status --json emits parseable object with expected keys", async () 
     assert.equal(stderr, "", `stderr must be empty on success; got: ${stderr}`);
     const parsed = JSON.parse(stdout) as Record<string, unknown>;
     for (const key of [
-      "disabledCount", "reapplied", "orphaned", "conflicted",
-      "recoveredCommits", "recoveredRollbacks", "skipped",
-      "symlinkMismatches", "orphanMarkers",
-      "disabled", "pendingOps", "routed",
+      "disabledCount",
+      "reapplied",
+      "orphaned",
+      "conflicted",
+      "recoveredCommits",
+      "recoveredRollbacks",
+      "skipped",
+      "symlinkMismatches",
+      "orphanMarkers",
+      "disabled",
+      "pendingOps",
+      "routed",
     ]) {
       assert.ok(key in parsed, `status --json missing key ${key}: ${JSON.stringify(parsed)}`);
     }
     assert.equal(typeof parsed.disabledCount, "number");
-    for (const arrKey of ["reapplied", "orphaned", "conflicted", "recoveredCommits", "recoveredRollbacks", "skipped", "symlinkMismatches", "orphanMarkers", "disabled", "pendingOps", "routed"]) {
+    for (const arrKey of [
+      "reapplied",
+      "orphaned",
+      "conflicted",
+      "recoveredCommits",
+      "recoveredRollbacks",
+      "skipped",
+      "symlinkMismatches",
+      "orphanMarkers",
+      "disabled",
+      "pendingOps",
+      "routed",
+    ]) {
       assert.ok(Array.isArray(parsed[arrKey]), `${arrKey} must be an array`);
     }
   } finally {
@@ -993,10 +997,7 @@ test("skills dci budget --json emits parseable budget object", async () => {
 test("skills suggest --json emits parseable envelope with suggestions array and usageDiagnostics", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    const { stdout, stderr } = await runOk(
-      ["skills", "suggest", "--unused-for=365d", "--json"],
-      fake.env,
-    );
+    const { stdout, stderr } = await runOk(["skills", "suggest", "--unused-for=365d", "--json"], fake.env);
     assert.equal(stderr, "", `stderr must be empty on success; got: ${stderr}`);
     const parsed = JSON.parse(stdout) as { suggestions: unknown[]; usageDiagnostics: Record<string, unknown> };
     assert.ok(parsed && typeof parsed === "object", "suggest --json must be an envelope object");
@@ -1062,12 +1063,7 @@ async function expectExitCode(
 test("skills route without --query and no positional exits 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectExitCode(
-      ["skills", "route"],
-      fake.env,
-      2,
-      /specify --query|pass the query as positional/i,
-    );
+    await expectExitCode(["skills", "route"], fake.env, 2, /specify --query|pass the query as positional/i);
   } finally {
     await fake.cleanup();
   }
@@ -1078,12 +1074,7 @@ test("skills route with empty positional query (single empty arg) exits 2", asyn
   try {
     // Empty positional joins to "" which is rejected by the same guard
     // that handles a missing --query. This pins the current behavior.
-    await expectExitCode(
-      ["skills", "route", ""],
-      fake.env,
-      2,
-      /specify --query|pass the query as positional/i,
-    );
+    await expectExitCode(["skills", "route", ""], fake.env, 2, /specify --query|pass the query as positional/i);
   } finally {
     await fake.cleanup();
   }
@@ -1148,12 +1139,7 @@ test("skills dci search --top-k=abc exits 2", async () => {
 test("skills dci search without --query exits 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectExitCode(
-      ["skills", "dci", "search"],
-      fake.env,
-      2,
-      /specify --query/i,
-    );
+    await expectExitCode(["skills", "dci", "search"], fake.env, 2, /specify --query/i);
   } finally {
     await fake.cleanup();
   }
@@ -1165,12 +1151,7 @@ test("skills disable without <id> and no --all-suggested exits 2", async () => {
     // src/cli.ts:706-709 returns 2 for "specify <id...> or --all-suggested".
     // Pinning this exit code so future refactors don't silently flip the
     // contract from parse-error (2) to user-error (1).
-    await expectExitCode(
-      ["skills", "disable"],
-      fake.env,
-      2,
-      /specify <id\.\.\.>|--all-suggested/i,
-    );
+    await expectExitCode(["skills", "disable"], fake.env, 2, /specify <id\.\.\.>|--all-suggested/i);
   } finally {
     await fake.cleanup();
   }
@@ -1181,12 +1162,7 @@ test("skills disable <id> without --yes exits 1 (preview, not parse-error)", asy
   try {
     // Operational preview: parsing succeeded, but the apply was skipped
     // because --yes was not passed. That is an exit-1 case per cli.ts.
-    await expectExitCode(
-      ["skills", "disable", fake.disabledSkillId],
-      fake.env,
-      1,
-      /would disable .* pass --yes/i,
-    );
+    await expectExitCode(["skills", "disable", fake.disabledSkillId], fake.env, 1, /would disable .* pass --yes/i);
   } finally {
     await fake.cleanup();
   }
@@ -1195,12 +1171,7 @@ test("skills disable <id> without --yes exits 1 (preview, not parse-error)", asy
 test("skills disable with unknown <id> exits 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectExitCode(
-      ["skills", "disable", "user:codex:does-not-exist", "--yes"],
-      fake.env,
-      2,
-      /unknown skill id/i,
-    );
+    await expectExitCode(["skills", "disable", "user:codex:does-not-exist", "--yes"], fake.env, 2, /unknown skill id/i);
   } finally {
     await fake.cleanup();
   }
@@ -1209,12 +1180,7 @@ test("skills disable with unknown <id> exits 2", async () => {
 test("skills enable without <id> exits 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectExitCode(
-      ["skills", "enable"],
-      fake.env,
-      2,
-      /specify <id\.\.\.>/i,
-    );
+    await expectExitCode(["skills", "enable"], fake.env, 2, /specify <id\.\.\.>/i);
   } finally {
     await fake.cleanup();
   }
@@ -1223,12 +1189,7 @@ test("skills enable without <id> exits 2", async () => {
 test("skills dci inspect without <id> exits 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectExitCode(
-      ["skills", "dci", "inspect"],
-      fake.env,
-      2,
-      /specify <id-or-ref>/i,
-    );
+    await expectExitCode(["skills", "dci", "inspect"], fake.env, 2, /specify <id-or-ref>/i);
   } finally {
     await fake.cleanup();
   }
@@ -1237,12 +1198,7 @@ test("skills dci inspect without <id> exits 2", async () => {
 test("unknown top-level command exits 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectExitCode(
-      ["bogus-command"],
-      fake.env,
-      2,
-      /unknown command/i,
-    );
+    await expectExitCode(["bogus-command"], fake.env, 2, /unknown command/i);
   } finally {
     await fake.cleanup();
   }
@@ -1251,12 +1207,7 @@ test("unknown top-level command exits 2", async () => {
 test("unknown skills subcommand exits 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectExitCode(
-      ["skills", "bogus"],
-      fake.env,
-      2,
-      /unknown subcommand/i,
-    );
+    await expectExitCode(["skills", "bogus"], fake.env, 2, /unknown subcommand/i);
   } finally {
     await fake.cleanup();
   }
@@ -1265,12 +1216,7 @@ test("unknown skills subcommand exits 2", async () => {
 test("unknown dci subcommand exits 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectExitCode(
-      ["skills", "dci", "bogus"],
-      fake.env,
-      2,
-      /unknown dci subcommand/i,
-    );
+    await expectExitCode(["skills", "dci", "bogus"], fake.env, 2, /unknown dci subcommand/i);
   } finally {
     await fake.cleanup();
   }
@@ -1279,12 +1225,7 @@ test("unknown dci subcommand exits 2", async () => {
 test("deprecated --host flag is rejected with exit 2", async () => {
   const fake = await makeFakeCodexUser();
   try {
-    await expectExitCode(
-      ["--host=codex", "skills", "list"],
-      fake.env,
-      2,
-      /--host has been removed/i,
-    );
+    await expectExitCode(["--host=codex", "skills", "list"], fake.env, 2, /--host has been removed/i);
   } finally {
     await fake.cleanup();
   }
@@ -1369,10 +1310,7 @@ test("skills enable refuses state-only out-of-root record without --allow-symlin
     await mkdir(externalSkillDir, { recursive: true });
     const externalLive = join(externalSkillDir, "SKILL.md");
     const externalDisabled = externalLive + ".agentic-skill-router-disabled";
-    await writeFile(
-      externalDisabled,
-      "---\nname: drifted-skill\ndescription: drifted out-of-root\n---\n",
-    );
+    await writeFile(externalDisabled, "---\nname: drifted-skill\ndescription: drifted out-of-root\n---\n");
 
     // Symlink the codex-side parent directory at a path the host's scan does
     // not surface as `drifted-skill` (we deliberately give the inventory dir
@@ -1470,10 +1408,7 @@ test("skills enable on an in-root state record still works without --allow-symli
     // enable it.
     const liveSkillDir = join(fake.codexHome, "skills", "in-root-disabled");
     await mkdir(liveSkillDir, { recursive: true });
-    await writeFile(
-      join(liveSkillDir, "SKILL.md"),
-      "---\nname: in-root-disabled\ndescription: in-root skill\n---\n",
-    );
+    await writeFile(join(liveSkillDir, "SKILL.md"), "---\nname: in-root-disabled\ndescription: in-root skill\n---\n");
 
     await runCli(["skills", "disable", "user:codex:in-root-disabled", "--yes"], fake.env);
     await stat(join(liveSkillDir, "SKILL.md.agentic-skill-router-disabled"));
@@ -1504,10 +1439,7 @@ test("skills enable rejects a tampered state record whose skillMdPath escapes th
     const escapedDir = join(fake.root, "totally-outside", "evil-skill");
     await mkdir(escapedDir, { recursive: true });
     const escapedDisabled = join(escapedDir, "SKILL.md.agentic-skill-router-disabled");
-    await writeFile(
-      escapedDisabled,
-      "---\nname: evil-skill\ndescription: planted file outside skill roots\n---\n",
-    );
+    await writeFile(escapedDisabled, "---\nname: evil-skill\ndescription: planted file outside skill roots\n---\n");
     // Use a path that survives realpath but is unambiguously not under any
     // codex skill root. We embed a `..` segment so the recorded `skillMdPath`
     // textually points "into" the skills tree but resolves elsewhere; the
@@ -1584,10 +1516,7 @@ test("skills enable refuses broken-symlink record when canonical disabled marker
     await mkdir(externalSkillDir, { recursive: true });
     const externalLive = join(externalSkillDir, "SKILL.md");
     const externalDisabled = externalLive + ".agentic-skill-router-disabled";
-    await writeFile(
-      externalLive,
-      "---\nname: broken-link-skill\ndescription: out-of-root via symlink\n---\n",
-    );
+    await writeFile(externalLive, "---\nname: broken-link-skill\ndescription: out-of-root via symlink\n---\n");
     const inRootDir = join(fake.codexHome, "skills", "broken-link-skill");
     await symlink(externalSkillDir, inRootDir);
 
@@ -1608,9 +1537,7 @@ test("skills enable refuses broken-symlink record when canonical disabled marker
         discoveredViaSymlink?: boolean;
       }>;
     };
-    const recAfterDisable = stateAfterDisable.disabledSkills.find(
-      (r) => r.id === "user:codex:broken-link-skill",
-    );
+    const recAfterDisable = stateAfterDisable.disabledSkills.find((r) => r.id === "user:codex:broken-link-skill");
     assert.ok(recAfterDisable, "disable should have written a state record");
     assert.equal(recAfterDisable!.discoveredViaSymlink, true);
     assert.ok(
@@ -1671,10 +1598,7 @@ test("skills enable succeeds on broken-symlink record with --allow-symlink-targe
     await mkdir(externalSkillDir, { recursive: true });
     const externalLive = join(externalSkillDir, "SKILL.md");
     const externalDisabled = externalLive + ".agentic-skill-router-disabled";
-    await writeFile(
-      externalLive,
-      "---\nname: broken-link-skill-2\ndescription: out-of-root via symlink\n---\n",
-    );
+    await writeFile(externalLive, "---\nname: broken-link-skill-2\ndescription: out-of-root via symlink\n---\n");
     const inRootDir = join(fake.codexHome, "skills", "broken-link-skill-2");
     await symlink(externalSkillDir, inRootDir);
 
@@ -1688,12 +1612,7 @@ test("skills enable succeeds on broken-symlink record with --allow-symlink-targe
     await rm(inRootDir, { force: true });
 
     const enabled = await runCli(
-      [
-        "skills",
-        "enable",
-        "user:codex:broken-link-skill-2",
-        "--allow-symlink-target-mutation",
-      ],
+      ["skills", "enable", "user:codex:broken-link-skill-2", "--allow-symlink-target-mutation"],
       fake.env,
     );
     assert.equal(
@@ -1732,10 +1651,7 @@ test("skills enable still orphan-cleans a broken-symlink record when canonical f
     await mkdir(externalSkillDir, { recursive: true });
     const externalLive = join(externalSkillDir, "SKILL.md");
     const externalDisabled = externalLive + ".agentic-skill-router-disabled";
-    await writeFile(
-      externalLive,
-      "---\nname: fully-gone-skill\ndescription: orphan candidate\n---\n",
-    );
+    await writeFile(externalLive, "---\nname: fully-gone-skill\ndescription: orphan candidate\n---\n");
     const inRootDir = join(fake.codexHome, "skills", "fully-gone-skill");
     await symlink(externalSkillDir, inRootDir);
 
@@ -1752,10 +1668,7 @@ test("skills enable still orphan-cleans a broken-symlink record when canonical f
 
     // Plain `skills enable` must succeed (orphan cleanup), NOT refuse with
     // the new gate. Use --json so we can read the result deterministically.
-    const enabled = await runCli(
-      ["skills", "enable", "user:codex:fully-gone-skill", "--json"],
-      fake.env,
-    );
+    const enabled = await runCli(["skills", "enable", "user:codex:fully-gone-skill", "--json"], fake.env);
     assert.equal(
       enabled.stderr.includes("refusing to enable"),
       false,
@@ -1794,10 +1707,7 @@ test("skills enable refuses out-of-root record with flag when canonical fields a
     await mkdir(externalSkillDir, { recursive: true });
     const externalLive = join(externalSkillDir, "SKILL.md");
     const externalDisabled = externalLive + ".agentic-skill-router-disabled";
-    await writeFile(
-      externalDisabled,
-      "---\nname: tampered-no-canonical\ndescription: planted out-of-root\n---\n",
-    );
+    await writeFile(externalDisabled, "---\nname: tampered-no-canonical\ndescription: planted out-of-root\n---\n");
     const codexInRootDir = join(fake.codexHome, "skills", "tampered-stub");
     await symlink(externalSkillDir, codexInRootDir);
     const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
@@ -1922,10 +1832,7 @@ test("skills enable refuses with flag when canonical drifted from recorded realp
     const currentTargetDir = join(fake.root, "external-skills", "current-target");
     await mkdir(currentTargetDir, { recursive: true });
     const currentDisabled = join(currentTargetDir, "SKILL.md.agentic-skill-router-disabled");
-    await writeFile(
-      currentDisabled,
-      "---\nname: drifted\ndescription: current target after retarget\n---\n",
-    );
+    await writeFile(currentDisabled, "---\nname: drifted\ndescription: current target after retarget\n---\n");
     const codexInRootDir = join(fake.codexHome, "skills", "drift-stub");
     await symlink(currentTargetDir, codexInRootDir);
     const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
@@ -1933,12 +1840,7 @@ test("skills enable refuses with flag when canonical drifted from recorded realp
     // The ORIGINAL canonical at disable time (different path — this is what
     // the state record claims was disabled). Doesn't need to exist on disk
     // anymore; we only compare strings against current realpath.
-    const originalCanonicalLive = join(
-      fake.root,
-      "external-skills",
-      "original-target",
-      "SKILL.md",
-    );
+    const originalCanonicalLive = join(fake.root, "external-skills", "original-target", "SKILL.md");
 
     const statePath = join(fake.stateDir, "state-codex.json");
     const state = {
@@ -1962,10 +1864,7 @@ test("skills enable refuses with flag when canonical drifted from recorded realp
 
     let refused: unknown;
     try {
-      await runCli(
-        ["skills", "enable", "user:codex:drifted", "--allow-symlink-target-mutation"],
-        fake.env,
-      );
+      await runCli(["skills", "enable", "user:codex:drifted", "--allow-symlink-target-mutation"], fake.env);
     } catch (err) {
       refused = err;
     }
@@ -2002,10 +1901,7 @@ test("skills enable cleans state-only record for already-enabled out-of-root ski
     const externalSkillDir = join(fake.root, "external-skills", "already-enabled");
     await mkdir(externalSkillDir, { recursive: true });
     const externalLive = join(externalSkillDir, "SKILL.md");
-    await writeFile(
-      externalLive,
-      "---\nname: already-enabled\ndescription: user re-enabled out of band\n---\n",
-    );
+    await writeFile(externalLive, "---\nname: already-enabled\ndescription: user re-enabled out of band\n---\n");
     const codexInRootDir = join(fake.codexHome, "skills", "already-enabled-stub");
     await symlink(externalSkillDir, codexInRootDir);
 
@@ -2038,10 +1934,7 @@ test("skills enable cleans state-only record for already-enabled out-of-root ski
 
     // Enable WITHOUT the flag must succeed: no rename, no out-of-root file
     // mutation, just state cleanup. The pre-fix behavior refused here.
-    const enabled = await runCli(
-      ["skills", "enable", "user:codex:already-enabled", "--json"],
-      fake.env,
-    );
+    const enabled = await runCli(["skills", "enable", "user:codex:already-enabled", "--json"], fake.env);
     assert.equal(
       enabled.stderr.includes("refusing to enable"),
       false,
@@ -2080,10 +1973,7 @@ test("skills enable still refuses out-of-root record when disabled marker actual
     await mkdir(externalSkillDir, { recursive: true });
     const externalLive = join(externalSkillDir, "SKILL.md");
     const externalDisabled = externalLive + ".agentic-skill-router-disabled";
-    await writeFile(
-      externalDisabled,
-      "---\nname: still-disabled\ndescription: actually disabled out-of-root\n---\n",
-    );
+    await writeFile(externalDisabled, "---\nname: still-disabled\ndescription: actually disabled out-of-root\n---\n");
     const codexInRootDir = join(fake.codexHome, "skills", "still-disabled-stub");
     await symlink(externalSkillDir, codexInRootDir);
 

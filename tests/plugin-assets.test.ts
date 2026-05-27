@@ -25,7 +25,10 @@ test("shared router skill uses Agent Skills frontmatter as the source of truth",
   assert.match(description, /audit, slim, disable, restore, or route/);
   assert.doesNotMatch(description, /For Codex/);
   assert.deepEqual(topLevelKeys, ["name", "description", "metadata"]);
-  assert.match(frontmatter, /metadata:\n  agentic-skill-router\.version: "1"\n  agentic-skill-router\.variant: "L-agentic"\n  agentic-skill-router\.hosts: "claude-code,codex"/);
+  assert.match(
+    frontmatter,
+    /metadata:\n  agentic-skill-router\.version: "1"\n  agentic-skill-router\.variant: "L-agentic"\n  agentic-skill-router\.hosts: "claude-code,codex"/,
+  );
 });
 
 test("plugin packages assemble from one unified skill source", async () => {
@@ -42,18 +45,33 @@ test("plugin packages assemble from one unified skill source", async () => {
   assert.equal(await pathExists(join(REPO_ROOT, "plugins", "codex", "skills")), false);
   assert.equal(await pathExists(join(REPO_ROOT, "shared", "host-overlays")), false);
 
-  const claudeManifest = JSON.parse(await readFile(join(REPO_ROOT, "plugins", "claude-code", ".claude-plugin", "plugin.json"), "utf8"));
-  const codexManifest = JSON.parse(await readFile(join(REPO_ROOT, "plugins", "codex", ".codex-plugin", "plugin.json"), "utf8"));
+  const claudeManifest = JSON.parse(
+    await readFile(join(REPO_ROOT, "plugins", "claude-code", ".claude-plugin", "plugin.json"), "utf8"),
+  );
+  const codexManifest = JSON.parse(
+    await readFile(join(REPO_ROOT, "plugins", "codex", ".codex-plugin", "plugin.json"), "utf8"),
+  );
   assert.equal(claudeManifest.skills, "../../skills/");
   assert.equal(codexManifest.skills, "../../skills/");
-  assert.ok(await pathExists(resolve(REPO_ROOT, "plugins", "claude-code", claudeManifest.skills, "agentic-skill-router-skills", "SKILL.md")));
-  assert.ok(await pathExists(resolve(REPO_ROOT, "plugins", "codex", codexManifest.skills, "agentic-skill-router-skills", "SKILL.md")));
+  assert.ok(
+    await pathExists(
+      resolve(REPO_ROOT, "plugins", "claude-code", claudeManifest.skills, "agentic-skill-router-skills", "SKILL.md"),
+    ),
+  );
+  assert.ok(
+    await pathExists(
+      resolve(REPO_ROOT, "plugins", "codex", codexManifest.skills, "agentic-skill-router-skills", "SKILL.md"),
+    ),
+  );
 
   await execFileAsync(process.execPath, ["scripts/generate-assets.mjs", "--check"], { cwd: REPO_ROOT });
 });
 
 test("Codex slash command is a thin compatibility shim", async () => {
-  const prompt = await readFile(join(REPO_ROOT, "plugins", "codex", "prompts", "agentic-skill-router-skills.md"), "utf8");
+  const prompt = await readFile(
+    join(REPO_ROOT, "plugins", "codex", "prompts", "agentic-skill-router-skills.md"),
+    "utf8",
+  );
   const fm = parseFrontmatter(prompt);
 
   assert.equal(fm.description, "Use the agentic-skill-router-skills skill with optional arguments.");
@@ -77,10 +95,7 @@ test("package bin wrapper resolves npm-style symlinks", async () => {
     await mkdir(packageLib, { recursive: true });
     await mkdir(npmBin, { recursive: true });
 
-    await copyFile(
-      join(REPO_ROOT, "bin", "agentic-skill-router"),
-      join(packageBin, "agentic-skill-router"),
-    );
+    await copyFile(join(REPO_ROOT, "bin", "agentic-skill-router"), join(packageBin, "agentic-skill-router"));
     await chmod(join(packageBin, "agentic-skill-router"), 0o755);
     await writeFile(
       join(packageLib, "agentic-skill-router.mjs"),
@@ -118,32 +133,25 @@ test("built bin auto-detects installed Codex plugin host from its bundle", async
       "---\nname: marker-priority\ndescription: Codex marker priority probe\n---\n",
     );
 
-    await copyFile(
-      join(REPO_ROOT, "bin", "agentic-skill-router"),
-      join(packageBin, "agentic-skill-router"),
-    );
+    await copyFile(join(REPO_ROOT, "bin", "agentic-skill-router"), join(packageBin, "agentic-skill-router"));
     await chmod(join(packageBin, "agentic-skill-router"), 0o755);
-    await copyFile(
-      join(REPO_ROOT, "lib", "agentic-skill-router.mjs"),
-      join(packageLib, "agentic-skill-router.mjs"),
-    );
+    await copyFile(join(REPO_ROOT, "lib", "agentic-skill-router.mjs"), join(packageLib, "agentic-skill-router.mjs"));
 
-    const { stdout } = await execFileAsync(
-      join(packageBin, "agentic-skill-router"),
-      ["skills", "list", "--json"],
-      {
-        env: {
-          ...process.env,
-          HOME: root,
-          CODEX_HOME: undefined,
-          AGENTS_HOME: undefined,
-          AGENTIC_SKILL_ROUTER_HOST: "claude-code",
-          AGENTIC_SKILL_ROUTER_STATE_DIR: stateDir,
-        },
+    const { stdout } = await execFileAsync(join(packageBin, "agentic-skill-router"), ["skills", "list", "--json"], {
+      env: {
+        ...process.env,
+        HOME: root,
+        CODEX_HOME: undefined,
+        AGENTS_HOME: undefined,
+        AGENTIC_SKILL_ROUTER_HOST: "claude-code",
+        AGENTIC_SKILL_ROUTER_STATE_DIR: stateDir,
       },
-    );
+    });
     const listed = (JSON.parse(stdout) as { skills: Array<{ id: string }> }).skills;
-    assert.deepEqual(listed.map((item) => item.id), ["user:codex:marker-priority"]);
+    assert.deepEqual(
+      listed.map((item) => item.id),
+      ["user:codex:marker-priority"],
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -194,11 +202,11 @@ test("built bin flushes large JSON output before exit", async () => {
 
 test("npm package includes the bin runtime bundle", async () => {
   await execFileAsync("npm", ["run", "build"], { cwd: REPO_ROOT, env: npmTestEnv(), maxBuffer: 1024 * 1024 });
-  const { stdout } = await execFileAsync(
-    "npm",
-    ["pack", "--dry-run", "--json", "--ignore-scripts"],
-    { cwd: REPO_ROOT, env: npmTestEnv(), maxBuffer: 1024 * 1024 },
-  );
+  const { stdout } = await execFileAsync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+    cwd: REPO_ROOT,
+    env: npmTestEnv(),
+    maxBuffer: 1024 * 1024,
+  });
   const packed = JSON.parse(stdout) as Array<{ files: Array<{ path: string }> }>;
   const files = new Set(packed[0]?.files.map((f) => f.path) ?? []);
   assert.ok(files.has("bin/agentic-skill-router"));
@@ -222,7 +230,12 @@ test("install scripts assemble host entries and shared runtime from unified asse
 
     await execFileAsync(process.execPath, ["scripts/install.mjs"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, HOME: root, CLAUDE_HOME: claudeHome, AGENTIC_SKILL_ROUTER_RUNTIME_ROOT: join(root, ".agentic-skill-router", "runtime") },
+      env: {
+        ...process.env,
+        HOME: root,
+        CLAUDE_HOME: claudeHome,
+        AGENTIC_SKILL_ROUTER_RUNTIME_ROOT: join(root, ".agentic-skill-router", "runtime"),
+      },
       maxBuffer: 1024 * 1024,
     });
     await assertInstalledPlugin(claudeInstallPath, ".claude-plugin/plugin.json");
@@ -233,12 +246,20 @@ test("install scripts assemble host entries and shared runtime from unified asse
 
     await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
       cwd: REPO_ROOT,
-      env: { ...process.env, HOME: root, CODEX_HOME: codexHome, AGENTIC_SKILL_ROUTER_RUNTIME_ROOT: join(root, ".agentic-skill-router", "runtime") },
+      env: {
+        ...process.env,
+        HOME: root,
+        CODEX_HOME: codexHome,
+        AGENTIC_SKILL_ROUTER_RUNTIME_ROOT: join(root, ".agentic-skill-router", "runtime"),
+      },
       maxBuffer: 1024 * 1024,
     });
     await assertInstalledPlugin(codexInstallPath, ".codex-plugin/plugin.json");
     await assertInstalledRuntime(runtimePath);
-    assert.match(await readFile(join(codexHome, "config.toml"), "utf8"), /\[plugins\."agentic-skill-router@local"\]\nenabled = true/);
+    assert.match(
+      await readFile(join(codexHome, "config.toml"), "utf8"),
+      /\[plugins\."agentic-skill-router@local"\]\nenabled = true/,
+    );
     assert.ok(await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")));
   } finally {
     await rm(root, { recursive: true, force: true });

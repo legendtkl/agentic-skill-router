@@ -18,9 +18,12 @@ import { usage } from "../output.ts";
 export async function cmdConfig(argv: string[]): Promise<number> {
   const [subcommand, ...rest] = argv;
   switch (subcommand) {
-    case "get": return await cmdConfigGet(rest);
-    case "set": return await cmdConfigSet(rest);
-    case "path": return cmdConfigPath(rest);
+    case "get":
+      return await cmdConfigGet(rest);
+    case "set":
+      return await cmdConfigSet(rest);
+    case "path":
+      return cmdConfigPath(rest);
     case undefined:
     case "-h":
     case "--help":
@@ -75,7 +78,7 @@ async function cmdConfigSet(argv: string[]): Promise<number> {
   if (positionals.length > 2) {
     console.error(
       `unexpected extra argument(s) for config set: ${positionals.slice(2).join(" ")}. ` +
-      `Quote multi-word values, e.g. \`config set keepNames '["foo","bar"]'\`.`,
+        `Quote multi-word values, e.g. \`config set keepNames '["foo","bar"]'\`.`,
     );
     return 2;
   }

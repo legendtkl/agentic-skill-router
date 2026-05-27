@@ -63,7 +63,10 @@ export async function readInstalledPlugins(path: string): Promise<InstalledPlugi
       // deterministically and surface a warning so the user knows we ignored
       // the others.
       candidates.sort((a, b) => compareVersions(b.version, a.version));
-      const dropped = candidates.slice(1).map((c) => `${c.version}@${c.installPath}`).join(", ");
+      const dropped = candidates
+        .slice(1)
+        .map((c) => `${c.version}@${c.installPath}`)
+        .join(", ");
       process.stderr.write(
         `warning: plugin "${pluginKey}" has ${candidates.length} install entries; using ${candidates[0]!.version}@${candidates[0]!.installPath} and ignoring: ${dropped}\n`,
       );
@@ -110,11 +113,7 @@ function parseVersion(v: string): Parsed {
   if (strict) {
     return {
       kind: "version",
-      numeric: [
-        Number.parseInt(strict[1]!, 10),
-        Number.parseInt(strict[2]!, 10),
-        Number.parseInt(strict[3]!, 10),
-      ],
+      numeric: [Number.parseInt(strict[1]!, 10), Number.parseInt(strict[2]!, 10), Number.parseInt(strict[3]!, 10)],
       prerelease: strict[4] ? strict[4].split(".") : [],
       // BUILD metadata (strict[5]) intentionally discarded; ignored for ordering.
     };
@@ -240,7 +239,11 @@ export async function readClaudeSettings(path: string): Promise<ClaudeSettings> 
     throw err;
   }
   let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch { return {}; }
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
   if (!isPlainObject(parsed)) return {};
   const enabledPlugins = parsed["enabledPlugins"];
   if (!isPlainObject(enabledPlugins)) return {};
@@ -277,12 +280,7 @@ export async function readClaudeSettings(path: string): Promise<ClaudeSettings> 
  * config.toml plugin section, so this is sufficient for the values we parse.
  */
 export function stripTomlComment(line: string): string {
-  type State =
-    | "none"
-    | "basic"
-    | "literal"
-    | "multiBasic"
-    | "multiLiteral";
+  type State = "none" | "basic" | "literal" | "multiBasic" | "multiLiteral";
   let state: State = "none";
   let i = 0;
   const len = line.length;
@@ -453,7 +451,9 @@ export async function walkSkillsDir(
       try {
         const s = await stat(skillDir);
         isDir = s.isDirectory();
-      } catch { /* dangling symlink */ }
+      } catch {
+        /* dangling symlink */
+      }
     }
     if (!isDir) continue;
 
@@ -461,9 +461,7 @@ export async function walkSkillsDir(
     // skills root. We deliberately only enforce this for symlinks: a real
     // subdirectory of skillsRoot is in-root by construction, and walking
     // every regular directory's realpath would add useless syscalls.
-    const outOfRoot = isSymlink
-      ? !(await isInsideCanonicalRoot(skillDir, canonicalRoot))
-      : false;
+    const outOfRoot = isSymlink ? !(await isInsideCanonicalRoot(skillDir, canonicalRoot)) : false;
 
     const livePath = join(skillDir, "SKILL.md");
     const disabledPath = livePath + DISABLED_SUFFIX;
@@ -549,15 +547,11 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-export async function readSkillFrontmatter(
-  skillMdPath: string,
-): Promise<SkillMetadata> {
+export async function readSkillFrontmatter(skillMdPath: string): Promise<SkillMetadata> {
   return (await readSkillFrontmatterDetailed(skillMdPath)).metadata;
 }
 
-export async function readSkillFrontmatterDetailed(
-  skillMdPath: string,
-): Promise<FrontmatterReadResult> {
+export async function readSkillFrontmatterDetailed(skillMdPath: string): Promise<FrontmatterReadResult> {
   const raw = await readSkillFrontmatterBlock(skillMdPath);
   const { data: fm, warnings } = parseFrontmatterWithWarnings(raw);
   const name = scalar(fm["name"]) ?? basename(dirname(skillMdPath)) ?? "";
@@ -626,11 +620,7 @@ function optionalArray<K extends keyof SkillMetadata>(
   key: K,
   value: string | string[] | undefined,
 ): Partial<Pick<SkillMetadata, K>> {
-  const arr = Array.isArray(value)
-    ? value
-    : typeof value === "string" && value !== ""
-      ? [value]
-      : [];
+  const arr = Array.isArray(value) ? value : typeof value === "string" && value !== "" ? [value] : [];
   if (arr.length === 0) return {};
   return { [key]: arr } as Partial<Pick<SkillMetadata, K>>;
 }

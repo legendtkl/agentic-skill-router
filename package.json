@@ -31,6 +31,10 @@
     "build": "node scripts/generate-assets.mjs && node scripts/build.mjs",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
+    "lint": "biome lint",
+    "format": "biome format --write",
+    "format:check": "biome format",
+    "security": "npm audit --audit-level=high",
     "test": "node --test --import tsx tests/*.test.ts",
     "test:e2e": "npm run test:e2e:network",
     "test:e2e:offline": "node --test --test-concurrency=1 --import tsx tests/cli-offline.e2e.ts",
@@ -46,6 +50,7 @@
     "uninstall:codex-plugin": "node scripts/uninstall-codex.mjs"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
     "@types/node": "^20.11.0",
     "esbuild": "^0.28.0",
     "tsx": "^4.19.0",

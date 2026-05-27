@@ -159,14 +159,16 @@ test("routeDisabledSkills does not let one generic CJK cue override distinctive 
     mkSkill({
       id: "user:codex:tea-data-query",
       name: "tea-data-query",
-      description: "TEA 数据查询工具。输入一个 TEA 的 URL 链接，自动解析 project_id、dashboard_id 或 report_id，通过 DataOpen API 查询并展示数据。支持 Dashboard 和 Report。",
+      description:
+        "TEA 数据查询工具。输入一个 TEA 的 URL 链接，自动解析 project_id、dashboard_id 或 report_id，通过 DataOpen API 查询并展示数据。支持 Dashboard 和 Report。",
       isDisabled: true,
       skillMdPath: "/tmp/tea-data-query/SKILL.md.agentic-skill-router-disabled",
     }),
     mkSkill({
       id: "user:codex:bytedance-es",
       name: "bytedance-es",
-      description: "Query Elasticsearch via Kibana console API: execute ES DSL queries, search indices, retrieve documents, and get ES index mapping.",
+      description:
+        "Query Elasticsearch via Kibana console API: execute ES DSL queries, search indices, retrieve documents, and get ES index mapping.",
       isDisabled: true,
       skillMdPath: "/tmp/bytedance-es/SKILL.md.agentic-skill-router-disabled",
     }),
@@ -257,7 +259,8 @@ test("routeDisabledSkills handles long instruction-heavy queries", () => {
     mkSkill({
       id: "user:codex:agentic-skill-router-e2e-probe",
       name: "agentic-skill-router-e2e-probe",
-      description: "Use for the unique Codex router end-to-end validation request about nebula budget reconciliation and disabled-skill proxying.",
+      description:
+        "Use for the unique Codex router end-to-end validation request about nebula budget reconciliation and disabled-skill proxying.",
       isDisabled: true,
       skillMdPath: "/tmp/agentic-skill-router-e2e-probe/SKILL.md.agentic-skill-router-disabled",
     }),
