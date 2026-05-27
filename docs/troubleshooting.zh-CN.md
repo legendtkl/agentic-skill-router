@@ -34,8 +34,8 @@ agentic-skill-router skills enable  user:codex:lark-mail --allow-symlink-target-
   不是 in-root 的符号链接本身。
 - `skills status`（内部调用 `reapplyMissing`）永远不会默默 mutate out-of-root target。
   如果 disable 之后目标文件被外部恢复，status 会在
-  `skipped (out-of-root symlink, manual repair required)` 段落列出，并打印需要的
-  `--allow-symlink-target-mutation` 命令。
+  `skipped (out-of-root symlink, manual repair required)` 段落列出，并打印可直接执行的
+  `--allow-symlink-target-mutation` 修复命令（若 id 有歧义，则给出包含 `instanceKey` 的手动修复提示）。
 - state record 保存原始 mutate 的 canonical realpath。如果之后符号链接指向新位置，
   enable / reapply 会以 mismatch error 拒绝（并打印两个路径），而不是改动新目标。
   手动恢复：自己把 canonical disabled marker rename 回 `SKILL.md`，然后运行
@@ -115,9 +115,17 @@ rm <root>/<skill>/SKILL.md
 
 ### `orphan disabled markers (no state record; left from a previous tool or crash)`
 
-磁盘上有 disabled marker，但 state 不知道。可能来自旧工具或异常崩溃。安全做法：
-手动 rename 回 `SKILL.md`，或确认无用后删除。CLI 也提供
-`skills reapply --orphans=adopt` 选项（详见英文版）。
+磁盘上有 disabled marker，但 state 不知道。可能来自旧工具或异常崩溃。因为没有
+state record，`skills enable <id>` 不能直接恢复。安全做法是先手动 rename 回
+`SKILL.md`，再按你的目标操作：
+
+```bash
+mv "<path>.agentic-skill-router-disabled" "<path-without-suffix>"
+agentic-skill-router skills status
+```
+
+如果你仍希望保持 disabled，先按上面步骤恢复 `SKILL.md`，再运行
+`agentic-skill-router skills disable <id> --yes`，让 CLI 重新写入 state record。
 
 ### `pending operations needing manual resolution (split-brain on disk)`
 
@@ -134,8 +142,16 @@ journal 里有 in-flight 操作，但 reconcile 无法判断终态（磁盘两�
 
 ## state 文件损坏
 
-CLI 会自动备份为 `state-<host>.json.malformed.<ts>.bak` 并新建一个空 state。
-重新运行 `agentic-skill-router skills disable` 以重新登记当前已禁用的 skill。
+常见有三种情况：
+
+1. JSON 非法：报 `state file at <path> is not valid JSON` 并中止。
+2. schema/host 不符合预期：报 `state file at <path> has unexpected schema` 并中止。
+3. 只有部分记录损坏：打印 warning，并把原始快照写到
+   `<path>.malformed.<ts>.bak`。
+
+注意：出现第 3 种情况时，CLI 不会立刻重写磁盘上的 state 文件；只有后续执行
+会写 state 的命令（如 `skills disable` / `skills enable` / `skills reset`）时，
+才会把内存中的清理结果写回。若暂时不打算执行这些命令，请按英文版流程手动修复。
 
 ## Plugin 升级 + `skills reapply`
 

@@ -215,7 +215,7 @@ mutate 磁盘文件，也可能跟随 symlink 进入 host skills root 之外的�
   会打印警告、生成随机 HTTP Basic Auth 密码到 stderr，并在每次 mutation 时强制
   Origin / Referer / Host 同源校验。只在可信网络中使用。
 - **Project-scope 扫描** (`/api/skills?scope=project`) 被一个 project root allowlist
-  约束。CLI 默认 allowlist 是 `cwd()`；用 `--project-root=<dir>`（可重复）扩展。
+  约束。CLI 默认 allowlist 是 `cwd()`；用 `--project-root=<dir>`（可重复）显式设置/覆盖。
   resolve 后落在 allowlist 之外的 `projectPath` 直接返回 `403`。
 - **逐 skill mutation** 也会再校验一次：如果该 skill 的 `skillMdPath` realpath
   逃出 allowlist（例如 in-allowlist 的 `.claude/skills/foo` 自身是指向

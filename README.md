@@ -307,7 +307,7 @@ intentionally conservative.
   same-origin checks on every mutation. Only use this on trusted networks.
 - **Project-scope scans** (`/api/skills?scope=project`) are bounded by an
   allowlist of project roots. The CLI defaults the allowlist to `cwd()`; pass
-  `--project-root=<dir>` (repeatable) to extend it. A request whose
+  `--project-root=<dir>` (repeatable) to set/override it. A request whose
   `projectPath` resolves outside every allowlisted root is rejected with `403`.
 - **Per-skill mutations** are additionally validated: if the skill's
   `skillMdPath` realpath escapes the allowlist (e.g. an in-allowlist

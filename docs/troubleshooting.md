@@ -4,8 +4,9 @@ This guide explains every section that `agentic-skill-router skills status` can 
 and how to recover from each one. The text quoted here matches the CLI output
 verbatim so you can `grep` your terminal scrollback or screenshots.
 
-> A Chinese version of this guide is planned; until then this English doc is
-> authoritative.
+> A Chinese version is available at
+> [`docs/troubleshooting.zh-CN.md`](troubleshooting.zh-CN.md); if there is a
+> mismatch, this English doc is authoritative.
 
 ## Safety first
 
@@ -45,7 +46,8 @@ agentic-skill-router skills enable  user:codex:lark-mail --allow-symlink-target-
   silently mutate out-of-root targets. If a target was re-created externally
   after you disabled it, status reports it under
   `skipped (out-of-root symlink, manual repair required)` with the exact
-  `--allow-symlink-target-mutation` command to re-apply.
+  `--allow-symlink-target-mutation` command to re-apply (or, for ambiguous ids,
+  a manual repair hint naming the specific `instanceKey`).
 - The state record stores the canonical realpath of the originally-mutated
   file. If the symlink is later retargeted to a different location, enable /
   reapply refuse with a mismatch error naming both paths instead of touching
