@@ -366,6 +366,15 @@ names, product names, umbrella vs specific skills, and multi-domain keyword
 piles. The script is informational — failing metrics do not fail the command,
 and `eval:route` is intentionally not wired into `npm test`.
 
+The companion `tests/route-smoke.test.ts` file is the CI gate that catches
+obvious routing regressions. It hand-picks a handful of high-confidence cases
+from the same fixture (Chinese query, English query, API name, product name,
+umbrella vs specific) and asserts each one selects the expected skill id via
+the same `routeDisabledSkillsAuto` entry point the full eval uses. It runs as
+part of `npm test`, so a regression that flips any of those selections fails
+CI. Use `npm run eval:route` to investigate borderline cases or score the full
+fixture; use the smoke test as the deterministic backstop.
+
 `routedSource` reports which source produced each hit. In `--mode=auto` it
 reflects `diagnostics.auto.selectedSource` (metadata vs DCI-after-escalation);
 in `--mode=metadata|lexical|dci` every hit is attributed to that mode by
