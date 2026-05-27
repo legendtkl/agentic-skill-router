@@ -565,12 +565,15 @@ test("DCI candidate score down-weights generic-only queries below medium confide
   }
 });
 
-test("DCI search lifts the distinctive-cap when a short-alias query fully covers a candidate (#150)", async () => {
+test("DCI search lifts the distinctive-cap for a single short alias hitting id/name (#150)", async () => {
   // After PR #149, every <=2-char Latin term is "generic" in `dci` mode so
   // `distinctiveHit` was zero for a single-token alias query like `"ai"` —
   // even when the alias hit the skill name. The cap clamped the score
-  // below 0.5, dropping the route to "low" confidence. The fix lets a
-  // full-coverage match keep its raw score when every query term hits.
+  // below 0.5, dropping the route to "low" confidence. The fix bypasses
+  // the cap only for the targeted short-alias case: a single short Latin
+  // token that lands on a structured identifier field (`id` or `name`).
+  // The Codex P1 follow-up tightened this so multi-term generic queries
+  // (e.g. `"api config"`) cannot piggyback on the bypass.
   const corpus = await makeCorpus(0);
   try {
     const ai = await writeCorpusSkill(corpus.root, {
@@ -586,7 +589,7 @@ test("DCI search lifts the distinctive-cap when a short-alias query fully covers
     assert.equal(search.matches[0]?.id, "user:codex:ai");
     assert.ok(
       (search.matches[0]?.score ?? 0) >= 0.5,
-      `expected full-coverage short alias score >= 0.5, got ${search.matches[0]?.score}`,
+      `expected short alias id/name hit score >= 0.5, got ${search.matches[0]?.score}`,
     );
 
     const route = await dciRouteDisabledSkills([ai], "ai", { topK: 1 });
@@ -594,12 +597,86 @@ test("DCI search lifts the distinctive-cap when a short-alias query fully covers
 
     // Partial-coverage short-only queries (where not every query term hits)
     // must STILL be capped: `"ai db"` against the `ai` skill matches only
-    // `ai`, so the cap should keep it below 0.5.
+    // `ai`, but it is a 2-term query so the bypass does not apply.
     const partial = await dciSearchDisabledSkills([ai], "ai db", { topK: 1 });
     assert.equal(partial.matches.length, 1);
     assert.ok(
       (partial.matches[0]?.score ?? 1) < 0.5,
       `expected partial-coverage short alias score < 0.5, got ${partial.matches[0]?.score}`,
+    );
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI search keeps the distinctive-cap for short alias hitting only the body (#150 P1)", async () => {
+  // Codex P1 regression guard: a short generic that hits only the body
+  // (not id/name) must still be capped. The bypass is reserved for the
+  // structured-identifier case so body-substring noise cannot promote a
+  // mismatched skill on a generic alias.
+  const corpus = await makeCorpus(0);
+  try {
+    const skill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:unrelated-helper",
+      name: "unrelated-helper",
+      description: "Unrelated helper skill",
+      body: "This skill happens to mention ai somewhere in its body text.",
+      isDisabled: true,
+    });
+
+    const search = await dciSearchDisabledSkills([skill], "ai", { topK: 1 });
+    assert.equal(search.matches.length, 1);
+    assert.ok(
+      (search.matches[0]?.score ?? 1) < 0.5,
+      `expected body-only short alias score < 0.5, got ${search.matches[0]?.score}`,
+    );
+
+    const route = await dciRouteDisabledSkills([skill], "ai", { topK: 1 });
+    assert.equal(route.matches[0]?.confidence, "low");
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
+test("DCI search caps multi-term generic-only queries with full coverage (#150 P1)", async () => {
+  // Codex P1 regression guard: `"api config"` against a skill containing
+  // both terms is full-coverage AND distinctive-zero (both terms are on
+  // the metadata stop list). The pre-fix full-coverage bypass would have
+  // let this skill score up to 1.0, breaking the #110 generic-only floor.
+  // Option A's bypass is restricted to single-term short-alias queries
+  // hitting id/name, so this case stays capped.
+  const corpus = await makeCorpus(0);
+  try {
+    const skill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:generic-pair-probe",
+      name: "generic-pair-probe",
+      description: "Helper skill",
+      // Both generic terms appear in the body so full-coverage is reached.
+      body: "Use the api and config sections to set up the integration.",
+      isDisabled: true,
+    });
+
+    const search = await dciSearchDisabledSkills([skill], "api config", { topK: 1 });
+    assert.equal(search.matches.length, 1);
+    assert.ok(
+      (search.matches[0]?.score ?? 1) < 0.5,
+      `expected generic-pair score < 0.5, got ${search.matches[0]?.score}`,
+    );
+
+    // `"the and"`: both tokens are stop words in `dci` mode, both hit the
+    // body, full coverage — the cap must hold.
+    const stopSkill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:stop-pair-probe",
+      name: "stop-pair-probe",
+      description: "Helper",
+      body: "This sentence contains the and tokens but nothing distinctive.",
+      isDisabled: true,
+    });
+    const stopSearch = await dciSearchDisabledSkills([stopSkill], "the and", { topK: 1 });
+    assert.equal(stopSearch.matches.length, 1);
+    assert.ok(
+      (stopSearch.matches[0]?.score ?? 1) < 0.5,
+      `expected stop-word-pair score < 0.5, got ${stopSearch.matches[0]?.score}`,
     );
   } finally {
     await corpus.cleanup();

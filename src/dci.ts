@@ -288,6 +288,12 @@ export async function dciSearchDisabledSkills(
       let weightedHit = 0;
       let weightedQueryWeight = 0;
       let distinctiveHit = 0;
+      // Per-field hit map: which structured sub-field each matched term came
+      // from. Threaded into `scoreSearchMatch` so the short-alias cap-bypass
+      // (#150) can require the alias to land on `id` or `name`, not just
+      // anywhere in the body. Built from the same `locateTermField` lookup
+      // that drives evidence attribution (#151) so the two stay in sync.
+      const fieldHits: FieldHitMap = { id: new Set(), name: new Set(), description: new Set(), body: new Set() };
       for (const term of queryTerms) {
         const generic = isGenericTerm(term, "dci");
         const weight = generic ? GENERIC_TERM_WEIGHT : 1;
@@ -296,6 +302,8 @@ export async function dciSearchDisabledSkills(
           hitCount++;
           weightedHit += weight;
           if (!generic) distinctiveHit++;
+          const located = locateTermField(term, haystackFields.fields);
+          if (located) fieldHits[located.field].add(term);
         }
       }
       const phraseMatched = queryPhrase.length >= 4 && haystackPhrase.includes(queryPhrase);
@@ -304,8 +312,9 @@ export async function dciSearchDisabledSkills(
         weightedQueryWeight,
         phraseMatched,
         distinctiveHit,
-        queryTerms.size,
+        queryTerms,
         hitCount,
+        fieldHits,
       );
       if (score <= 0) continue;
       const snippets = snippetsForTerms(item.lines, queryTerms, queryPhrase, maxSnippets);
@@ -1223,31 +1232,60 @@ function locateTermField(
  * just because the haystack happens to contain those same generic tokens.
  *
  * When no distinctive term hits, the result is normally clamped strictly
- * below the medium-confidence threshold (0.5). The clamp is intentionally
- * skipped when the candidate covers EVERY query term (full coverage), so a
- * short distinctive alias query like `"ai"` or `"db"` — which `isGenericTerm`
- * treats as generic in `dci` mode because all <=2-character Latin tokens
- * are generic there (#150) — can still reach medium/high confidence when
- * the haystack genuinely matches the whole query. Partial-coverage matches
- * (some query terms unmatched) still hit the cap because the only matched
- * tokens are stop fragments.
+ * below the medium-confidence threshold (0.5). The clamp is bypassed only
+ * for the narrow short-alias case (#150): a single-term query whose only
+ * term is a short Latin token (`isGenericTerm` treats every <=2-char Latin
+ * token as generic in `dci` mode) AND that term lands on a structured
+ * identifier field (`id` or `name`), not just a body substring. A short
+ * generic that hits only the body — or a multi-term generic query like
+ * `"api config"` — still hits the cap so the generic-only floor from
+ * issue #110 is preserved.
  */
 function scoreSearchMatch(
   weightedHit: number,
   weightedQueryWeight: number,
   phraseMatched: boolean,
   distinctiveHit: number,
-  queryTermCount: number,
+  queryTerms: Set<string>,
   hitCount: number,
+  fieldHits: FieldHitMap,
 ): number {
   if (weightedQueryWeight <= 0) return phraseMatched ? 1 : 0;
   const termScore = weightedHit / weightedQueryWeight;
   const raw = Math.min(1, termScore + (phraseMatched ? 0.35 : 0));
   if (distinctiveHit === 0) {
-    const fullCoverage = queryTermCount > 0 && hitCount >= queryTermCount;
-    if (!fullCoverage) return Math.min(raw, 0.49);
+    if (!isShortAliasIdentifierHit(queryTerms, hitCount, fieldHits)) {
+      return Math.min(raw, 0.49);
+    }
   }
   return raw;
+}
+
+interface FieldHitMap {
+  id: Set<string>;
+  name: Set<string>;
+  description: Set<string>;
+  body: Set<string>;
+}
+
+/**
+ * True iff the query is a single short Latin token that hit on the skill's
+ * `id` or `name`. This is the only case the distinctive-cap is allowed to
+ * bypass (#150) — see {@link scoreSearchMatch}.
+ */
+function isShortAliasIdentifierHit(
+  queryTerms: Set<string>,
+  hitCount: number,
+  fieldHits: FieldHitMap,
+): boolean {
+  if (queryTerms.size !== 1 || hitCount !== 1) return false;
+  const [only] = queryTerms;
+  if (!only) return false;
+  // Latin-only, <=3 characters. `isShortLatinTerm`-style check kept inline so
+  // the dependency graph stays narrow and the condition reads alongside the
+  // bypass rule it gates.
+  if (only.length > 3 || !/^[a-z0-9]+$/.test(only)) return false;
+  return fieldHits.id.has(only) || fieldHits.name.has(only);
 }
 
 // Score per matched line, then return the top N by score (desc) with stable
