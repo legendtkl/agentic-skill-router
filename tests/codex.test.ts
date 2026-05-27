@@ -1372,3 +1372,64 @@ test("CodexHost memoizes plugin marketplace enumeration within a single host", a
     await fake.cleanup();
   }
 });
+
+test("CodexHost memo invalidates when a new plugin appears under an existing marketplace", async () => {
+  // Regression for the P1 follow-up on issue #113: a plugin installed under
+  // an existing marketplace directory (e.g. `openai-curated/calendar/1.2.3`
+  // when `openai-curated/gmail/...` already exists) only bumps THAT
+  // marketplace dir's mtime, not the cache root's. The composite cache key
+  // must fold each marketplace child's mtime+size in so we detect the new
+  // plugin on the next listSkills() call.
+  const fake = await makeFakeCodexUser();
+  try {
+    const host = new CodexHost({
+      codexHome: fake.codexHome,
+      agentsHome: fake.agentsHome,
+      cwd: fake.cwd,
+      adminSkillsRoot: fake.adminSkillsRoot,
+    });
+
+    const first = await host.listSkills();
+    assert.ok(
+      first.some((s) => s.id === "plugin:gmail@openai-curated:gmail"),
+      "expected the prefab gmail plugin to be present on the first call",
+    );
+    assert.equal(
+      first.some((s) => s.id === "plugin:calendar@openai-curated:calendar"),
+      false,
+      "calendar plugin should not exist yet",
+    );
+
+    // Drop the new plugin under the SAME `openai-curated` marketplace that
+    // already exists. The cache root's own mtime does not change here on a
+    // typical filesystem (we only created a deeper child), so the per-
+    // marketplace stat is what must carry the signal.
+    const newPluginRoot = join(
+      fake.codexHome,
+      "plugins",
+      "cache",
+      "openai-curated",
+      "calendar",
+      "1.2.3",
+    );
+    await writeCodexPluginInstall(newPluginRoot, {
+      name: "calendar",
+      version: "1.2.3",
+      skillName: "calendar",
+      skillDescription: "Calendar workflows added under an existing marketplace",
+    });
+
+    const second = await host.listSkills();
+    const newCalendar = second.find((s) => s.id === "plugin:calendar@openai-curated:calendar");
+    assert.ok(
+      newCalendar,
+      "memo must invalidate when a marketplace child's mtime changes from a new plugin install",
+    );
+    assert.equal(
+      newCalendar!.description,
+      "Calendar workflows added under an existing marketplace",
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});

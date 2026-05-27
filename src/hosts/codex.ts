@@ -50,15 +50,15 @@ export class CodexHost implements Host {
   // Per-instance memo for installedPlugins(). The Codex host is constructed
   // once per CLI invocation, so this is effectively a per-invocation cache.
   // The web UI keeps the host alive across requests; the cacheRootKey below
-  // (mtime + size of the marketplace cache root) lets us re-detect when a
-  // new plugin or marketplace directory appears at the top level.
+  // folds in the marketplace cache root's mtime+size AND each immediate
+  // marketplace child's mtime+size, so we re-detect both top-level changes
+  // (new marketplace dir) and new plugins installed under an existing
+  // marketplace dir (which only bumps the marketplace child's mtime, not
+  // the cache root's).
   //
-  // Note: this does NOT detect a new *version* being dropped under an
-  // existing `<marketplace>/<plugin>/` dir, because that only changes that
-  // plugin dir's mtime, not the cache root's. In the common case the readdir
-  // is tiny and the value is in not duplicating work across multiple
-  // host.listSkills() calls within a single CLI invocation. Plugin install
-  // flows (which add new marketplace or plugin dirs) ARE detected.
+  // Cost: one stat for the cache root plus one per marketplace per call.
+  // Typical setups have 1-3 marketplaces so this stays well under the cost
+  // of the full readdir tree we used to walk on every listSkills() call.
   private installedPluginsCache: InstalledPluginsCacheEntry | null = null;
 
   constructor(opts: CodexHostOptions = {}) {
@@ -186,7 +186,7 @@ export class CodexHost implements Host {
 
   private async installedPlugins(): Promise<CodexPluginInstall[]> {
     const cacheRoot = join(this.codexHome, "plugins", "cache");
-    const cacheRootKey = await statCacheKey(cacheRoot);
+    const cacheRootKey = await computeMarketplaceCacheKey(cacheRoot);
     if (this.installedPluginsCache && this.installedPluginsCache.cacheRootKey === cacheRootKey) {
       return this.installedPluginsCache.installs;
     }
@@ -262,16 +262,42 @@ function isNewerCodexPluginInstall(candidate: CodexPluginInstall, current: Codex
   return candidate.installPath > current.installPath;
 }
 
-async function statCacheKey(path: string): Promise<string> {
+async function computeMarketplaceCacheKey(cacheRoot: string): Promise<string> {
+  let rootStat;
   try {
-    const st = await stat(path);
-    // mtimeMs covers add/remove of direct children; size guards against
-    // filesystems that round mtime coarsely while children change.
-    return `present:${st.mtimeMs}:${st.size}`;
+    rootStat = await stat(cacheRoot);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return "absent";
     throw err;
   }
+  // Fold each immediate marketplace child's mtime+size into the key. A new
+  // plugin installed under an existing marketplace dir only changes that
+  // marketplace dir's mtime — not the cache root's — so stat'ing the root
+  // alone would miss the change. One extra stat per marketplace per call
+  // (typically 1-3) is still far cheaper than re-walking the whole tree.
+  let entries;
+  try {
+    entries = await readdir(cacheRoot, { withFileTypes: true });
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return "absent";
+    throw err;
+  }
+  const marketplaceParts: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    const childPath = join(cacheRoot, entry.name);
+    try {
+      const childStat = await stat(childPath);
+      marketplaceParts.push(`${entry.name}:${childStat.mtimeMs}:${childStat.size}`);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw err;
+    }
+  }
+  // Sort so the key is order-independent across filesystems with different
+  // readdir orderings.
+  marketplaceParts.sort();
+  return `present:${rootStat.mtimeMs}:${rootStat.size}|${marketplaceParts.join(",")}`;
 }
 
 async function readCodexPluginManifest(path: string): Promise<CodexPluginManifest | null> {
