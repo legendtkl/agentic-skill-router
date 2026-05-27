@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -13,6 +13,7 @@ const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(__dirname);
 const CLI_PATH = join(REPO_ROOT, "src", "cli.ts");
+const DISABLED_SUFFIX = ".agentic-skill-router-disabled";
 
 async function assertFileAbsent(path: string): Promise<void> {
   try {
@@ -24,6 +25,11 @@ async function assertFileAbsent(path: string): Promise<void> {
     throw err;
   }
   assert.fail(`expected file to be absent: ${path}`);
+}
+
+async function canonicalSkillMdForm(path: string): Promise<string> {
+  const resolved = await realpath(path);
+  return resolved.endsWith(DISABLED_SUFFIX) ? resolved.slice(0, -DISABLED_SUFFIX.length) : resolved;
 }
 
 async function makeFakeCodexUser(): Promise<{
@@ -421,13 +427,13 @@ test("skills disable on out-of-root symlink with --allow-symlink-target-mutation
     );
     await symlink(externalSkillDir, join(fake.codexHome, "skills", "linked-skill"));
 
+    const realSkillPath = await realpath(join(externalSkillDir, "SKILL.md"));
     const disabled = await runCli(
       ["skills", "disable", "user:codex:linked-skill", "--yes", "--allow-symlink-target-mutation"],
       fake.env,
     );
     assert.match(disabled.stderr, /warning: user:codex:linked-skill is a symlink/);
     const linkedSkillPath = join(fake.codexHome, "skills", "linked-skill", "SKILL.md");
-    const realSkillPath = join(externalSkillDir, "SKILL.md");
     assert.ok(
       disabled.stderr.includes(`${linkedSkillPath} -> ${realSkillPath}`),
       `disable warning should identify linked target path; got: ${disabled.stderr}`,
@@ -447,13 +453,13 @@ test("skills disable on out-of-root symlink with --allow-symlink-target-mutation
     assert.match(enableStderr, /refusing to enable user:codex:linked-skill/);
     assert.match(enableStderr, /--allow-symlink-target-mutation/);
 
+    const linkedDisabledPath = join(fake.codexHome, "skills", "linked-skill", "SKILL.md.agentic-skill-router-disabled");
+    const realDisabledPath = await realpath(join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled"));
     const enabled = await runCli(
       ["skills", "enable", "user:codex:linked-skill", "--allow-symlink-target-mutation"],
       fake.env,
     );
     assert.match(enabled.stderr, /warning: user:codex:linked-skill is a symlink/);
-    const linkedDisabledPath = join(fake.codexHome, "skills", "linked-skill", "SKILL.md.agentic-skill-router-disabled");
-    const realDisabledPath = join(externalSkillDir, "SKILL.md.agentic-skill-router-disabled");
     assert.ok(
       enabled.stderr.includes(`${linkedDisabledPath} -> ${realDisabledPath}`),
       `enable warning should identify linked target path; got: ${enabled.stderr}`,
@@ -1386,6 +1392,7 @@ test("skills enable refuses state-only out-of-root record without --allow-symlin
     const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
 
     const statePath = join(fake.stateDir, "state-codex.json");
+    const canonicalExternalLive = await canonicalSkillMdForm(externalDisabled);
     // Populate `discoveredViaSymlink` + `canonicalSkillMdPath` so the record
     // represents a legitimate symlink-targeted disable that THIS CLI wrote
     // (post-#97 / PR #132 shape). The flag's bypass is now restricted to
@@ -1405,9 +1412,9 @@ test("skills enable refuses state-only out-of-root record without --allow-symlin
           reason: "manual",
           discoveredViaSymlink: true,
           // canonicalSkillMdPath is the SKILL.md-form realpath captured at
-          // disable time. `externalLive` is the canonical live path; the
-          // marker-suffix form lives at `externalDisabled` on disk today.
-          canonicalSkillMdPath: externalLive,
+          // disable time. It is derived from the disabled marker on disk and
+          // normalized back to SKILL.md form.
+          canonicalSkillMdPath: canonicalExternalLive,
         },
       ],
     };
@@ -1874,6 +1881,7 @@ test("skills enable succeeds with flag when discoveredViaSymlink + canonical mat
     const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
 
     const statePath = join(fake.stateDir, "state-codex.json");
+    const canonicalExternalLive = await canonicalSkillMdForm(externalDisabled);
     const state = {
       schema: 1,
       host: "codex",
@@ -1887,7 +1895,7 @@ test("skills enable succeeds with flag when discoveredViaSymlink + canonical mat
           disabledAt: new Date().toISOString(),
           reason: "manual",
           discoveredViaSymlink: true,
-          canonicalSkillMdPath: externalLive,
+          canonicalSkillMdPath: canonicalExternalLive,
         },
       ],
     };
@@ -2017,6 +2025,7 @@ test("skills enable cleans state-only record for already-enabled out-of-root ski
     // realistic post-disable record carries them.
     const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
     const statePath = join(fake.stateDir, "state-codex.json");
+    const canonicalExternalLive = await canonicalSkillMdForm(externalLive);
     const state = {
       schema: 1,
       host: "codex",
@@ -2030,7 +2039,7 @@ test("skills enable cleans state-only record for already-enabled out-of-root ski
           disabledAt: new Date().toISOString(),
           reason: "manual",
           discoveredViaSymlink: true,
-          canonicalSkillMdPath: externalLive,
+          canonicalSkillMdPath: canonicalExternalLive,
         },
       ],
     };
@@ -2089,6 +2098,7 @@ test("skills enable still refuses out-of-root record when disabled marker actual
 
     const recordedDisabledPath = join(codexInRootDir, "SKILL.md.agentic-skill-router-disabled");
     const statePath = join(fake.stateDir, "state-codex.json");
+    const canonicalExternalLive = await canonicalSkillMdForm(externalDisabled);
     const state = {
       schema: 1,
       host: "codex",
@@ -2102,7 +2112,7 @@ test("skills enable still refuses out-of-root record when disabled marker actual
           disabledAt: new Date().toISOString(),
           reason: "manual",
           discoveredViaSymlink: true,
-          canonicalSkillMdPath: externalLive,
+          canonicalSkillMdPath: canonicalExternalLive,
         },
       ],
     };
