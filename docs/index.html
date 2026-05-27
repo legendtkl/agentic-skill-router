@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="agentic-skill-router 项目介绍：no-embedding 的 agentic Agent Skills 路由、技能管理、安全恢复与批量实验结果。">
+  <meta name="description" content="agentic-skill-router: a no-embedding agent-facing routing skill for slimming, restoring, and retrieving Agent Skills on demand.">
   <link rel="icon" type="image/png" href="assets/agentic-skill-router-logo.png?v=2">
   <link rel="shortcut icon" type="image/png" href="assets/agentic-skill-router-logo.png?v=2">
   <link rel="apple-touch-icon" href="assets/agentic-skill-router-logo.png?v=2">
@@ -274,7 +274,7 @@
 
     .metric-strip {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
       margin: 0 0 28px;
     }
@@ -376,25 +376,43 @@
     .step {
       position: relative;
       min-width: 0;
-      min-height: 132px;
-      padding: 16px;
+      min-height: 146px;
+      padding: 18px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: var(--field);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.26)),
+        var(--field);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+      overflow: hidden;
+    }
+
+    .step::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), transparent 72%);
+      opacity: 0.72;
     }
 
     .step-num {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 28px;
+      min-width: 36px;
       height: 28px;
-      margin-bottom: 12px;
-      border-radius: 8px;
+      margin-bottom: 14px;
+      padding: 0 10px;
+      border: 1px solid rgba(31, 122, 90, 0.18);
+      border-radius: 999px;
       color: var(--accent);
-      background: var(--accent-soft);
+      background: rgba(31, 122, 90, 0.08);
       font-weight: 760;
-      font-size: 13px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
     }
 
     .step b {
@@ -573,9 +591,17 @@
     }
 
     :root[data-theme="dark"] .feature,
+    :root[data-theme="dark"] .step,
     :root[data-theme="dark"] table,
     :root[data-theme="dark"] .resource {
       background: rgba(255, 255, 255, 0.04);
+    }
+
+    :root[data-theme="dark"] .step {
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
+        var(--field);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
 
     :root[data-theme="dark"] .callout p { color: rgba(244, 243, 238, 0.78); }
@@ -607,9 +633,17 @@
       }
 
       :root:not([data-theme="light"]) .feature,
+      :root:not([data-theme="light"]) .step,
       :root:not([data-theme="light"]) table,
       :root:not([data-theme="light"]) .resource {
         background: rgba(255, 255, 255, 0.04);
+      }
+
+      :root:not([data-theme="light"]) .step {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
+          var(--field);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
 
       :root:not([data-theme="light"]) .callout p { color: rgba(244, 243, 238, 0.78); }
@@ -709,7 +743,7 @@
 </head>
 <body>
   <main class="shell">
-    <nav class="nav" aria-label="主导航">
+    <nav class="nav" aria-label="Main navigation">
       <a class="brand" href="#">
         <img src="assets/agentic-skill-router-logo.png" alt="">
         <span>agentic-skill-router</span>
@@ -717,15 +751,15 @@
       <div class="nav-end">
         <div class="nav-links">
           <a href="#quick-start" data-i18n="nav.quick">Quick Start</a>
-          <a href="#features" data-i18n="nav.features">功能</a>
-          <a href="#workflow" data-i18n="nav.workflow">机制</a>
-          <a href="#experiments" data-i18n="nav.experiments">实验</a>
-          <a href="#resources" data-i18n="nav.resources">资源</a>
+          <a href="#features" data-i18n="nav.features">Features</a>
+          <a href="#workflow" data-i18n="nav.workflow">Workflow</a>
+          <a href="#experiments" data-i18n="nav.experiments">Experiments</a>
+          <a href="#resources" data-i18n="nav.resources">Resources</a>
         </div>
         <div class="nav-controls" aria-label="Page controls">
           <div class="lang-switch" aria-label="Language">
-            <button type="button" data-lang="zh" aria-pressed="true">中</button>
-            <button type="button" data-lang="en" aria-pressed="false">EN</button>
+            <button type="button" data-lang="zh" aria-pressed="false">中</button>
+            <button class="active" type="button" data-lang="en" aria-pressed="true">EN</button>
           </div>
           <button class="icon-button theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
             <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -751,24 +785,24 @@
       <div>
         <h1>agentic-skill-router</h1>
         <p class="lead">
-          不依赖 embedding 或向量库，用 agentic search 直接检索本地 skill 语料；
-          把不常用的 Agent Skills 移出常驻上下文，在真正需要时再路由找回。
+          A no-embedding, agent-facing routing skill that moves rarely used Agent Skills
+          out of always-on context, then retrieves the right skill instructions on demand.
         </p>
         <div class="actions">
           <a class="button primary" href="https://github.com/legendtkl/agentic-skill-router">GitHub</a>
           <a class="button" href="#quick-start">Quick Start</a>
-          <a class="button" href="reports/report-all-experiments.html">实验报告</a>
+          <a class="button" href="reports/report-all-experiments.html">Experiment report</a>
         </div>
       </div>
 
-      <aside class="terminal" aria-label="安装命令">
+      <aside class="terminal" aria-label="Install as a skill commands">
         <div class="terminal-head">
-          <span>install</span>
+          <span>install as a skill</span>
           <span>Node.js 20+</span>
         </div>
         <pre class="terminal-body"><span class="prompt">$</span> npm install -g agentic-skill-router
 <span class="prompt">$</span> agentic-skill-router init
-<span class="output">select host: codex or claude-code
+<span class="output">select agent: codex or claude-code
 select scope: project or global</span>
 
 <span class="prompt">$</span> agentic-skill-router skills suggest --json
@@ -776,26 +810,18 @@ select scope: project or global</span>
       </aside>
     </header>
 
-    <div class="metric-strip" aria-label="项目关键数字">
+    <div class="metric-strip" aria-label="Project highlights">
       <div class="metric">
-        <strong>2 hosts</strong>
-        <span>覆盖 Codex 与 Claude Code，支持项目级和全局级技能目录。</span>
+        <strong>Agent support</strong>
+        <span>Runs as a project or global routing skill for Codex and Claude Code agents.</span>
       </div>
       <div class="metric">
-        <strong>1,152</strong>
-        <span>最新批量实验单元，来自 2026-05-26 的完整重跑。</span>
+        <strong>1,152 units</strong>
+        <span>Batch evidence combines 150 anonymized skills, 24 expert queries, 16 variants, and 48 aggregate rows.</span>
       </div>
       <div class="metric">
-        <strong>150</strong>
-        <span>匿名化 SkillRouter 技能语料，包含针对性 distractor。</span>
-      </div>
-      <div class="metric">
-        <strong>24/24</strong>
-        <span>Codex 最优路由变体在专家查询集上的命中结果。</span>
-      </div>
-      <div class="metric">
-        <strong>0</strong>
-        <span>最新完整重跑中的 timeout 与 API error 数量。</span>
+        <strong>Bash + Tool</strong>
+        <span>Strategy experiments compare bash-based agentic retrieval, tool-wrapped retrieval, and catalog baselines.</span>
       </div>
     </div>
 
@@ -803,130 +829,134 @@ select scope: project or global</span>
       <div class="section-head">
         <h2>Quick Start</h2>
         <p class="section-copy">
-          常用安装和初始化路径直接放在页面里；完整参数仍以 README 和 CLI help 为准。
+          Install the CLI, then initialize agentic-skill-router as an agent-facing routing skill.
+          The README and CLI help remain the source of truth for the full option set.
         </p>
       </div>
 
       <div class="feature-grid">
         <article class="feature">
-          <b>全局安装</b>
+          <b>Install as a skill</b>
           <pre class="code-panel">npm install -g agentic-skill-router
 agentic-skill-router init</pre>
-          <p>推荐先全局安装，让生成的 skill 能引用稳定的 CLI 路径。</p>
+          <p>Install the CLI, then write the routing skill entry that agents can discover and invoke.</p>
         </article>
         <article class="feature">
-          <b>Codex 项目级入口</b>
+          <b>Codex project skill</b>
           <pre class="code-panel">agentic-skill-router init codex project
 agentic-skill-router skills list</pre>
-          <p>在当前项目写入 Codex 可发现的路由 skill，不影响其他项目。</p>
+          <p>Add a Codex-discoverable routing skill to the current project without affecting other workspaces.</p>
         </article>
         <article class="feature">
-          <b>Claude Code 项目级入口</b>
+          <b>Claude Code project skill</b>
           <pre class="code-panel">agentic-skill-router init claude-code project
 agentic-skill-router skills suggest</pre>
-          <p>初始化时会维护带 fence 的 CLAUDE.md routing block，重复运行保持幂等。</p>
+          <p>Maintain a fenced CLAUDE.md routing block and keep initialization idempotent across reruns.</p>
         </article>
         <article class="feature">
-          <b>本地 Web 管理页</b>
+          <b>Local skill manager</b>
           <pre class="code-panel">agentic-skill-router skills web
 # http://127.0.0.1:8787</pre>
-          <p>用于浏览、筛选、禁用和恢复本机技能；默认只绑定 loopback。</p>
+          <p>Browse, filter, disable, and restore local skills; the server binds to loopback by default.</p>
         </article>
         <article class="feature">
-          <b>路由禁用技能</b>
+          <b>Route disabled skills</b>
           <pre class="code-panel">agentic-skill-router skills route \
   --query "draft a Lark mail reply" \
   --json</pre>
-          <p>从禁用技能语料中选择匹配项，输出可被 agent workflow 消费的结构化结果。</p>
+          <p>Select a matching skill from the disabled corpus and emit structured output for agent workflows.</p>
         </article>
         <article class="feature">
-          <b>恢复技能</b>
+          <b>Restore SKILL.md</b>
           <pre class="code-panel">agentic-skill-router skills status
 agentic-skill-router skills enable user:codex:lark-mail</pre>
-          <p>通过状态记录恢复 SKILL.md；内置和系统技能保持受保护。</p>
+          <p>Restore SKILL.md from state records while keeping built-in and system skills protected.</p>
         </article>
       </div>
     </section>
 
     <section id="features">
       <div class="section-head">
-        <h2>核心功能</h2>
+        <h2>Core Features</h2>
         <p class="section-copy">
-          项目围绕一个目标设计：降低常驻 skill 元数据成本，同时保持禁用、恢复和按需路由都可控。
+          The project is a routing skill for reducing always-on skill metadata while keeping
+          disable, restore, and on-demand retrieval controlled.
         </p>
       </div>
 
       <div class="feature-grid">
         <article class="feature">
-          <b>技能盘点</b>
-          <p>枚举 Codex、Claude Code、项目目录、用户目录和插件目录中的技能，并识别内置系统技能。</p>
+          <b>Agent-facing routing skill</b>
+          <p>Installs a skill entry that agents can call when a task needs instructions from a disabled skill.</p>
         </article>
         <article class="feature">
-          <b>基于使用记录瘦身</b>
-          <p>读取本地 transcript，统计技能调用痕迹，按最近使用时间给出 stale 或 unused 建议。</p>
+          <b>Usage-based skill slimming</b>
+          <p>Reads local transcripts, extracts skill usage signals, and suggests stale or unused entries by last-used time.</p>
         </article>
         <article class="feature">
-          <b>安全禁用与恢复</b>
-          <p>通过重命名 <code>SKILL.md</code> 禁用技能，保留状态文件，保护内置和系统技能不被误改。</p>
+          <b>Safe disable and restore</b>
+          <p>Disables skills by renaming <code>SKILL.md</code>, keeps state records, and protects built-in system skills.</p>
         </article>
         <article class="feature">
-          <b>禁用技能路由</b>
-          <p>当已启用技能无法覆盖请求时，从禁用技能语料中检索并选择更合适的技能。</p>
+          <b>No-embedding skill retrieval</b>
+          <p>Searches local skill files directly with agentic retrieval instead of introducing embeddings or a vector database.</p>
         </article>
         <article class="feature">
-          <b>本地 Web 管理页</b>
-          <p>内置 localhost Web UI，可浏览、筛选、禁用和恢复技能；公网绑定需要显式危险开关。</p>
+          <b>Local skill manager</b>
+          <p>A localhost Web UI can browse, filter, disable, and restore skills; public binding requires an explicit danger flag.</p>
         </article>
         <article class="feature">
-          <b>CLI 与插件分发</b>
-          <p>提供 npm CLI、Codex slash prompt、Claude Code 插件资产和统一的技能工作流定义。</p>
+          <b>CLI + skill distribution</b>
+          <p>Ships an npm CLI, Codex slash prompt, Claude Code plugin assets, and one unified routing skill workflow.</p>
         </article>
       </div>
     </section>
 
     <section id="workflow">
       <div class="section-head">
-        <h2>运行机制</h2>
+        <h2>How It Works</h2>
         <p class="section-copy">
-          agentic-skill-router 不复制宿主的内置技能系统，而是在技能目录和宿主触发机制之间增加一层可审计的路由。
+          agentic-skill-router adds an auditable skill-routing layer between local skill directories
+          and the agent's normal trigger path.
         </p>
       </div>
 
       <div class="flow">
         <div class="step">
-          <span class="step-num">1</span>
-          <b>初始化</b>
-          <span><code>init</code> 安装项目或全局技能入口，并写入对应宿主需要的触发资产。</span>
+          <span class="step-num">01</span>
+          <b>Install skill</b>
+          <span><code>init</code> writes a project or global routing skill entry that the agent can invoke.</span>
         </div>
         <div class="step">
-          <span class="step-num">2</span>
-          <b>扫描</b>
-          <span>汇总技能元数据、来源、冲突和禁用状态，形成当前可操作清单。</span>
+          <span class="step-num">02</span>
+          <b>Scan skills</b>
+          <span>Collect metadata, source, conflict, and disabled-state information into one actionable inventory.</span>
         </div>
         <div class="step">
-          <span class="step-num">3</span>
-          <b>瘦身</b>
-          <span><code>suggest</code> 结合使用记录生成候选项，再由用户确认禁用。</span>
+          <span class="step-num">03</span>
+          <b>Slim context</b>
+          <span><code>suggest</code> combines transcript usage with policy rules, then leaves disable decisions explicit.</span>
         </div>
         <div class="step">
-          <span class="step-num">4</span>
-          <b>路由</b>
-          <span>请求需要禁用技能时，路由工作流在语料中选择目标 skill 并读取其指令。</span>
+          <span class="step-num">04</span>
+          <b>Route on demand</b>
+          <span>When a disabled skill is needed, the routing skill selects a target and reads its instructions.</span>
         </div>
         <div class="step">
-          <span class="step-num">5</span>
-          <b>恢复</b>
-          <span><code>enable</code> 使用状态记录还原 <code>SKILL.md</code>，也能处理缺失状态的修复路径。</span>
+          <span class="step-num">05</span>
+          <b>Restore</b>
+          <span><code>enable</code> restores <code>SKILL.md</code> through state records and supports repair paths for missing state.</span>
         </div>
       </div>
     </section>
 
     <section id="experiments">
       <div class="section-head">
-        <h2>批量实验结果</h2>
+        <h2>Batch Experiment Results</h2>
         <p class="section-copy">
-          最新聚合数据来自 <code>experiments/dci-compare/runs/rerun-150-full-2026-05-26</code>：
-          48 个聚合行，1,152 个实验单元，覆盖 Claude、Codex、16 个路由变体与 24 个专家查询。
+          Latest aggregate data comes from <code>experiments/dci-compare/runs/rerun-150-full-2026-05-26</code>:
+          48 aggregate rows and 1,152 experiment units across Claude, Codex, 16 routing variants,
+          and 24 expert queries.
         </p>
       </div>
 
@@ -935,39 +965,43 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
           <div class="callout strategy-card">
             <strong>Bash-based agentic retriever</strong>
             <p>
-              让 agent 用 <code>find</code>、<code>rg</code>、<code>sed</code> 等通用命令直接搜索禁用 skill 语料。
-              优点是 no embedding、可读完整正文、可解释；代价是需要约束输出和轮次，否则容易增加上下文与工具调用。
+              The agent searches disabled skills directly with general shell commands such as
+              <code>find</code>, <code>rg</code>, and <code>sed</code>.
+              Pros: no embeddings, full-body evidence, and explainable traces. Tradeoff:
+              output and turns need bounds.
             </p>
           </div>
           <div class="callout amber strategy-card" style="margin-top: 12px;">
             <strong>Tool-wrapped agentic retrieval</strong>
             <p>
-              把搜索、打开、读取等步骤包装成受控工具接口，让 agent 在固定动作空间内检索。
-              优点是行为更稳定、边界更清晰；代价是工具设计会影响召回率和调试复杂度。
+              Search, open, and read actions are wrapped behind controlled tool interfaces while
+              the agent still plans the retrieval path. Pros: steadier behavior and clearer
+              boundaries. Tradeoff: tool design shapes recall and debugging.
             </p>
           </div>
           <div class="callout strategy-card" style="margin-top: 12px;">
             <strong>Metadata / catalog retrieval</strong>
             <p>
-              先读取 skill description 或预生成 catalog，再按需展开候选 skill。
-              优点是便宜、快、上下文更可控；风险是 metadata 不足时容易被近义 distractor 带偏。
+              The workflow reads skill descriptions or a prebuilt catalog first, then expands
+              candidates only when needed. Pros: cheaper, faster, and easier to bound. Risk:
+              weak metadata can be pulled toward near-miss distractors.
             </p>
           </div>
           <div class="report-actions">
-            <a class="button primary" href="reports/report-all-experiments.html">打开完整 HTML 报告</a>
-            <a class="button" href="https://github.com/legendtkl/agentic-skill-router/tree/main/experiments/dci-compare">查看实验源码</a>
+            <a class="button primary" href="reports/report-all-experiments.html">Open full HTML report</a>
+            <a class="button" href="https://github.com/legendtkl/agentic-skill-router/tree/main/experiments/dci-compare">View experiment source</a>
           </div>
         </div>
 
         <div class="table-wrap">
-          <table aria-label="批量实验摘要">
+          <table aria-label="Batch experiment summary">
             <thead>
               <tr>
-                <th>Host</th>
-                <th>变体</th>
-                <th>命中</th>
-                <th>成本</th>
-                <th>说明</th>
+                <th>Agent</th>
+                <th>Variant</th>
+                <th>Hits</th>
+                <th>Cost</th>
+                <th>Notes</th>
               </tr>
             </thead>
             <tbody>
@@ -976,42 +1010,42 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
                 <td><code>I-meta</code></td>
                 <td>24/24</td>
                 <td>$3.02</td>
-                <td>仅读 metadata，trigger rate 100%。</td>
+                <td>Metadata-only routing, 100% trigger rate.</td>
               </tr>
               <tr>
                 <td><span class="tag">Codex</span></td>
                 <td><code>E-digest</code></td>
                 <td>24/24</td>
                 <td>$3.05</td>
-                <td>目录摘要 + 单 skill 展开。</td>
+                <td>Catalog digest plus one skill expansion.</td>
               </tr>
               <tr>
                 <td><span class="tag">Codex</span></td>
                 <td><code>C-lite</code></td>
                 <td>24/24</td>
                 <td>$4.36</td>
-                <td>有界 DCI shell 路由，读取正文。</td>
+                <td>Bounded DCI shell routing with body reads.</td>
               </tr>
               <tr>
                 <td><span class="tag blue">Claude</span></td>
                 <td><code>B-cc</code></td>
                 <td>23/24</td>
                 <td>$5.61</td>
-                <td>自由 shell DCI，准确率最高但成本更高。</td>
+                <td>Free-form shell DCI; highest accuracy, higher cost.</td>
               </tr>
               <tr>
                 <td><span class="tag blue">Claude</span></td>
                 <td><code>K-lite</code></td>
                 <td>22/24</td>
                 <td>$4.06</td>
-                <td>轻量路由，保持 91.7% 命中率。</td>
+                <td>Lightweight routing at 91.7% accuracy.</td>
               </tr>
               <tr>
                 <td><span class="tag blue">Claude</span></td>
                 <td><code>G-native</code></td>
                 <td>14/24</td>
                 <td>$2.82</td>
-                <td>宿主原生选择基线，非禁用技能路由。</td>
+                <td>Agent-native baseline, not disabled-skill routing.</td>
               </tr>
             </tbody>
           </table>
@@ -1021,40 +1055,40 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
 
     <section id="resources">
       <div class="section-head">
-        <h2>资源入口</h2>
-        <p class="section-copy">代码、文档和实验产物都保留在仓库中，便于复现实验或检查具体实现。</p>
+        <h2>Resources</h2>
+        <p class="section-copy">Code, docs, and experiment artifacts stay in the repository for reproduction and implementation review.</p>
       </div>
 
       <div class="links">
         <a class="resource" href="reports/report-all-experiments.html">
-          <b>完整实验 HTML 报告</b>
-          <span>已渲染的 all-experiments 报告，可直接在站内浏览。</span>
+          <b>Full experiment HTML report</b>
+          <span>Rendered all-experiments report, browsable directly on this site.</span>
         </a>
         <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/blob/main/README.md">
           <b>README</b>
-          <span>安装、CLI 命令、宿主路径和运行细节。</span>
+          <span>Install steps, CLI commands, skill paths, and runtime details.</span>
         </a>
         <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/blob/main/README.zh-CN.md">
-          <b>中文 README</b>
-          <span>面向中文读者的项目说明和使用方式。</span>
+          <b>Chinese README</b>
+          <span>Project overview and usage notes for Chinese readers.</span>
         </a>
         <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/tree/main/skills/agentic-skill-router-skills">
-          <b>路由 Skill</b>
-          <span>agent-facing 工作流和引用文档。</span>
+          <b>Routing Skill</b>
+          <span>Agent-facing workflow and reference documents.</span>
         </a>
       </div>
     </section>
 
     <footer class="footer">
       <span>MIT License · agentic-skill-router</span>
-      <span>页面数据引用 2026-05-26 最新批量实验聚合结果。</span>
+      <span>Page data cites the latest batch experiment aggregates from May 26, 2026.</span>
     </footer>
   </main>
   <script>
     const translations = {
       zh: {
         lang: "zh-CN",
-        description: "agentic-skill-router 项目介绍：no-embedding 的 agentic Agent Skills 路由、技能管理、安全恢复与批量实验结果。",
+        description: "agentic-skill-router 项目介绍：no-embedding 的 agent-facing routing skill，用于 Agent Skills 瘦身、恢复和按需检索。",
         themeDark: "切换到暗色模式",
         themeLight: "切换到亮色模式",
         i18n: {
@@ -1067,59 +1101,61 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
         html: {
           ".terminal-body": `<span class="prompt">$</span> npm install -g agentic-skill-router
 <span class="prompt">$</span> agentic-skill-router init
-<span class="output">选择 host：codex 或 claude-code
+<span class="output">选择 agent：codex 或 claude-code
 选择 scope：project 或 global</span>
 
 <span class="prompt">$</span> agentic-skill-router skills suggest --json
 <span class="prompt">$</span> agentic-skill-router skills web`,
         },
         text: {
-          ".lead": "不依赖 embedding 或向量库，用 agentic search 直接检索本地 skill 语料；把不常用的 Agent Skills 移出常驻上下文，在真正需要时再路由找回。",
+          ".lead": "一个 no-embedding 的 agent-facing routing skill：把不常用的 Agent Skills 移出常驻上下文，在任务真正需要时再检索并读取正确的 skill 指令。",
+          ".terminal-head span:first-child": "安装为 skill",
           ".hero .actions a[href='#quick-start']": "Quick Start",
           ".hero .actions a[href='reports/report-all-experiments.html']": "实验报告",
-          ".metric:nth-child(1) span": "覆盖 Codex 与 Claude Code，支持项目级和全局级技能目录。",
-          ".metric:nth-child(2) span": "最新批量实验单元，来自 2026-05-26 的完整重跑。",
-          ".metric:nth-child(3) span": "匿名化 SkillRouter 技能语料，包含针对性 distractor。",
-          ".metric:nth-child(4) span": "Codex 最优路由变体在专家查询集上的命中结果。",
-          ".metric:nth-child(5) span": "最新完整重跑中的 timeout 与 API error 数量。",
+          ".metric:nth-child(1) strong": "Agent 支持",
+          ".metric:nth-child(1) span": "作为项目级或全局路由 skill 接入 Codex 与 Claude Code agent。",
+          ".metric:nth-child(2) strong": "1,152 实验单元",
+          ".metric:nth-child(2) span": "合并展示 150 个匿名 skill、24 个专家查询、16 个路由变体与 48 个聚合行。",
+          ".metric:nth-child(3) strong": "Bash + Tool",
+          ".metric:nth-child(3) span": "策略实验对比 bash-based agentic retrieval、tool-wrapped retrieval 与目录基线。",
           "#quick-start h2": "Quick Start",
-          "#quick-start .section-copy": "常用安装和初始化路径直接放在页面里；完整参数仍以 README 和 CLI help 为准。",
-          "#quick-start .feature:nth-child(1) b": "全局安装",
-          "#quick-start .feature:nth-child(1) p": "推荐先全局安装，让生成的 skill 能引用稳定的 CLI 路径。",
-          "#quick-start .feature:nth-child(2) b": "Codex 项目级入口",
+          "#quick-start .section-copy": "先安装 CLI，再把 agentic-skill-router 初始化为 agent-facing routing skill。完整参数仍以 README 和 CLI help 为准。",
+          "#quick-start .feature:nth-child(1) b": "安装为 skill",
+          "#quick-start .feature:nth-child(1) p": "安装 CLI 后写入 agent 可发现、可调用的 routing skill 入口。",
+          "#quick-start .feature:nth-child(2) b": "Codex 项目级 skill",
           "#quick-start .feature:nth-child(2) p": "在当前项目写入 Codex 可发现的路由 skill，不影响其他项目。",
-          "#quick-start .feature:nth-child(3) b": "Claude Code 项目级入口",
+          "#quick-start .feature:nth-child(3) b": "Claude Code 项目级 skill",
           "#quick-start .feature:nth-child(3) p": "初始化时会维护带 fence 的 CLAUDE.md routing block，重复运行保持幂等。",
-          "#quick-start .feature:nth-child(4) b": "本地 Web 管理页",
+          "#quick-start .feature:nth-child(4) b": "本地 skill 管理页",
           "#quick-start .feature:nth-child(4) p": "用于浏览、筛选、禁用和恢复本机技能；默认只绑定 loopback。",
           "#quick-start .feature:nth-child(5) b": "路由禁用技能",
           "#quick-start .feature:nth-child(5) p": "从禁用技能语料中选择匹配项，输出可被 agent workflow 消费的结构化结果。",
-          "#quick-start .feature:nth-child(6) b": "恢复技能",
+          "#quick-start .feature:nth-child(6) b": "恢复 SKILL.md",
           "#quick-start .feature:nth-child(6) p": "通过状态记录恢复 SKILL.md；内置和系统技能保持受保护。",
           "#features h2": "核心功能",
-          "#features .section-copy": "项目围绕一个目标设计：降低常驻 skill 元数据成本，同时保持禁用、恢复和按需路由都可控。",
-          "#features .feature:nth-child(1) b": "技能盘点",
-          "#features .feature:nth-child(1) p": "枚举 Codex、Claude Code、项目目录、用户目录和插件目录中的技能，并识别内置系统技能。",
+          "#features .section-copy": "这是一个 routing skill：降低常驻 skill metadata 成本，同时让禁用、恢复和按需检索都保持可控。",
+          "#features .feature:nth-child(1) b": "面向 agent 的路由 skill",
+          "#features .feature:nth-child(1) p": "当任务需要禁用 skill 的指令时，agent 可以调用这个 skill 入口进行检索。",
           "#features .feature:nth-child(2) b": "基于使用记录瘦身",
           "#features .feature:nth-child(2) p": "读取本地 transcript，统计技能调用痕迹，按最近使用时间给出 stale 或 unused 建议。",
           "#features .feature:nth-child(3) b": "安全禁用与恢复",
           "#features .feature:nth-child(3) p": "通过重命名 SKILL.md 禁用技能，保留状态文件，保护内置和系统技能不被误改。",
-          "#features .feature:nth-child(4) b": "禁用技能路由",
-          "#features .feature:nth-child(4) p": "当已启用技能无法覆盖请求时，从禁用技能语料中检索并选择更合适的技能。",
-          "#features .feature:nth-child(5) b": "本地 Web 管理页",
+          "#features .feature:nth-child(4) b": "No-embedding skill 检索",
+          "#features .feature:nth-child(4) p": "直接用 agentic retrieval 搜索本地 skill 文件，不引入 embedding 或向量库。",
+          "#features .feature:nth-child(5) b": "本地 skill 管理页",
           "#features .feature:nth-child(5) p": "内置 localhost Web UI，可浏览、筛选、禁用和恢复技能；公网绑定需要显式危险开关。",
-          "#features .feature:nth-child(6) b": "CLI 与插件分发",
+          "#features .feature:nth-child(6) b": "CLI + skill 分发",
           "#features .feature:nth-child(6) p": "提供 npm CLI、Codex slash prompt、Claude Code 插件资产和统一的技能工作流定义。",
           "#workflow h2": "运行机制",
-          "#workflow .section-copy": "agentic-skill-router 不复制宿主的内置技能系统，而是在技能目录和宿主触发机制之间增加一层可审计的路由。",
-          "#workflow .step:nth-child(1) b": "初始化",
-          "#workflow .step:nth-child(1) span:last-child": "init 安装项目或全局技能入口，并写入对应宿主需要的触发资产。",
-          "#workflow .step:nth-child(2) b": "扫描",
+          "#workflow .section-copy": "agentic-skill-router 在本地 skill 目录和 agent 的正常触发路径之间，增加一层可审计的 skill 路由。",
+          "#workflow .step:nth-child(1) b": "安装 skill",
+          "#workflow .step:nth-child(1) span:last-child": "init 写入项目级或全局 routing skill 入口，供 agent 调用。",
+          "#workflow .step:nth-child(2) b": "扫描 skills",
           "#workflow .step:nth-child(2) span:last-child": "汇总技能元数据、来源、冲突和禁用状态，形成当前可操作清单。",
-          "#workflow .step:nth-child(3) b": "瘦身",
+          "#workflow .step:nth-child(3) b": "瘦身上下文",
           "#workflow .step:nth-child(3) span:last-child": "suggest 结合使用记录生成候选项，再由用户确认禁用。",
-          "#workflow .step:nth-child(4) b": "路由",
-          "#workflow .step:nth-child(4) span:last-child": "请求需要禁用技能时，路由工作流在语料中选择目标 skill 并读取其指令。",
+          "#workflow .step:nth-child(4) b": "按需路由",
+          "#workflow .step:nth-child(4) span:last-child": "请求需要禁用 skill 时，routing skill 选择目标并读取其指令。",
           "#workflow .step:nth-child(5) b": "恢复",
           "#workflow .step:nth-child(5) span:last-child": "enable 使用状态记录还原 SKILL.md，也能处理缺失状态的修复路径。",
           "#experiments h2": "批量实验结果",
@@ -1132,7 +1168,7 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
           "#experiments .strategy-card:nth-child(3) p": "先读取 skill description 或预生成 catalog，再按需展开候选 skill。优点是便宜、快、上下文更可控；风险是 metadata 不足时容易被近义 distractor 带偏。",
           ".report-actions a[href='reports/report-all-experiments.html']": "打开完整 HTML 报告",
           ".report-actions a[href*='experiments/dci-compare']": "查看实验源码",
-          "#experiments th:nth-child(1)": "Host",
+          "#experiments th:nth-child(1)": "Agent",
           "#experiments th:nth-child(2)": "变体",
           "#experiments th:nth-child(3)": "命中",
           "#experiments th:nth-child(4)": "成本",
@@ -1142,12 +1178,12 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
           "#experiments tbody tr:nth-child(3) td:nth-child(5)": "有界 DCI shell 路由，读取正文。",
           "#experiments tbody tr:nth-child(4) td:nth-child(5)": "自由 shell DCI，准确率最高但成本更高。",
           "#experiments tbody tr:nth-child(5) td:nth-child(5)": "轻量路由，保持 91.7% 命中率。",
-          "#experiments tbody tr:nth-child(6) td:nth-child(5)": "宿主原生选择基线，非禁用技能路由。",
+          "#experiments tbody tr:nth-child(6) td:nth-child(5)": "Agent 原生选择基线，非禁用技能路由。",
           "#resources h2": "资源入口",
           "#resources .section-copy": "代码、文档和实验产物都保留在仓库中，便于复现实验或检查具体实现。",
           "#resources .resource:nth-child(1) b": "完整实验 HTML 报告",
           "#resources .resource:nth-child(1) span": "已渲染的 all-experiments 报告，可直接在站内浏览。",
-          "#resources .resource:nth-child(2) span": "安装、CLI 命令、宿主路径和运行细节。",
+          "#resources .resource:nth-child(2) span": "安装、CLI 命令、skill 路径和运行细节。",
           "#resources .resource:nth-child(3) b": "中文 README",
           "#resources .resource:nth-child(3) span": "面向中文读者的项目说明和使用方式。",
           "#resources .resource:nth-child(4) b": "路由 Skill",
@@ -1157,7 +1193,7 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
       },
       en: {
         lang: "en",
-        description: "agentic-skill-router project page: no-embedding agentic Agent Skills routing, skill management, safe restore workflows, and batch experiment results.",
+        description: "agentic-skill-router: a no-embedding agent-facing routing skill for slimming, restoring, and retrieving Agent Skills on demand.",
         themeDark: "Switch to dark mode",
         themeLight: "Switch to light mode",
         i18n: {
@@ -1170,72 +1206,74 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
         html: {
           ".terminal-body": `<span class="prompt">$</span> npm install -g agentic-skill-router
 <span class="prompt">$</span> agentic-skill-router init
-<span class="output">select host: codex or claude-code
+<span class="output">select agent: codex or claude-code
 select scope: project or global</span>
 
 <span class="prompt">$</span> agentic-skill-router skills suggest --json
 <span class="prompt">$</span> agentic-skill-router skills web`,
         },
         text: {
-          ".lead": "No embeddings, no vector database: an agentic search workflow directly inspects the local skill corpus, moves rarely used Agent Skills out of the always-on context, and routes them back only when a task needs them.",
+          ".lead": "A no-embedding, agent-facing routing skill that moves rarely used Agent Skills out of always-on context, then retrieves the right skill instructions on demand.",
+          ".terminal-head span:first-child": "install as a skill",
           ".hero .actions a[href='#quick-start']": "Quick Start",
           ".hero .actions a[href='reports/report-all-experiments.html']": "Experiment report",
-          ".metric:nth-child(1) span": "Supports Codex and Claude Code skill roots across project and global scopes.",
-          ".metric:nth-child(2) span": "Latest full batch rerun from May 26, 2026.",
-          ".metric:nth-child(3) span": "An anonymized SkillRouter corpus with targeted distractors.",
-          ".metric:nth-child(4) span": "Best Codex routing result on the expert query set.",
-          ".metric:nth-child(5) span": "Timeouts and API errors in the latest full rerun.",
+          ".metric:nth-child(1) strong": "Agent support",
+          ".metric:nth-child(1) span": "Runs as a project or global routing skill for Codex and Claude Code agents.",
+          ".metric:nth-child(2) strong": "1,152 units",
+          ".metric:nth-child(2) span": "Batch evidence combines 150 anonymized skills, 24 expert queries, 16 variants, and 48 aggregate rows.",
+          ".metric:nth-child(3) strong": "Bash + Tool",
+          ".metric:nth-child(3) span": "Strategy experiments compare bash-based agentic retrieval, tool-wrapped retrieval, and catalog baselines.",
           "#quick-start h2": "Quick Start",
-          "#quick-start .section-copy": "Common install and initialization paths are rendered here; the README and CLI help remain the source of truth for the full option set.",
-          "#quick-start .feature:nth-child(1) b": "Global install",
-          "#quick-start .feature:nth-child(1) p": "Install globally first so generated skills can reference a stable CLI path.",
-          "#quick-start .feature:nth-child(2) b": "Codex project entry",
+          "#quick-start .section-copy": "Install the CLI, then initialize agentic-skill-router as an agent-facing routing skill. The README and CLI help remain the source of truth for the full option set.",
+          "#quick-start .feature:nth-child(1) b": "Install as a skill",
+          "#quick-start .feature:nth-child(1) p": "Install the CLI, then write the routing skill entry that agents can discover and invoke.",
+          "#quick-start .feature:nth-child(2) b": "Codex project skill",
           "#quick-start .feature:nth-child(2) p": "Add a Codex-discoverable routing skill to the current project without affecting other workspaces.",
-          "#quick-start .feature:nth-child(3) b": "Claude Code project entry",
-          "#quick-start .feature:nth-child(3) p": "Initialization maintains a fenced CLAUDE.md routing block and stays idempotent across reruns.",
-          "#quick-start .feature:nth-child(4) b": "Local web manager",
+          "#quick-start .feature:nth-child(3) b": "Claude Code project skill",
+          "#quick-start .feature:nth-child(3) p": "Maintain a fenced CLAUDE.md routing block and keep initialization idempotent across reruns.",
+          "#quick-start .feature:nth-child(4) b": "Local skill manager",
           "#quick-start .feature:nth-child(4) p": "Browse, filter, disable, and restore local skills; the server binds to loopback by default.",
           "#quick-start .feature:nth-child(5) b": "Route disabled skills",
           "#quick-start .feature:nth-child(5) p": "Select a matching skill from the disabled corpus and emit structured output for agent workflows.",
-          "#quick-start .feature:nth-child(6) b": "Restore skills",
+          "#quick-start .feature:nth-child(6) b": "Restore SKILL.md",
           "#quick-start .feature:nth-child(6) p": "Restore SKILL.md from state records while keeping built-in and system skills protected.",
           "#features h2": "Core Features",
-          "#features .section-copy": "The project has one job: reduce always-on skill metadata cost while keeping disable, restore, and on-demand routing controlled.",
-          "#features .feature:nth-child(1) b": "Skill inventory",
-          "#features .feature:nth-child(1) p": "Enumerate skills from Codex, Claude Code, project directories, user directories, and plugins, while identifying built-in system skills.",
-          "#features .feature:nth-child(2) b": "Usage-based slimming",
-          "#features .feature:nth-child(2) p": "Read local transcripts, extract skill usage signals, and suggest stale or unused entries by last-used time.",
+          "#features .section-copy": "The project is a routing skill for reducing always-on skill metadata while keeping disable, restore, and on-demand retrieval controlled.",
+          "#features .feature:nth-child(1) b": "Agent-facing routing skill",
+          "#features .feature:nth-child(1) p": "Installs a skill entry that agents can call when a task needs instructions from a disabled skill.",
+          "#features .feature:nth-child(2) b": "Usage-based skill slimming",
+          "#features .feature:nth-child(2) p": "Reads local transcripts, extracts skill usage signals, and suggests stale or unused entries by last-used time.",
           "#features .feature:nth-child(3) b": "Safe disable and restore",
-          "#features .feature:nth-child(3) p": "Disable skills by renaming SKILL.md, keep state records, and prevent accidental mutation of built-in or system skills.",
-          "#features .feature:nth-child(4) b": "Disabled-skill routing",
-          "#features .feature:nth-child(4) p": "When enabled skills do not cover a request, search the disabled corpus and select the most relevant skill.",
-          "#features .feature:nth-child(5) b": "Local web manager",
+          "#features .feature:nth-child(3) p": "Disables skills by renaming SKILL.md, keeps state records, and protects built-in system skills.",
+          "#features .feature:nth-child(4) b": "No-embedding skill retrieval",
+          "#features .feature:nth-child(4) p": "Searches local skill files directly with agentic retrieval instead of introducing embeddings or a vector database.",
+          "#features .feature:nth-child(5) b": "Local skill manager",
           "#features .feature:nth-child(5) p": "A localhost Web UI can browse, filter, disable, and restore skills; public binding requires an explicit danger flag.",
-          "#features .feature:nth-child(6) b": "CLI and plugin distribution",
+          "#features .feature:nth-child(6) b": "CLI + skill distribution",
           "#features .feature:nth-child(6) p": "Ships an npm CLI, Codex slash prompt, Claude Code plugin assets, and one unified routing skill workflow.",
           "#workflow h2": "How It Works",
-          "#workflow .section-copy": "agentic-skill-router does not replace the host skill system. It adds an auditable routing layer between skill directories and host triggers.",
-          "#workflow .step:nth-child(1) b": "Initialize",
-          "#workflow .step:nth-child(1) span:last-child": "init installs a project or global skill entry and writes the trigger assets needed by the selected host.",
-          "#workflow .step:nth-child(2) b": "Scan",
+          "#workflow .section-copy": "agentic-skill-router adds an auditable skill-routing layer between local skill directories and the agent's normal trigger path.",
+          "#workflow .step:nth-child(1) b": "Install skill",
+          "#workflow .step:nth-child(1) span:last-child": "init writes a project or global routing skill entry that the agent can invoke.",
+          "#workflow .step:nth-child(2) b": "Scan skills",
           "#workflow .step:nth-child(2) span:last-child": "Collect metadata, source, conflict, and disabled-state information into one actionable inventory.",
-          "#workflow .step:nth-child(3) b": "Slim",
+          "#workflow .step:nth-child(3) b": "Slim context",
           "#workflow .step:nth-child(3) span:last-child": "suggest combines transcript usage with policy rules, then leaves disable decisions explicit.",
-          "#workflow .step:nth-child(4) b": "Route",
-          "#workflow .step:nth-child(4) span:last-child": "When a disabled skill is needed, the routing workflow selects a target skill and reads its instructions.",
+          "#workflow .step:nth-child(4) b": "Route on demand",
+          "#workflow .step:nth-child(4) span:last-child": "When a disabled skill is needed, the routing skill selects a target and reads its instructions.",
           "#workflow .step:nth-child(5) b": "Restore",
           "#workflow .step:nth-child(5) span:last-child": "enable restores SKILL.md through state records and supports repair paths for missing state.",
           "#experiments h2": "Batch Experiment Results",
-          "#experiments .section-copy": "Latest aggregate data comes from experiments/dci-compare/runs/rerun-150-full-2026-05-26: 48 aggregate rows and 1,152 cells across Claude, Codex, 16 routing variants, and 24 expert queries.",
+          "#experiments .section-copy": "Latest aggregate data comes from experiments/dci-compare/runs/rerun-150-full-2026-05-26: 48 aggregate rows and 1,152 experiment units across Claude, Codex, 16 routing variants, and 24 expert queries.",
           "#experiments .strategy-card:nth-child(1) strong": "Bash-based agentic retriever",
-          "#experiments .strategy-card:nth-child(1) p": "The agent searches disabled skills directly with general shell commands such as find, rg, and sed. Pros: no embeddings, full-body evidence, and explainable traces. Tradeoff: output and turns need bounds, or context and tool calls can grow quickly.",
+          "#experiments .strategy-card:nth-child(1) p": "The agent searches disabled skills directly with general shell commands such as find, rg, and sed. Pros: no embeddings, full-body evidence, and explainable traces. Tradeoff: output and turns need bounds.",
           "#experiments .strategy-card:nth-child(2) strong": "Tool-wrapped agentic retrieval",
-          "#experiments .strategy-card:nth-child(2) p": "Search, open, and read actions are wrapped behind controlled tool interfaces while the agent still plans the retrieval path. Pros: steadier behavior and clearer boundaries. Tradeoff: tool design shapes recall and debugging complexity.",
+          "#experiments .strategy-card:nth-child(2) p": "Search, open, and read actions are wrapped behind controlled tool interfaces while the agent still plans the retrieval path. Pros: steadier behavior and clearer boundaries. Tradeoff: tool design shapes recall and debugging.",
           "#experiments .strategy-card:nth-child(3) strong": "Metadata / catalog retrieval",
           "#experiments .strategy-card:nth-child(3) p": "The workflow reads skill descriptions or a prebuilt catalog first, then expands candidates only when needed. Pros: cheaper, faster, and easier to bound. Risk: weak metadata can be pulled toward near-miss distractors.",
           ".report-actions a[href='reports/report-all-experiments.html']": "Open full HTML report",
           ".report-actions a[href*='experiments/dci-compare']": "View experiment source",
-          "#experiments th:nth-child(1)": "Host",
+          "#experiments th:nth-child(1)": "Agent",
           "#experiments th:nth-child(2)": "Variant",
           "#experiments th:nth-child(3)": "Hits",
           "#experiments th:nth-child(4)": "Cost",
@@ -1245,12 +1283,12 @@ select scope: project or global</span>
           "#experiments tbody tr:nth-child(3) td:nth-child(5)": "Bounded DCI shell routing with body reads.",
           "#experiments tbody tr:nth-child(4) td:nth-child(5)": "Free-form shell DCI; highest accuracy, higher cost.",
           "#experiments tbody tr:nth-child(5) td:nth-child(5)": "Lightweight routing at 91.7% accuracy.",
-          "#experiments tbody tr:nth-child(6) td:nth-child(5)": "Host-native baseline, not disabled-skill routing.",
+          "#experiments tbody tr:nth-child(6) td:nth-child(5)": "Agent-native baseline, not disabled-skill routing.",
           "#resources h2": "Resources",
           "#resources .section-copy": "Code, docs, and experiment artifacts stay in the repository for reproduction and implementation review.",
           "#resources .resource:nth-child(1) b": "Full experiment HTML report",
           "#resources .resource:nth-child(1) span": "Rendered all-experiments report, browsable directly on this site.",
-          "#resources .resource:nth-child(2) span": "Install steps, CLI commands, host paths, and runtime details.",
+          "#resources .resource:nth-child(2) span": "Install steps, CLI commands, skill paths, and runtime details.",
           "#resources .resource:nth-child(3) b": "Chinese README",
           "#resources .resource:nth-child(3) span": "Project overview and usage notes for Chinese readers.",
           "#resources .resource:nth-child(4) b": "Routing Skill",
@@ -1263,12 +1301,13 @@ select scope: project or global</span>
     const root = document.documentElement;
     const themeToggle = document.querySelector(".theme-toggle");
     const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+    const languageStorageKey = "asr-lang-v2";
 
     function getLanguage() {
       try {
-        return localStorage.getItem("asr-lang") === "en" ? "en" : "zh";
+        return localStorage.getItem(languageStorageKey) === "zh" ? "zh" : "en";
       } catch {
-        return "zh";
+        return "en";
       }
     }
 
@@ -1287,7 +1326,7 @@ select scope: project or global</span>
     }
 
     function applyLanguage(lang) {
-      const dictionary = translations[lang] ?? translations.zh;
+      const dictionary = translations[lang] ?? translations.en;
       root.lang = dictionary.lang;
       document.querySelector('meta[name="description"]').setAttribute("content", dictionary.description);
       for (const [key, value] of Object.entries(dictionary.i18n)) {
@@ -1317,7 +1356,7 @@ select scope: project or global</span>
       button.addEventListener("click", () => {
         const lang = button.dataset.lang === "en" ? "en" : "zh";
         try {
-          localStorage.setItem("asr-lang", lang);
+          localStorage.setItem(languageStorageKey, lang);
         } catch {
           // Ignore storage errors; the current page can still switch language.
         }
