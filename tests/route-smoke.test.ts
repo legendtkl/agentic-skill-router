@@ -11,11 +11,8 @@
 // is intentionally rebalanced.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
-import { routeDisabledSkillsAuto } from "../src/auto-route.ts";
+import { routeDisabledSkillsMetadata } from "../src/metadata-route.ts";
 import type { Skill, SkillMetadata } from "../src/types.ts";
 
 interface SmokeSkillSpec {
@@ -146,7 +143,7 @@ const SKILLS: readonly SmokeSkillSpec[] = [
 // Curated cases cover the dimensions called out in issue #115: Chinese query,
 // English query, API/product name, and umbrella-vs-specific disambiguation.
 // Each case is taken verbatim from tests/fixtures/route-cases.json and is one
-// the current auto-route reliably selects (see `npm run eval:route -- --json`).
+// the current metadata route reliably selects (see `npm run eval:route -- --mode=metadata --json`).
 // Cases the full eval flags as `ambiguous reject` are intentionally excluded
 // — the smoke test is a regression gate for confidently-selected cases, not a
 // quality bar for borderline ones.
@@ -172,65 +169,27 @@ const CASES: readonly SmokeCase[] = [
   },
 ];
 
-// Materialize each spec into a real SKILL.md.agentic-skill-router-disabled file so
-// auto-route's DCI escalation path can read bodies from disk if it triggers.
-// Mirrors scripts/eval-route.mjs#materializeSkillFiles so the smoke test
-// exercises the same physical setup the full eval does.
-async function materializeSkills(root: string, specs: readonly SmokeSkillSpec[]): Promise<Skill[]> {
-  await mkdir(root, { recursive: true });
-  const out: Skill[] = [];
-  for (const spec of specs) {
-    const dir = join(root, spec.name);
-    await mkdir(dir, { recursive: true });
-    const skillMdPath = join(dir, "SKILL.md.agentic-skill-router-disabled");
-    const meta = spec.metadata;
-    const yamlSafe = (text: string) => text.replace(/"/g, '\\"').replace(/\r?\n/g, " ");
-    const body = [
-      "---",
-      `name: ${spec.name}`,
-      `description: ${yamlSafe(spec.description)}`,
-      "---",
-      "",
-      `# ${spec.name}`,
-      "",
-      spec.description,
-      "",
-      "## Metadata",
-      "",
-      `- aliases: ${JSON.stringify(meta.aliases ?? [])}`,
-      `- domains: ${JSON.stringify(meta.domains ?? [])}`,
-      `- intents: ${JSON.stringify(meta.intents ?? [])}`,
-      `- tools: ${JSON.stringify(meta.tools ?? [])}`,
-      "",
-    ].join("\n");
-    await writeFile(skillMdPath, body, "utf8");
-    out.push({
-      id: spec.id,
-      name: spec.name,
-      description: spec.description,
-      metadata: meta,
-      source: "user",
-      pluginKey: null,
-      skillMdPath,
-      isDisabled: true,
-      isPluginDisabled: false,
-      canDisable: true,
-      conflict: false,
-    });
-  }
-  return out;
+function materializeSkills(specs: readonly SmokeSkillSpec[]): Skill[] {
+  return specs.map((spec) => ({
+    id: spec.id,
+    name: spec.name,
+    description: spec.description,
+    metadata: spec.metadata,
+    source: "user",
+    pluginKey: null,
+    skillMdPath: `virtual://${spec.name}/SKILL.md.agentic-skill-router-disabled`,
+    isDisabled: true,
+    isPluginDisabled: false,
+    canDisable: true,
+    conflict: false,
+  }));
 }
 
-test("route smoke: curated cases pick the expected skill via auto-route", async (t) => {
-  const workDir = await mkdtemp(join(tmpdir(), "agentic-skill-router-smoke-"));
-  t.after(async () => {
-    await rm(workDir, { recursive: true, force: true });
-  });
-
-  const skills = await materializeSkills(join(workDir, "skills"), SKILLS);
+test("route smoke: curated cases pick the expected skill via single-round metadata route", () => {
+  const skills = materializeSkills(SKILLS);
 
   for (const testCase of CASES) {
-    const result = await routeDisabledSkillsAuto(skills, testCase.query, { topK: 3 });
+    const result = routeDisabledSkillsMetadata(skills, testCase.query, { topK: 3 });
     assert.ok(
       result.selected !== null,
       `[${testCase.name}] expected a selection for query "${testCase.query}", got none`,

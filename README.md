@@ -370,8 +370,8 @@ The companion `tests/route-smoke.test.ts` file is the CI gate that catches
 obvious routing regressions. It hand-picks a handful of high-confidence cases
 from the same fixture (Chinese query, English query, API name, product name,
 umbrella vs specific) and asserts each one selects the expected skill id via
-the same `routeDisabledSkillsAuto` entry point the full eval uses. It runs as
-part of `npm test`, so a regression that flips any of those selections fails
+the single-round `routeDisabledSkillsMetadata` path. It runs as part of
+`npm test`, so a regression that flips any of those selections fails
 CI. Use `npm run eval:route` to investigate borderline cases or score the full
 fixture; use the smoke test as the deterministic backstop.
 
