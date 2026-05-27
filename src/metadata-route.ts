@@ -315,8 +315,10 @@ function evidenceFor(item: MetadataField, matched: string, contribution: number)
   return {
     field: item.field,
     matched,
-    weight: item.weight,
+    isGeneric: isGenericTerm(matched),
     contribution: Number(contribution.toFixed(4)),
+    source: "metadata",
+    weight: item.weight,
     text: clamp(item.text),
   };
 }
@@ -349,7 +351,7 @@ function toRouteMatch(item: ScoredMetadataSkill): SkillRouteMatch {
       matchedName: item.exactNameMatched || item.exactAliasMatched,
       matchedPhrase: item.containedNameMatched ||
         item.containedAliasMatched ||
-        item.evidence.some((e) => e.matched.length >= 8 && compact(e.text).includes(compact(e.matched))),
+        item.evidence.some((e) => e.matched.length >= 8 && compact(e.text ?? "").includes(compact(e.matched))),
     },
   };
 }
