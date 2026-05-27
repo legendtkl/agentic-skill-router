@@ -185,6 +185,20 @@
     .prompt { color: #86d8aa; }
     .output { color: rgba(244, 243, 238, 0.70); }
 
+    .code-panel {
+      margin: 0 0 12px;
+      padding: 12px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--panel-strong);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre;
+    }
+
     .metric-strip {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -352,6 +366,13 @@
       margin: 0;
       color: rgba(31, 39, 49, 0.78);
       line-height: 1.6;
+    }
+
+    .report-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
     }
 
     .table-wrap {
@@ -566,6 +587,7 @@
         <span>agentic-skill-router</span>
       </a>
       <div class="nav-links">
+        <a href="#quick-start">Quick Start</a>
         <a href="#features">功能</a>
         <a href="#workflow">机制</a>
         <a href="#experiments">实验</a>
@@ -583,8 +605,8 @@
         </p>
         <div class="actions">
           <a class="button primary" href="https://github.com/legendtkl/agentic-skill-router">GitHub</a>
-          <a class="button" href="https://github.com/legendtkl/agentic-skill-router#quick-start">Quick Start</a>
-          <a class="button" href="https://github.com/legendtkl/agentic-skill-router/blob/main/experiments/dci-compare/REPORT-skillrouter.md">实验报告</a>
+          <a class="button" href="#quick-start">Quick Start</a>
+          <a class="button" href="reports/report-all-experiments.html">实验报告</a>
         </div>
       </div>
 
@@ -625,6 +647,55 @@ select scope: project or global</span>
         <span>最新完整重跑中的 timeout 与 API error 数量。</span>
       </div>
     </div>
+
+    <section id="quick-start">
+      <div class="section-head">
+        <h2>Quick Start</h2>
+        <p class="section-copy">
+          常用安装和初始化路径直接放在页面里；完整参数仍以 README 和 CLI help 为准。
+        </p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature">
+          <b>全局安装</b>
+          <pre class="code-panel">npm install -g agentic-skill-router
+agentic-skill-router init</pre>
+          <p>推荐先全局安装，让生成的 skill 能引用稳定的 CLI 路径。</p>
+        </article>
+        <article class="feature">
+          <b>Codex 项目级入口</b>
+          <pre class="code-panel">agentic-skill-router init codex project
+agentic-skill-router skills list</pre>
+          <p>在当前项目写入 Codex 可发现的路由 skill，不影响其他项目。</p>
+        </article>
+        <article class="feature">
+          <b>Claude Code 项目级入口</b>
+          <pre class="code-panel">agentic-skill-router init claude-code project
+agentic-skill-router skills suggest</pre>
+          <p>初始化时会维护带 fence 的 CLAUDE.md routing block，重复运行保持幂等。</p>
+        </article>
+        <article class="feature">
+          <b>本地 Web 管理页</b>
+          <pre class="code-panel">agentic-skill-router skills web
+# http://127.0.0.1:8787</pre>
+          <p>用于浏览、筛选、禁用和恢复本机技能；默认只绑定 loopback。</p>
+        </article>
+        <article class="feature">
+          <b>路由禁用技能</b>
+          <pre class="code-panel">agentic-skill-router skills route \
+  --query "draft a Lark mail reply" \
+  --json</pre>
+          <p>从禁用技能语料中选择匹配项，输出可被 agent workflow 消费的结构化结果。</p>
+        </article>
+        <article class="feature">
+          <b>恢复技能</b>
+          <pre class="code-panel">agentic-skill-router skills status
+agentic-skill-router skills enable user:codex:lark-mail</pre>
+          <p>通过状态记录恢复 SKILL.md；内置和系统技能保持受保护。</p>
+        </article>
+      </div>
+    </section>
 
     <section id="features">
       <div class="section-head">
@@ -724,6 +795,10 @@ select scope: project or global</span>
               提供更低成本的折中点。
             </p>
           </div>
+          <div class="report-actions">
+            <a class="button primary" href="reports/report-all-experiments.html">打开完整 HTML 报告</a>
+            <a class="button" href="https://github.com/legendtkl/agentic-skill-router/tree/main/experiments/dci-compare">查看实验源码</a>
+          </div>
         </div>
 
         <div class="table-wrap">
@@ -793,6 +868,10 @@ select scope: project or global</span>
       </div>
 
       <div class="links">
+        <a class="resource" href="reports/report-all-experiments.html">
+          <b>完整实验 HTML 报告</b>
+          <span>已渲染的 all-experiments 报告，可直接在站内浏览。</span>
+        </a>
         <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/blob/main/README.md">
           <b>README</b>
           <span>安装、CLI 命令、宿主路径和运行细节。</span>
@@ -800,10 +879,6 @@ select scope: project or global</span>
         <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/blob/main/README.zh-CN.md">
           <b>中文 README</b>
           <span>面向中文读者的项目说明和使用方式。</span>
-        </a>
-        <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/tree/main/experiments/dci-compare">
-          <b>实验目录</b>
-          <span>路由变体、harness、聚合数据和 HTML 报告。</span>
         </a>
         <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/tree/main/skills/agentic-skill-router-skills">
           <b>路由 Skill</b>
