@@ -35,6 +35,12 @@
       --amber: #926b2c;
       --amber-soft: #f4ead9;
       --field: rgba(255, 255, 255, 0.72);
+      --table-bg: rgba(255, 255, 255, 0.78);
+      --table-head-bg: rgba(31, 122, 90, 0.08);
+      --table-row: rgba(255, 255, 255, 0.56);
+      --table-row-alt: rgba(31, 122, 90, 0.045);
+      --table-text: #1f2327;
+      --table-muted: #555b61;
       --shadow: 0 18px 50px rgba(20, 30, 25, 0.08);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
@@ -470,33 +476,69 @@
       margin-top: 14px;
     }
 
+    .experiment-panel {
+      min-width: 0;
+    }
+
+    .experiment-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .experiment-stat {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--table-bg);
+    }
+
+    .experiment-stat strong {
+      display: block;
+      color: var(--accent);
+      font-size: 19px;
+      line-height: 1.05;
+    }
+
+    .experiment-stat span {
+      display: block;
+      margin-top: 6px;
+      color: var(--table-muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
     .table-wrap {
       min-width: 0;
       width: 100%;
-      overflow: hidden;
+      overflow-x: auto;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.34);
+      background: var(--table-bg);
     }
 
     table {
       width: 100%;
-      min-width: 620px;
+      min-width: 780px;
       border-collapse: collapse;
       background: transparent;
-      font-size: 14px;
+      color: var(--table-text);
+      font-size: 13px;
     }
 
     th,
     td {
-      padding: 12px 14px;
+      padding: 11px 12px;
       border-bottom: 1px solid var(--line);
       text-align: left;
       vertical-align: top;
     }
 
     th {
-      color: var(--muted);
+      color: var(--table-muted);
+      background: var(--table-head-bg);
       font-size: 11px;
       font-weight: 780;
       letter-spacing: 0.08em;
@@ -504,7 +546,17 @@
       white-space: nowrap;
     }
 
+    tbody tr { background: var(--table-row); }
+    tbody tr:nth-child(even) { background: var(--table-row-alt); }
     tr:last-child td { border-bottom: 0; }
+
+    td:nth-child(2),
+    td:nth-child(3),
+    td:nth-child(4),
+    td:nth-child(5),
+    td:nth-child(6) {
+      white-space: nowrap;
+    }
 
     td code,
     .terminal code {
@@ -581,6 +633,12 @@
       --amber: #e5c17a;
       --amber-soft: rgba(190, 145, 68, 0.18);
       --field: rgba(255, 255, 255, 0.08);
+      --table-bg: rgba(18, 23, 20, 0.94);
+      --table-head-bg: rgba(134, 216, 170, 0.12);
+      --table-row: rgba(255, 255, 255, 0.045);
+      --table-row-alt: rgba(134, 216, 170, 0.07);
+      --table-text: #f1f4ed;
+      --table-muted: #c0c8bf;
       --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
     }
 
@@ -623,6 +681,12 @@
         --amber: #e5c17a;
         --amber-soft: rgba(190, 145, 68, 0.18);
         --field: rgba(255, 255, 255, 0.08);
+        --table-bg: rgba(18, 23, 20, 0.94);
+        --table-head-bg: rgba(134, 216, 170, 0.12);
+        --table-row: rgba(255, 255, 255, 0.045);
+        --table-row-alt: rgba(134, 216, 170, 0.07);
+        --table-text: #f1f4ed;
+        --table-muted: #c0c8bf;
         --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
       }
 
@@ -661,6 +725,7 @@
 
       .metric-strip,
       .feature-grid,
+      .experiment-stats,
       .flow,
       .links {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -714,6 +779,7 @@
 
       .metric-strip,
       .feature-grid,
+      .experiment-stats,
       .flow,
       .links {
         grid-template-columns: 1fr;
@@ -993,62 +1059,141 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
           </div>
         </div>
 
-        <div class="table-wrap">
-          <table aria-label="Batch experiment summary">
-            <thead>
-              <tr>
-                <th>Agent</th>
-                <th>Variant</th>
-                <th>Hits</th>
-                <th>Cost</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><span class="tag">Codex</span></td>
-                <td><code>I-meta</code></td>
-                <td>24/24</td>
-                <td>$3.02</td>
-                <td>Metadata-only routing, 100% trigger rate.</td>
-              </tr>
-              <tr>
-                <td><span class="tag">Codex</span></td>
-                <td><code>E-digest</code></td>
-                <td>24/24</td>
-                <td>$3.05</td>
-                <td>Catalog digest plus one skill expansion.</td>
-              </tr>
-              <tr>
-                <td><span class="tag">Codex</span></td>
-                <td><code>C-lite</code></td>
-                <td>24/24</td>
-                <td>$4.36</td>
-                <td>Bounded DCI shell routing with body reads.</td>
-              </tr>
-              <tr>
-                <td><span class="tag blue">Claude</span></td>
-                <td><code>B-cc</code></td>
-                <td>23/24</td>
-                <td>$5.61</td>
-                <td>Free-form shell DCI; highest accuracy, higher cost.</td>
-              </tr>
-              <tr>
-                <td><span class="tag blue">Claude</span></td>
-                <td><code>K-lite</code></td>
-                <td>22/24</td>
-                <td>$4.06</td>
-                <td>Lightweight routing at 91.7% accuracy.</td>
-              </tr>
-              <tr>
-                <td><span class="tag blue">Claude</span></td>
-                <td><code>G-native</code></td>
-                <td>14/24</td>
-                <td>$2.82</td>
-                <td>Agent-native baseline, not disabled-skill routing.</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="experiment-panel">
+          <div class="experiment-stats" aria-label="Batch experiment coverage">
+            <div class="experiment-stat">
+              <strong>48</strong>
+              <span>aggregate rows</span>
+            </div>
+            <div class="experiment-stat">
+              <strong>1,152</strong>
+              <span>experiment units</span>
+            </div>
+            <div class="experiment-stat">
+              <strong>16</strong>
+              <span>routing variants</span>
+            </div>
+            <div class="experiment-stat">
+              <strong>24</strong>
+              <span>expert queries</span>
+            </div>
+            <div class="experiment-stat">
+              <strong>0 / 0</strong>
+              <span>timeouts / API errors</span>
+            </div>
+            <div class="experiment-stat">
+              <strong>4</strong>
+              <span>Codex configs hit 24/24</span>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table aria-label="Batch experiment summary">
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th>Variant</th>
+                  <th>Mode</th>
+                  <th>Hits</th>
+                  <th>Cost</th>
+                  <th>Trigger</th>
+                  <th>Avg work</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>I-meta</code></td>
+                  <td>with md</td>
+                  <td>24/24</td>
+                  <td>$3.02</td>
+                  <td>100%</td>
+                  <td>3.0 turns / 2.0 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>E-digest</code></td>
+                  <td>with md</td>
+                  <td>24/24</td>
+                  <td>$3.05</td>
+                  <td>100%</td>
+                  <td>3.0 turns / 2.0 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>K-lite-replicate</code></td>
+                  <td>with md</td>
+                  <td>24/24</td>
+                  <td>$3.27</td>
+                  <td>100%</td>
+                  <td>3.5 turns / 2.4 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>C-lite</code></td>
+                  <td>with md</td>
+                  <td>24/24</td>
+                  <td>$4.36</td>
+                  <td>100%</td>
+                  <td>4.9 turns / 5.7 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>G-native</code></td>
+                  <td>with md</td>
+                  <td>23/24</td>
+                  <td>$1.84</td>
+                  <td>0%</td>
+                  <td>1.0 turns / 0.0 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>K-lite</code></td>
+                  <td>with md</td>
+                  <td>23/24</td>
+                  <td>$2.77</td>
+                  <td>100%</td>
+                  <td>3.3 turns / 2.2 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>K-bounded</code></td>
+                  <td>with md</td>
+                  <td>23/24</td>
+                  <td>$2.83</td>
+                  <td>100%</td>
+                  <td>3.8 turns / 2.8 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>H-bounded</code></td>
+                  <td>with md</td>
+                  <td>23/24</td>
+                  <td>$4.94</td>
+                  <td>100%</td>
+                  <td>5.8 turns / 5.7 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag blue">Claude</span></td>
+                  <td><code>B-cc</code></td>
+                  <td>no md</td>
+                  <td>23/24</td>
+                  <td>$5.61</td>
+                  <td>95.8%</td>
+                  <td>7.1 turns / 5.2 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag blue">Claude</span></td>
+                  <td><code>K-lite</code></td>
+                  <td>with md</td>
+                  <td>22/24</td>
+                  <td>$4.06</td>
+                  <td>95.8%</td>
+                  <td>4.0 turns / 2.1 tools</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
@@ -1168,17 +1313,39 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
           "#experiments .strategy-card:nth-child(3) p": "先读取 skill description 或预生成 catalog，再按需展开候选 skill。优点是便宜、快、上下文更可控；风险是 metadata 不足时容易被近义 distractor 带偏。",
           ".report-actions a[href='reports/report-all-experiments.html']": "打开完整 HTML 报告",
           ".report-actions a[href*='experiments/dci-compare']": "查看实验源码",
+          ".experiment-stat:nth-child(1) span": "聚合行",
+          ".experiment-stat:nth-child(2) span": "实验单元",
+          ".experiment-stat:nth-child(3) span": "路由变体",
+          ".experiment-stat:nth-child(4) span": "专家查询",
+          ".experiment-stat:nth-child(5) span": "timeout / API error",
+          ".experiment-stat:nth-child(6) span": "Codex 配置达到 24/24",
           "#experiments th:nth-child(1)": "Agent",
           "#experiments th:nth-child(2)": "变体",
-          "#experiments th:nth-child(3)": "命中",
-          "#experiments th:nth-child(4)": "成本",
-          "#experiments th:nth-child(5)": "说明",
-          "#experiments tbody tr:nth-child(1) td:nth-child(5)": "仅读 metadata，trigger rate 100%。",
-          "#experiments tbody tr:nth-child(2) td:nth-child(5)": "目录摘要 + 单 skill 展开。",
-          "#experiments tbody tr:nth-child(3) td:nth-child(5)": "有界 DCI shell 路由，读取正文。",
-          "#experiments tbody tr:nth-child(4) td:nth-child(5)": "自由 shell DCI，准确率最高但成本更高。",
-          "#experiments tbody tr:nth-child(5) td:nth-child(5)": "轻量路由，保持 91.7% 命中率。",
-          "#experiments tbody tr:nth-child(6) td:nth-child(5)": "Agent 原生选择基线，非禁用技能路由。",
+          "#experiments th:nth-child(3)": "模式",
+          "#experiments th:nth-child(4)": "命中",
+          "#experiments th:nth-child(5)": "成本",
+          "#experiments th:nth-child(6)": "触发率",
+          "#experiments th:nth-child(7)": "平均工作量",
+          "#experiments tbody tr:nth-child(1) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(2) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(3) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(4) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(5) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(6) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(7) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(8) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(9) td:nth-child(3)": "无 md",
+          "#experiments tbody tr:nth-child(10) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(1) td:nth-child(7)": "3.0 轮 / 2.0 工具",
+          "#experiments tbody tr:nth-child(2) td:nth-child(7)": "3.0 轮 / 2.0 工具",
+          "#experiments tbody tr:nth-child(3) td:nth-child(7)": "3.5 轮 / 2.4 工具",
+          "#experiments tbody tr:nth-child(4) td:nth-child(7)": "4.9 轮 / 5.7 工具",
+          "#experiments tbody tr:nth-child(5) td:nth-child(7)": "1.0 轮 / 0.0 工具",
+          "#experiments tbody tr:nth-child(6) td:nth-child(7)": "3.3 轮 / 2.2 工具",
+          "#experiments tbody tr:nth-child(7) td:nth-child(7)": "3.8 轮 / 2.8 工具",
+          "#experiments tbody tr:nth-child(8) td:nth-child(7)": "5.8 轮 / 5.7 工具",
+          "#experiments tbody tr:nth-child(9) td:nth-child(7)": "7.1 轮 / 5.2 工具",
+          "#experiments tbody tr:nth-child(10) td:nth-child(7)": "4.0 轮 / 2.1 工具",
           "#resources h2": "资源入口",
           "#resources .section-copy": "代码、文档和实验产物都保留在仓库中，便于复现实验或检查具体实现。",
           "#resources .resource:nth-child(1) b": "完整实验 HTML 报告",
@@ -1273,17 +1440,39 @@ select scope: project or global</span>
           "#experiments .strategy-card:nth-child(3) p": "The workflow reads skill descriptions or a prebuilt catalog first, then expands candidates only when needed. Pros: cheaper, faster, and easier to bound. Risk: weak metadata can be pulled toward near-miss distractors.",
           ".report-actions a[href='reports/report-all-experiments.html']": "Open full HTML report",
           ".report-actions a[href*='experiments/dci-compare']": "View experiment source",
+          ".experiment-stat:nth-child(1) span": "aggregate rows",
+          ".experiment-stat:nth-child(2) span": "experiment units",
+          ".experiment-stat:nth-child(3) span": "routing variants",
+          ".experiment-stat:nth-child(4) span": "expert queries",
+          ".experiment-stat:nth-child(5) span": "timeouts / API errors",
+          ".experiment-stat:nth-child(6) span": "Codex configs hit 24/24",
           "#experiments th:nth-child(1)": "Agent",
           "#experiments th:nth-child(2)": "Variant",
-          "#experiments th:nth-child(3)": "Hits",
-          "#experiments th:nth-child(4)": "Cost",
-          "#experiments th:nth-child(5)": "Notes",
-          "#experiments tbody tr:nth-child(1) td:nth-child(5)": "Metadata-only routing, 100% trigger rate.",
-          "#experiments tbody tr:nth-child(2) td:nth-child(5)": "Catalog digest plus one skill expansion.",
-          "#experiments tbody tr:nth-child(3) td:nth-child(5)": "Bounded DCI shell routing with body reads.",
-          "#experiments tbody tr:nth-child(4) td:nth-child(5)": "Free-form shell DCI; highest accuracy, higher cost.",
-          "#experiments tbody tr:nth-child(5) td:nth-child(5)": "Lightweight routing at 91.7% accuracy.",
-          "#experiments tbody tr:nth-child(6) td:nth-child(5)": "Agent-native baseline, not disabled-skill routing.",
+          "#experiments th:nth-child(3)": "Mode",
+          "#experiments th:nth-child(4)": "Hits",
+          "#experiments th:nth-child(5)": "Cost",
+          "#experiments th:nth-child(6)": "Trigger",
+          "#experiments th:nth-child(7)": "Avg work",
+          "#experiments tbody tr:nth-child(1) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(2) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(3) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(4) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(5) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(6) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(7) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(8) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(9) td:nth-child(3)": "no md",
+          "#experiments tbody tr:nth-child(10) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(1) td:nth-child(7)": "3.0 turns / 2.0 tools",
+          "#experiments tbody tr:nth-child(2) td:nth-child(7)": "3.0 turns / 2.0 tools",
+          "#experiments tbody tr:nth-child(3) td:nth-child(7)": "3.5 turns / 2.4 tools",
+          "#experiments tbody tr:nth-child(4) td:nth-child(7)": "4.9 turns / 5.7 tools",
+          "#experiments tbody tr:nth-child(5) td:nth-child(7)": "1.0 turns / 0.0 tools",
+          "#experiments tbody tr:nth-child(6) td:nth-child(7)": "3.3 turns / 2.2 tools",
+          "#experiments tbody tr:nth-child(7) td:nth-child(7)": "3.8 turns / 2.8 tools",
+          "#experiments tbody tr:nth-child(8) td:nth-child(7)": "5.8 turns / 5.7 tools",
+          "#experiments tbody tr:nth-child(9) td:nth-child(7)": "7.1 turns / 5.2 tools",
+          "#experiments tbody tr:nth-child(10) td:nth-child(7)": "4.0 turns / 2.1 tools",
           "#resources h2": "Resources",
           "#resources .section-copy": "Code, docs, and experiment artifacts stay in the repository for reproduction and implementation review.",
           "#resources .resource:nth-child(1) b": "Full experiment HTML report",
