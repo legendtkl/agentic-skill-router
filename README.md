@@ -2,10 +2,19 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Skill management CLI and installation assets for Agent Skills across supported
-hosts. It enumerates installed skills, reads usage from local transcripts,
+Agentic Search-inspired, non-vectorized routing and management for Agent Skills
+across supported hosts. `agentic-skill-router` treats installed skill metadata
+as a local searchable corpus, lets the agent run bounded evidence-gathering
+searches, and records a routed skill only when the metadata supports that
+choice. It also enumerates installed skills, reads usage from local transcripts,
 suggests stale or unused skills, and safely disables or restores selected skills
 by renaming `SKILL.md`.
+
+The project is intentionally not a general RAG stack. It does not require
+embeddings, a vector database, or a background indexing service. The goal is a
+small, auditable routing layer for skill management: keep the active skill set
+lean, preserve a metadata-only path back to disabled skills, and leave the final
+selection under agent control.
 
 Subagent management is intentionally out of scope for this repository.
 
@@ -187,10 +196,13 @@ Built-in and system skills are listed but cannot be disabled.
 
 Disabled-skill routing:
 
-- The default agent workflow is L-agentic: the agent builds must/probe terms,
-  searches disabled-skill metadata with `skills corpus search`, optionally
-  inspects a small shortlist with `skills corpus inspect`, then records one
-  choice with `skills corpus select`.
+- The default agent workflow is Agentic Search-inspired L-agentic routing: the
+  agent builds must/probe terms, searches disabled-skill metadata with
+  `skills corpus search`, optionally inspects a small shortlist with
+  `skills corpus inspect`, then records one choice with `skills corpus select`.
+- Routing is deliberately non-vectorized. Search runs over structured
+  frontmatter and short metadata fields; no embeddings, vector store, or hidden
+  semantic index is required.
 - During retrieval, the agent must not read disabled skill bodies. Selection is
   based on metadata only.
 - `skills corpus search` reads `id`, `name`, `description`, aliases, tags,
