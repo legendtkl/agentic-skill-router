@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="agentic-skill-router 项目介绍：Agent Skills 管理、禁用路由、安全恢复与批量实验结果。">
+  <meta name="description" content="agentic-skill-router 项目介绍：no-embedding 的 agentic Agent Skills 路由、技能管理、安全恢复与批量实验结果。">
   <link rel="icon" type="image/png" href="assets/agentic-skill-router-logo.png?v=2">
   <link rel="shortcut icon" type="image/png" href="assets/agentic-skill-router-logo.png?v=2">
   <link rel="apple-touch-icon" href="assets/agentic-skill-router-logo.png?v=2">
@@ -180,25 +180,13 @@
       padding: 22px 0 38px;
     }
 
-    .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      min-height: 30px;
-      padding: 0 10px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      color: var(--accent);
-      background: rgba(255, 255, 255, 0.50);
-      font-size: 13px;
-      font-weight: 720;
-    }
-
     h1 {
-      margin: 18px 0 16px;
+      margin: 0 0 16px;
       color: var(--accent);
-      font-size: clamp(42px, 7vw, 78px);
+      font-size: 72px;
       line-height: 0.95;
       letter-spacing: 0;
+      white-space: nowrap;
     }
 
     .lead {
@@ -584,7 +572,6 @@
         linear-gradient(180deg, #151713 0%, var(--bg) 55%, #0c0d0b 100%);
     }
 
-    :root[data-theme="dark"] .eyebrow,
     :root[data-theme="dark"] .feature,
     :root[data-theme="dark"] table,
     :root[data-theme="dark"] .resource {
@@ -619,7 +606,6 @@
           linear-gradient(180deg, #151713 0%, var(--bg) 55%, #0c0d0b 100%);
       }
 
-      :root:not([data-theme="light"]) .eyebrow,
       :root:not([data-theme="light"]) .feature,
       :root:not([data-theme="light"]) table,
       :root:not([data-theme="light"]) .resource {
@@ -633,6 +619,10 @@
       .hero,
       .results-grid {
         grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 58px;
       }
 
       .metric-strip,
@@ -674,6 +664,10 @@
         gap: 22px;
         min-height: 0;
         padding-top: 14px;
+      }
+
+      h1 {
+        font-size: 32px;
       }
 
       .lead {
@@ -755,11 +749,10 @@
 
     <header class="hero">
       <div>
-        <span class="eyebrow">Codex + Claude Code Agent Skills 管理器</span>
         <h1>agentic-skill-router</h1>
         <p class="lead">
-          把不常用的 Agent Skills 移出常驻上下文，在真正需要时再通过路由找回。
-          它让大型技能库保持轻量，同时保留可审计、可恢复、可实验验证的使用路径。
+          不依赖 embedding 或向量库，用 agentic search 直接检索本地 skill 语料；
+          把不常用的 Agent Skills 移出常驻上下文，在真正需要时再路由找回。
         </p>
         <div class="actions">
           <a class="button primary" href="https://github.com/legendtkl/agentic-skill-router">GitHub</a>
@@ -1054,7 +1047,7 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
     const translations = {
       zh: {
         lang: "zh-CN",
-        description: "agentic-skill-router 项目介绍：Agent Skills 管理、禁用路由、安全恢复与批量实验结果。",
+        description: "agentic-skill-router 项目介绍：no-embedding 的 agentic Agent Skills 路由、技能管理、安全恢复与批量实验结果。",
         themeDark: "切换到暗色模式",
         themeLight: "切换到亮色模式",
         i18n: {
@@ -1074,8 +1067,7 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
 <span class="prompt">$</span> agentic-skill-router skills web`,
         },
         text: {
-          ".eyebrow": "Codex + Claude Code Agent Skills 管理器",
-          ".lead": "把不常用的 Agent Skills 移出常驻上下文，在真正需要时再通过路由找回。它让大型技能库保持轻量，同时保留可审计、可恢复、可实验验证的使用路径。",
+          ".lead": "不依赖 embedding 或向量库，用 agentic search 直接检索本地 skill 语料；把不常用的 Agent Skills 移出常驻上下文，在真正需要时再路由找回。",
           ".hero .actions a[href='#quick-start']": "Quick Start",
           ".hero .actions a[href='reports/report-all-experiments.html']": "实验报告",
           ".metric:nth-child(1) span": "覆盖 Codex 与 Claude Code，支持项目级和全局级技能目录。",
@@ -1156,7 +1148,7 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
       },
       en: {
         lang: "en",
-        description: "agentic-skill-router project page: Agent Skills management, disabled-skill routing, safe restore workflows, and batch experiment results.",
+        description: "agentic-skill-router project page: no-embedding agentic Agent Skills routing, skill management, safe restore workflows, and batch experiment results.",
         themeDark: "Switch to dark mode",
         themeLight: "Switch to light mode",
         i18n: {
@@ -1176,8 +1168,7 @@ select scope: project or global</span>
 <span class="prompt">$</span> agentic-skill-router skills web`,
         },
         text: {
-          ".eyebrow": "Codex + Claude Code Agent Skills manager",
-          ".lead": "Move rarely used Agent Skills out of the always-on context, then route them back in only when a task actually needs them. The result is a lighter skill library with auditable disable, restore, and experiment-backed routing paths.",
+          ".lead": "No embeddings, no vector database: an agentic search workflow directly inspects the local skill corpus, moves rarely used Agent Skills out of the always-on context, and routes them back only when a task needs them.",
           ".hero .actions a[href='#quick-start']": "Quick Start",
           ".hero .actions a[href='reports/report-all-experiments.html']": "Experiment report",
           ".metric:nth-child(1) span": "Supports Codex and Claude Code skill roots across project and global scopes.",
