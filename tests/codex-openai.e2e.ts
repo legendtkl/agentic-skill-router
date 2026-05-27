@@ -136,6 +136,8 @@ const ROUTE_CASES = [
 ] as const;
 
 const DISABLED_OPENAI_SKILLS = ROUTE_CASES.map((routeCase) => routeCase.skill);
+const IMPLICIT_ROUTE_CASE = ROUTE_CASES.find((routeCase) => routeCase.skill === "vercel-deploy")!;
+const IMPLICIT_ROUTE_QUERY = `${IMPLICIT_ROUTE_CASE.query} Dry run; do not contact Vercel or make external resource changes.`;
 
 interface FreshCodexEnvironment {
   root: string;
@@ -345,6 +347,108 @@ test(
       assert.equal(parsed.workflowSentinel, CODEX_WORKFLOW_SENTINEL);
       assert.deepEqual(parsed.probe.sentinels, ROUTE_CASES.map((routeCase) => routeCase.sentinel));
       assert.deepEqual(parsed.probe.selectedIds, ROUTE_CASES.map((routeCase) => `user:codex:${routeCase.skill}`));
+    } finally {
+      await fresh.cleanup();
+    }
+  },
+);
+
+test(
+  "[codex-cli] Codex CLI implicit agent e2e routes a natural query without slash",
+  async (t) => {
+    const codexBin = await findExecutable("codex");
+    if (!codexBin) {
+      t.skip("codex executable not found on PATH");
+      return;
+    }
+
+    const authPath = await localCodexAuthPath();
+    if (!authPath) {
+      t.skip("local Codex auth.json not found");
+      return;
+    }
+
+    const fresh = await makeFreshCodexEnvironment();
+    try {
+      await copyFile(authPath, join(fresh.codexHome, "auth.json"));
+      await installSkillRouterForCodex(fresh.env);
+      await appendCodexRouterWorkflowSentinels(fresh.codexHome);
+      assert.equal(
+        await installOpenAiCuratedSkillsFromGithub(fresh.workdir, fresh.codexHome, fresh.env),
+        EXPECTED_OPENAI_CURATED_SKILL_COUNT,
+      );
+      await appendCodexE2eSentinels(fresh.codexHome);
+
+      const routerBin = await installedCodexRouterBin(fresh.codexHome);
+      await runRouter(
+        routerBin,
+        [
+          "skills",
+          "disable",
+          ...DISABLED_OPENAI_SKILLS.map((skill) => `user:codex:${skill}`),
+          "--yes",
+          "--reason=codex-agent-implicit-openai-e2e",
+          "--json",
+        ],
+        fresh.env,
+      );
+
+      const finalMessagePath = join(fresh.root, "codex-agent-implicit-final.json");
+      const prompt = [
+        IMPLICIT_ROUTE_QUERY,
+        "",
+        "---",
+        "E2E verification constraints:",
+        "The task is the first line only; the lines below are safety and output constraints.",
+        "Do not use slash commands.",
+        "Follow any applicable local workflow instructions before answering.",
+        "Return only minified JSON in this exact shape: {\"ok\":true}.",
+      ].join("\n");
+
+      assert.ok(!prompt.includes("/agentic-skill-router:skills"));
+      const codexResult = await spawnFileNoStdin(
+        codexBin,
+        [
+          "-a",
+          "never",
+          "exec",
+          "--json",
+          "--ephemeral",
+          "--skip-git-repo-check",
+          "-C",
+          fresh.projectCwd,
+          "-s",
+          "danger-full-access",
+          "--output-last-message",
+          finalMessagePath,
+          prompt,
+        ],
+        {
+          env: fresh.env,
+          maxBuffer: 50 * 1024 * 1024,
+          timeout: CODEX_AGENT_TIMEOUT_MS,
+        },
+      );
+
+      assert.equal(
+        await fileExists(finalMessagePath),
+        true,
+        `Codex did not write final output.\nstdout:\n${codexResult.stdout}\nstderr:\n${codexResult.stderr}`,
+      );
+      const finalMessage = await readFile(finalMessagePath, "utf8");
+      assert.deepEqual(parseCodexImplicitRouteResponse(finalMessage), { ok: true });
+      const selected = assertCodexStreamShowsCorpusRouting(
+        codexResult.stdout,
+        codexResult.stderr,
+        `user:codex:${IMPLICIT_ROUTE_CASE.skill}`,
+      );
+      const selectedSkillMd = await readFile(selected.selected.skillMdPath, "utf8");
+      assert.match(selectedSkillMd, new RegExp(`^Codex E2E sentinel: ${IMPLICIT_ROUTE_CASE.sentinel}$`, "m"));
+
+      const status = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
+      const routedRecord = status.routed.find((item) => item.id === `user:codex:${IMPLICIT_ROUTE_CASE.skill}`);
+      assert.equal(routedRecord?.routeCount, 1);
+      assert.equal(routedRecord?.lastQuery, IMPLICIT_ROUTE_QUERY);
     } finally {
       await fresh.cleanup();
     }
@@ -614,6 +718,120 @@ function parseCodexSentinelResponse(raw: string): {
       sentinels: parsed.probe.sentinels.map((item) => String(item)),
       selectedIds: parsed.probe.selectedIds.map((item) => String(item)),
     },
+  };
+}
+
+function parseCodexImplicitRouteResponse(raw: string): {
+  ok: true;
+} {
+  const json = raw.trim().match(/\{[\s\S]*\}/)?.[0] ?? "";
+  const parsed = JSON.parse(json) as {
+    ok?: unknown;
+  };
+  assert.equal(parsed.ok, true, "Codex final response must include ok: true");
+  return { ok: true };
+}
+
+interface CodexCommandExecution {
+  command: string;
+  aggregatedOutput: string;
+  exitCode: number;
+}
+
+function assertCodexStreamShowsCorpusRouting(
+  stdout: string,
+  stderr: string,
+  expectedSkillId: string,
+): {
+  action: "read-skill-file";
+  recorded: true;
+  selected: { id: string; skillMdPath: string };
+} {
+  const commands = extractCodexCompletedCommandExecutions(stdout);
+  const commandText = commands.map((item) => item.command).join("\n");
+  const stream = `${stdout}\n${stderr}`.replaceAll("\\n", "\n").replaceAll('\\"', '"');
+  assert.match(
+    stream,
+    /agentic-skill-router-skills/,
+    `Codex stream did not show implicit router skill use.\nstdout tail:\n${stdout.slice(-4000)}\nstderr tail:\n${stderr.slice(-2000)}`,
+  );
+  const searchCommand = commands.find((item) => /\bskills\s+corpus\s+search\b/.test(item.command));
+  assert.ok(
+    searchCommand,
+    `Codex command stream did not show an executed corpus search.\ncommands:\n${commandText || "(none)"}`,
+  );
+  const selectCommand = commands.find((item) => /\bskills\s+corpus\s+select\b/.test(item.command));
+  assert.ok(
+    selectCommand,
+    `Codex command stream did not show an executed corpus select.\ncommands:\n${commandText || "(none)"}`,
+  );
+  const selected = parseCorpusSelectOutput(selectCommand.aggregatedOutput);
+  assert.equal(selected.action, "read-skill-file");
+  assert.equal(selected.recorded, true);
+  assert.equal(selected.selected?.id, expectedSkillId);
+  const skillMdPath = selected.selected?.skillMdPath;
+  if (typeof skillMdPath !== "string") {
+    assert.fail(`corpus select output did not include selected.skillMdPath:\n${JSON.stringify(selected, null, 2)}`);
+  }
+  return {
+    action: "read-skill-file",
+    recorded: true,
+    selected: {
+      id: expectedSkillId,
+      skillMdPath,
+    },
+  };
+}
+
+function extractCodexCompletedCommandExecutions(stdout: string): CodexCommandExecution[] {
+  const commands: CodexCommandExecution[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    if (!line.trim().startsWith("{")) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "type" in parsed &&
+      parsed.type === "item.completed" &&
+      "item" in parsed &&
+      parsed.item &&
+      typeof parsed.item === "object" &&
+      "type" in parsed.item &&
+      parsed.item.type === "command_execution" &&
+      "command" in parsed.item &&
+      typeof parsed.item.command === "string" &&
+      "aggregated_output" in parsed.item &&
+      typeof parsed.item.aggregated_output === "string" &&
+      "exit_code" in parsed.item &&
+      typeof parsed.item.exit_code === "number" &&
+      parsed.item.exit_code === 0
+    ) {
+      commands.push({
+        command: parsed.item.command,
+        aggregatedOutput: parsed.item.aggregated_output,
+        exitCode: parsed.item.exit_code,
+      });
+    }
+  }
+  return commands;
+}
+
+function parseCorpusSelectOutput(output: string): {
+  action?: unknown;
+  recorded?: unknown;
+  selected?: { id?: unknown; skillMdPath?: unknown } | null;
+} {
+  const json = output.trim().match(/\{[\s\S]*\}/)?.[0] ?? "";
+  assert.ok(json, `corpus select command did not emit JSON output:\n${output}`);
+  return JSON.parse(json) as {
+    action?: unknown;
+    recorded?: unknown;
+    selected?: { id?: unknown; skillMdPath?: unknown } | null;
   };
 }
 

@@ -1,6 +1,6 @@
 ---
 name: agentic-skill-router-skills
-description: Use as a fallback after enabled skills have been considered and none clearly match a skill-shaped request, and use directly when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills; provides Agentic Search-inspired, non-vectorized routing and management across supported hosts.
+description: MUST be used FIRST, before any other tool, for user requests that mention a specific tool, API, file format, service, framework, library, CLI, platform, dataset, or domain workflow when no enabled skill clearly matches; also use directly to audit, slim, disable, restore, or route locally installed Agent Skills; provides Agentic Search-inspired, non-vectorized routing and management across supported hosts.
 metadata:
   agentic-skill-router.version: "1"
   agentic-skill-router.variant: "L-agentic"
