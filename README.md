@@ -28,13 +28,16 @@ agentic-skill-router init
 ```
 
 `agentic-skill-router init` prompts for the target agent (`codex` or `claude-code`) and
-scope (`project` or `global`). Non-interactive examples:
+scope (`project` or `global`). The prompts accept multiple selections such as
+`1,2` or `all`. Non-interactive examples:
 
 ```bash
 agentic-skill-router init codex project
 agentic-skill-router init codex global
 agentic-skill-router init claude-code project
 agentic-skill-router init claude-code global
+agentic-skill-router init codex,claude-code project
+agentic-skill-router init all project,global
 ```
 
 For `claude-code`, `init` also writes a small routing-trigger block into

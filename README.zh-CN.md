@@ -23,13 +23,15 @@ npm install -g agentic-skill-router
 agentic-skill-router init
 ```
 
-`agentic-skill-router init` 会交互式选择目标 agent（`codex` 或 `claude-code`）和安装范围（`project` 或 `global`）。非交互示例：
+`agentic-skill-router init` 会交互式选择目标 agent（`codex` 或 `claude-code`）和安装范围（`project` 或 `global`）。交互提示支持 `1,2` 或 `all` 这样的多选输入。非交互示例：
 
 ```bash
 agentic-skill-router init codex project
 agentic-skill-router init codex global
 agentic-skill-router init claude-code project
 agentic-skill-router init claude-code global
+agentic-skill-router init codex,claude-code project
+agentic-skill-router init all project,global
 ```
 
 针对 `claude-code`，`init` 还会在 `CLAUDE.md` 里写入一小段路由触发指引（project 范围：`<projectRoot>/CLAUDE.md`；global 范围：`$CLAUDE_HOME/CLAUDE.md`，默认 `~/.claude/CLAUDE.md`）。实际写入的块如下：

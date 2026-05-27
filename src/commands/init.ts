@@ -21,6 +21,11 @@ interface InitResult {
   claudeMdAction?: "created" | "replaced" | "appended" | "skipped";
 }
 
+interface InitBatchResult {
+  action: "initialized-agentic-skill-router-skills";
+  results: InitResult[];
+}
+
 const CLAUDE_MD_BEGIN = "<!-- agentic-skill-router:claude-md:begin -->";
 const CLAUDE_MD_END = "<!-- agentic-skill-router:claude-md:end -->";
 
@@ -46,20 +51,19 @@ const CLAUDE_MD_BODY = [
 ].join("\n");
 
 /**
- * `agentic-skill-router init` creates a router skill for one supported code agent.
- * Without a target it prompts interactively; scripts can pass `codex` or
- * `claude-code` as the first positional argument and `project` or `global` as
- * the optional second positional argument.
+ * `agentic-skill-router init` creates router skills for one or more supported
+ * code agents. Without a target it prompts interactively; scripts can pass one
+ * or more target agents and scopes as positionals or repeated options.
  */
 export async function cmdInit(argv: string[]): Promise<number> {
   if (argv.includes("-h") || argv.includes("--help")) {
     process.stdout.write(
       [
-        "usage: agentic-skill-router init [codex|claude-code] [project|global]",
+        "usage: agentic-skill-router init [codex|claude-code|all] [project|global|all]",
         "",
         "Options:",
-        "  --agent <codex|claude-code>",
-        "  --scope <project|global>",
+        "  --agent <codex|claude-code|all>  repeatable; comma-separated values are also accepted",
+        "  --scope <project|global|all>     repeatable; comma-separated values are also accepted",
         "  --cwd <path>",
         "  --cli <path>",
         "  --force",
@@ -76,8 +80,8 @@ export async function cmdInit(argv: string[]): Promise<number> {
     config: {
       args: argv,
       options: {
-        agent: { type: "string" },
-        scope: { type: "string" },
+        agent: { type: "string", multiple: true },
+        scope: { type: "string", multiple: true },
         cwd: { type: "string" },
         cli: { type: "string" },
         force: { type: "boolean" },
@@ -88,101 +92,149 @@ export async function cmdInit(argv: string[]): Promise<number> {
     },
   });
 
-  if (positionals.length > 2) {
-    process.stderr.write("usage: agentic-skill-router init [codex|claude-code] [project|global]\n");
-    return 2;
-  }
-
   const decoded = decodeInitInputs(
     positionals,
-    values.agent as string | undefined,
-    values.scope as string | undefined,
+    stringValues(values.agent),
+    stringValues(values.scope),
   );
   if (decoded.extra.length > 0) {
-    process.stderr.write("usage: agentic-skill-router init [codex|claude-code] [project|global]\n");
+    process.stderr.write("usage: agentic-skill-router init [codex|claude-code|all] [project|global|all]\n");
     return 2;
   }
 
-  let agent = parseInitAgent(decoded.agentRaw);
-  if (!agent) {
-    if (decoded.agentRaw !== undefined) {
-      process.stderr.write("target agent must be codex or claude-code\n");
+  let agents = parseInitAgents(decoded.agentRaw);
+  if (agents.length === 0) {
+    if (decoded.agentRaw.length > 0) {
+      process.stderr.write("target agent must be codex, claude-code, or all\n");
       return 2;
     }
-    agent = await promptForAgent();
-    if (!agent) {
-      process.stderr.write("specify a target agent in non-interactive mode: agentic-skill-router init codex\n");
+    agents = await promptForAgents();
+    if (agents.length === 0) {
+      process.stderr.write("specify at least one target agent in non-interactive mode: agentic-skill-router init codex\n");
       return 2;
     }
   }
 
-  let scope = parseInitScope(decoded.scopeRaw);
-  if (!scope) {
-    if (decoded.scopeRaw !== undefined) {
-      process.stderr.write("scope must be project or global\n");
+  let scopes = parseInitScopes(decoded.scopeRaw);
+  if (scopes.length === 0) {
+    if (decoded.scopeRaw.length > 0) {
+      process.stderr.write("scope must be project, global, or all\n");
       return 2;
     }
-    scope = input.isTTY ? await promptForScope(agent) : "project";
-    if (!scope) {
+    scopes = input.isTTY ? await promptForScopes(agents) : ["project"];
+    if (scopes.length === 0) {
       process.stderr.write("specify a scope in non-interactive mode: agentic-skill-router init codex project\n");
       return 2;
     }
   }
 
   const projectRoot = resolve((values.cwd as string | undefined) ?? process.cwd());
-  let result: InitResult;
+  let results: InitResult[];
   try {
     const sourceDir = await findRouterSkillSourceDir();
     const cliPath = await resolveCliPath(values.cli as string | undefined);
-    result = await initializeSkill({
-      agent,
-      scope,
+    await preflightInitializeSkills({
+      agents,
+      scopes,
       projectRoot,
-      sourceDir,
-      cliPath,
       force: Boolean(values.force),
       writeClaudeMd: !values["no-claude-md"],
     });
+    results = [];
+    for (const agent of agents) {
+      for (const scope of scopes) {
+        results.push(await initializeSkill({
+          agent,
+          scope,
+          projectRoot,
+          sourceDir,
+          cliPath,
+          force: Boolean(values.force),
+          writeClaudeMd: !values["no-claude-md"],
+        }));
+      }
+    }
   } catch (err) {
     process.stderr.write(`${(err as Error).message}\n`);
     return 1;
   }
 
   if (values.json) {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    const json: InitResult | InitBatchResult = results.length === 1
+      ? results[0]!
+      : { action: "initialized-agentic-skill-router-skills", results };
+    process.stdout.write(JSON.stringify(json, null, 2) + "\n");
     return 0;
   }
 
-  process.stdout.write(`initialized agentic-skill-router for ${displayAgent(agent)} (${result.scope})\n`);
-  process.stdout.write(`skill: ${result.skillMdPath}\n`);
-  process.stdout.write(`cli:   ${result.cliPath}\n`);
-  if (result.claudeMdPath && result.claudeMdAction) {
-    process.stdout.write(`claudemd: ${result.claudeMdPath} (${result.claudeMdAction})\n`);
-  } else if (result.claudeMdAction === "skipped") {
-    process.stdout.write("claudemd: skipped\n");
+  if (results.length === 1) {
+    printInitResult(results[0]!);
+  } else {
+    process.stdout.write(`initialized agentic-skill-router for ${results.length} targets\n`);
+    for (const result of results) printInitResult(result, "  ");
   }
   return 0;
 }
 
 function decodeInitInputs(
   positionals: string[],
-  optionAgent: string | undefined,
-  optionScope: string | undefined,
-): { agentRaw: string | undefined; scopeRaw: string | undefined; extra: string[] } {
-  let agentRaw = optionAgent;
-  let scopeRaw = optionScope;
-  const rest = [...positionals];
+  optionAgents: string[],
+  optionScopes: string[],
+): { agentRaw: string[]; scopeRaw: string[]; extra: string[] } {
+  const agentRaw = [...optionAgents];
+  const scopeRaw = [...optionScopes];
+  const extra: string[] = [];
 
-  if (!agentRaw && rest[0] && parseInitAgent(rest[0])) agentRaw = rest.shift();
-  if (!scopeRaw && rest[0] && parseInitScope(rest[0])) scopeRaw = rest.shift();
-  if (!agentRaw && rest[0] && parseInitAgent(rest[0])) agentRaw = rest.shift();
-  if (!scopeRaw && rest[0] && parseInitScope(rest[0])) scopeRaw = rest.shift();
-  if (rest.length === 1) {
-    if (!agentRaw) agentRaw = rest.shift();
-    else if (!scopeRaw) scopeRaw = rest.shift();
+  for (const value of positionals) {
+    const tokens = splitSelection(value);
+    const hasAgentToken = tokens.some((token) => parseInitAgent(token));
+    const hasScopeToken = tokens.some((token) => parseInitScope(token));
+
+    for (const token of tokens) {
+      if (parseInitAgent(token)) {
+        agentRaw.push(token);
+      } else if (parseInitScope(token)) {
+        scopeRaw.push(token);
+      } else if (isAllSelection(token)) {
+        if (hasAgentToken && !hasScopeToken) agentRaw.push(token);
+        else if (hasScopeToken && !hasAgentToken) scopeRaw.push(token);
+        else if (hasAgentToken) agentRaw.push(token);
+        else if (agentRaw.length === 0 && optionAgents.length === 0) agentRaw.push(token);
+        else scopeRaw.push(token);
+      } else if (agentRaw.length === 0 && optionAgents.length === 0) {
+        agentRaw.push(token);
+      } else if (scopeRaw.length === 0 && optionScopes.length === 0) {
+        scopeRaw.push(token);
+      } else {
+        extra.push(token);
+      }
+    }
   }
 
-  return { agentRaw, scopeRaw, extra: rest };
+  return { agentRaw, scopeRaw, extra };
+}
+
+async function preflightInitializeSkills(opts: {
+  agents: InitAgent[];
+  scopes: InitScope[];
+  projectRoot: string;
+  force: boolean;
+  writeClaudeMd: boolean;
+}): Promise<void> {
+  for (const agent of opts.agents) {
+    for (const scope of opts.scopes) {
+      const targetRoot = skillRootFor(agent, scope, opts.projectRoot);
+      const skillDir = join(targetRoot, "skills", "agentic-skill-router-skills");
+      if (await pathExists(skillDir)) {
+        if (!opts.force) {
+          throw new Error(`${skillDir} already exists; re-run with --force to replace it`);
+        }
+      }
+      if (agent === "claude-code" && opts.writeClaudeMd) {
+        await validateClaudeMdFormat(claudeMdPathFor(scope, opts.projectRoot));
+      }
+    }
+  }
 }
 
 async function initializeSkill(opts: {
@@ -428,36 +480,94 @@ async function writeLocalCliReference(
   await writeFile(join(referenceDir, "local-cli.md"), body);
 }
 
-async function promptForAgent(): Promise<InitAgent | null> {
-  if (!input.isTTY) return null;
+function printInitResult(result: InitResult, indent = ""): void {
+  process.stdout.write(`${indent}initialized agentic-skill-router for ${displayAgent(result.agent)} (${result.scope})\n`);
+  process.stdout.write(`${indent}skill: ${result.skillMdPath}\n`);
+  process.stdout.write(`${indent}cli:   ${result.cliPath}\n`);
+  if (result.claudeMdPath && result.claudeMdAction) {
+    process.stdout.write(`${indent}claudemd: ${result.claudeMdPath} (${result.claudeMdAction})\n`);
+  } else if (result.claudeMdAction === "skipped") {
+    process.stdout.write(`${indent}claudemd: skipped\n`);
+  }
+}
+
+async function promptForAgents(): Promise<InitAgent[]> {
+  if (!input.isTTY) return [];
   output.write("Initialize agentic-skill-router for:\n");
   output.write("  1) Codex (.agents/skills)\n");
   output.write("  2) Claude Code (.claude/skills)\n");
   const rl = createInterface({ input, output });
   try {
-    const answer = (await rl.question("Select [1-2]: ")).trim().toLowerCase();
-    if (answer === "1" || answer === "codex") return "codex";
-    if (answer === "2" || answer === "claude" || answer === "claude-code") return "claude-code";
-    return null;
+    const answer = await rl.question("Select one or more [1-2, all]: ");
+    return parsePromptAgents(answer);
   } finally {
     rl.close();
   }
 }
 
-async function promptForScope(agent: InitAgent): Promise<InitScope | null> {
-  if (!input.isTTY) return null;
-  output.write(`Install ${displayAgent(agent)} agentic-skill-router skill into:\n`);
-  output.write(`  1) Project (${agent === "codex" ? ".agents/skills" : ".claude/skills"})\n`);
-  output.write(`  2) Global (${agent === "codex" ? "~/.agents/skills" : "~/.claude/skills"})\n`);
+async function promptForScopes(agents: InitAgent[]): Promise<InitScope[]> {
+  if (!input.isTTY) return [];
+  const label = agents.length === 1 ? `${displayAgent(agents[0]!)} ` : "";
+  output.write(`Install ${label}agentic-skill-router skill${agents.length === 1 ? "" : "s"} into:\n`);
+  output.write("  1) Project (.agents/skills or .claude/skills)\n");
+  output.write("  2) Global (~/.agents/skills or ~/.claude/skills)\n");
   const rl = createInterface({ input, output });
   try {
-    const answer = (await rl.question("Select [1-2]: ")).trim().toLowerCase();
-    if (answer === "1" || answer === "project" || answer === "local") return "project";
-    if (answer === "2" || answer === "global") return "global";
-    return null;
+    const answer = await rl.question("Select one or more [1-2, all]: ");
+    return parsePromptScopes(answer);
   } finally {
     rl.close();
   }
+}
+
+function parsePromptAgents(answer: string): InitAgent[] {
+  return parseInitAgents(splitSelection(answer).map((token) => {
+    if (token === "1") return "codex";
+    if (token === "2") return "claude-code";
+    return token;
+  }));
+}
+
+function parsePromptScopes(answer: string): InitScope[] {
+  return parseInitScopes(splitSelection(answer).map((token) => {
+    if (token === "1") return "project";
+    if (token === "2") return "global";
+    return token;
+  }));
+}
+
+function parseInitAgents(values: string[]): InitAgent[] {
+  const agents: InitAgent[] = [];
+  for (const value of values) {
+    for (const token of splitSelection(value)) {
+      if (isAllSelection(token)) {
+        pushUnique(agents, "codex");
+        pushUnique(agents, "claude-code");
+        continue;
+      }
+      const parsed = parseInitAgent(token);
+      if (!parsed) return [];
+      pushUnique(agents, parsed);
+    }
+  }
+  return agents;
+}
+
+function parseInitScopes(values: string[]): InitScope[] {
+  const scopes: InitScope[] = [];
+  for (const value of values) {
+    for (const token of splitSelection(value)) {
+      if (isAllSelection(token)) {
+        pushUnique(scopes, "project");
+        pushUnique(scopes, "global");
+        continue;
+      }
+      const parsed = parseInitScope(token);
+      if (!parsed) return [];
+      pushUnique(scopes, parsed);
+    }
+  }
+  return scopes;
 }
 
 function parseInitAgent(value: string | undefined): InitAgent | null {
@@ -474,6 +584,27 @@ function parseInitScope(value: string | undefined): InitScope | null {
   if (normalized === "project" || normalized === "local") return "project";
   if (normalized === "global") return "global";
   return null;
+}
+
+function splitSelection(value: string): string[] {
+  return value
+    .split(/[,\s]+/)
+    .map((token) => token.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isAllSelection(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "all" || normalized === "both";
+}
+
+function stringValues(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
+  return typeof value === "string" ? [value] : [];
+}
+
+function pushUnique<T>(items: T[], item: T): void {
+  if (!items.includes(item)) items.push(item);
 }
 
 async function resolveCliPath(cliFlag: string | undefined): Promise<string> {

@@ -121,6 +121,95 @@ test("init accepts scope positional when agent is supplied by option", async () 
   }
 });
 
+test("init supports multi-selected agents and scopes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-multi-"));
+  try {
+    const project = join(root, "project");
+    const { stdout, stderr } = await runInit(
+      ["codex,claude-code", "project,global", "--cwd", project, "--json"],
+      sandboxEnv(root),
+    );
+    assert.equal(stderr, "");
+    const parsed = JSON.parse(stdout) as {
+      action: string;
+      results: Array<{
+        agent: string;
+        scope: string;
+        skillMdPath: string;
+        claudeMdPath?: string;
+        claudeMdAction?: string;
+      }>;
+    };
+    assert.equal(parsed.action, "initialized-agentic-skill-router-skills");
+    assert.deepEqual(
+      parsed.results.map((result) => `${result.agent}:${result.scope}`),
+      ["codex:project", "codex:global", "claude-code:project", "claude-code:global"],
+    );
+
+    assert.ok(await fileExists(join(project, ".agents", "skills", "agentic-skill-router-skills", "SKILL.md")));
+    assert.ok(await fileExists(join(root, ".agents", "skills", "agentic-skill-router-skills", "SKILL.md")));
+    assert.ok(await fileExists(join(project, ".claude", "skills", "agentic-skill-router-skills", "SKILL.md")));
+    assert.ok(await fileExists(join(root, ".claude", "skills", "agentic-skill-router-skills", "SKILL.md")));
+
+    const claudeProject = parsed.results.find((result) => result.agent === "claude-code" && result.scope === "project");
+    const claudeGlobal = parsed.results.find((result) => result.agent === "claude-code" && result.scope === "global");
+    assert.equal(claudeProject?.claudeMdPath, join(project, "CLAUDE.md"));
+    assert.equal(claudeProject?.claudeMdAction, "created");
+    assert.equal(claudeGlobal?.claudeMdPath, join(root, ".claude", "CLAUDE.md"));
+    assert.equal(claudeGlobal?.claudeMdAction, "created");
+    assert.equal(await fileExists(join(project, "CLAUDE.md")), true);
+    assert.equal(await fileExists(join(root, ".claude", "CLAUDE.md")), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("init treats all inside a comma-separated agent positional as an agent selection", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-multi-agent-all-"));
+  try {
+    const project = join(root, "project");
+    const { stdout, stderr } = await runInit(
+      ["codex,all", "project", "--cwd", project, "--json"],
+      sandboxEnv(root),
+    );
+    assert.equal(stderr, "");
+    const parsed = JSON.parse(stdout) as {
+      results: Array<{ agent: string; scope: string }>;
+    };
+    assert.deepEqual(
+      parsed.results.map((result) => `${result.agent}:${result.scope}`),
+      ["codex:project", "claude-code:project"],
+    );
+    assert.ok(await fileExists(join(project, ".agents", "skills", "agentic-skill-router-skills", "SKILL.md")));
+    assert.ok(await fileExists(join(project, ".claude", "skills", "agentic-skill-router-skills", "SKILL.md")));
+    assert.equal(await fileExists(join(root, ".agents", "skills", "agentic-skill-router-skills", "SKILL.md")), false);
+    assert.equal(await fileExists(join(root, ".claude", "skills", "agentic-skill-router-skills", "SKILL.md")), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("init accepts repeated agent and scope options for multi-select", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-multi-options-"));
+  try {
+    const project = join(root, "project");
+    const { stdout, stderr } = await runInit(
+      ["--agent", "codex", "--agent", "claude-code", "--scope", "project", "--cwd", project, "--json"],
+      sandboxEnv(root),
+    );
+    assert.equal(stderr, "");
+    const parsed = JSON.parse(stdout) as {
+      results: Array<{ agent: string; scope: string }>;
+    };
+    assert.deepEqual(
+      parsed.results.map((result) => `${result.agent}:${result.scope}`),
+      ["codex:project", "claude-code:project"],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("init help and parse errors use CLI output instead of stack traces", async () => {
   const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-init-errors-"));
   try {
