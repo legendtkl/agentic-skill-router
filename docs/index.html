@@ -4,7 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="agentic-skill-router 项目介绍：Agent Skills 管理、禁用路由、安全恢复与批量实验结果。">
+  <link rel="icon" type="image/png" href="assets/agentic-skill-router-logo.png?v=2">
+  <link rel="shortcut icon" type="image/png" href="assets/agentic-skill-router-logo.png?v=2">
+  <link rel="apple-touch-icon" href="assets/agentic-skill-router-logo.png?v=2">
   <title>agentic-skill-router</title>
+  <script>
+    try {
+      const storedTheme = localStorage.getItem("asr-theme");
+      if (storedTheme === "dark" || storedTheme === "light") {
+        document.documentElement.dataset.theme = storedTheme;
+      }
+    } catch {
+      // Ignore storage errors; the page still follows the system preference.
+    }
+  </script>
   <style>
     :root {
       color-scheme: light;
@@ -80,12 +93,83 @@
       display: flex;
       align-items: center;
       gap: 18px;
+      min-width: 0;
+      max-width: 100%;
       color: var(--muted);
       font-size: 14px;
       white-space: nowrap;
     }
 
     .nav-links a:hover { color: var(--ink); }
+
+    .nav-end {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .lang-switch {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      height: 36px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+    }
+
+    .lang-switch button {
+      min-width: 42px;
+      border: 0;
+      border-radius: 6px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 720;
+      line-height: 1;
+    }
+
+    .lang-switch button.active {
+      color: var(--ink);
+      background: var(--panel-strong);
+      box-shadow: 0 1px 8px rgba(20, 30, 25, 0.08);
+    }
+
+    .icon-button {
+      width: 36px;
+      height: 36px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--panel-strong);
+      cursor: pointer;
+      box-shadow: 0 1px 8px rgba(20, 30, 25, 0.08);
+    }
+
+    .icon-button svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    .theme-toggle .sun-icon { display: none; }
+    :root[data-effective-theme="dark"] .theme-toggle .moon-icon { display: none; }
+    :root[data-effective-theme="dark"] .theme-toggle .sun-icon { display: block; }
 
     .hero {
       display: grid;
@@ -186,6 +270,7 @@
     .output { color: rgba(244, 243, 238, 0.70); }
 
     .code-panel {
+      max-width: 100%;
       margin: 0 0 12px;
       padding: 12px;
       overflow-x: auto;
@@ -207,6 +292,7 @@
     }
 
     .metric {
+      min-width: 0;
       min-height: 118px;
       padding: 16px;
       border: 1px solid var(--line);
@@ -270,6 +356,7 @@
     }
 
     .feature {
+      min-width: 0;
       min-height: 168px;
       padding: 16px;
       border: 1px solid var(--line);
@@ -300,6 +387,7 @@
 
     .step {
       position: relative;
+      min-width: 0;
       min-height: 132px;
       padding: 16px;
       border: 1px solid var(--line);
@@ -342,6 +430,7 @@
     }
 
     .callout {
+      min-width: 0;
       padding: 18px;
       border: 1px solid rgba(59, 95, 145, 0.22);
       border-radius: 8px;
@@ -376,6 +465,7 @@
     }
 
     .table-wrap {
+      min-width: 0;
       width: 100%;
       overflow: hidden;
       border: 1px solid var(--line);
@@ -441,6 +531,7 @@
     }
 
     .resource {
+      min-width: 0;
       min-height: 96px;
       padding: 16px;
       border: 1px solid var(--line);
@@ -468,8 +559,42 @@
       font-size: 13px;
     }
 
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #10110f;
+      --panel: rgba(26, 28, 25, 0.86);
+      --panel-strong: #1d201c;
+      --ink: #f4f3ee;
+      --ink-soft: #d7d9d2;
+      --muted: #a2a79f;
+      --line: rgba(255, 255, 255, 0.14);
+      --accent: #86d8aa;
+      --accent-soft: rgba(134, 216, 170, 0.16);
+      --blue: #a9c7f5;
+      --blue-soft: rgba(95, 138, 199, 0.18);
+      --amber: #e5c17a;
+      --amber-soft: rgba(190, 145, 68, 0.18);
+      --field: rgba(255, 255, 255, 0.08);
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+    }
+
+    :root[data-theme="dark"] body {
+      background:
+        radial-gradient(circle at 18% 10%, rgba(134, 216, 170, 0.10), transparent 27rem),
+        linear-gradient(180deg, #151713 0%, var(--bg) 55%, #0c0d0b 100%);
+    }
+
+    :root[data-theme="dark"] .eyebrow,
+    :root[data-theme="dark"] .feature,
+    :root[data-theme="dark"] table,
+    :root[data-theme="dark"] .resource {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    :root[data-theme="dark"] .callout p { color: rgba(244, 243, 238, 0.78); }
+
     @media (prefers-color-scheme: dark) {
-      :root {
+      :root:not([data-theme="light"]) {
         color-scheme: dark;
         --bg: #10110f;
         --panel: rgba(26, 28, 25, 0.86);
@@ -488,20 +613,20 @@
         --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
       }
 
-      body {
+      :root:not([data-theme="light"]) body {
         background:
           radial-gradient(circle at 18% 10%, rgba(134, 216, 170, 0.10), transparent 27rem),
           linear-gradient(180deg, #151713 0%, var(--bg) 55%, #0c0d0b 100%);
       }
 
-      .eyebrow,
-      .feature,
-      table,
-      .resource {
+      :root:not([data-theme="light"]) .eyebrow,
+      :root:not([data-theme="light"]) .feature,
+      :root:not([data-theme="light"]) table,
+      :root:not([data-theme="light"]) .resource {
         background: rgba(255, 255, 255, 0.04);
       }
 
-      .callout p { color: rgba(244, 243, 238, 0.78); }
+      :root:not([data-theme="light"]) .callout p { color: rgba(244, 243, 238, 0.78); }
     }
 
     @media (max-width: 980px) {
@@ -529,11 +654,20 @@
         padding-bottom: 18px;
       }
 
-      .nav-links {
-        gap: 12px;
+      .nav-end {
+        display: block;
         margin-top: 14px;
+      }
+
+      .nav-links {
+        width: 100%;
+        gap: 12px;
         overflow-x: auto;
         padding-bottom: 4px;
+      }
+
+      .nav-controls {
+        margin-top: 12px;
       }
 
       .hero {
@@ -586,12 +720,36 @@
         <img src="assets/agentic-skill-router-logo.png" alt="">
         <span>agentic-skill-router</span>
       </a>
-      <div class="nav-links">
-        <a href="#quick-start">Quick Start</a>
-        <a href="#features">功能</a>
-        <a href="#workflow">机制</a>
-        <a href="#experiments">实验</a>
-        <a href="#resources">资源</a>
+      <div class="nav-end">
+        <div class="nav-links">
+          <a href="#quick-start" data-i18n="nav.quick">Quick Start</a>
+          <a href="#features" data-i18n="nav.features">功能</a>
+          <a href="#workflow" data-i18n="nav.workflow">机制</a>
+          <a href="#experiments" data-i18n="nav.experiments">实验</a>
+          <a href="#resources" data-i18n="nav.resources">资源</a>
+        </div>
+        <div class="nav-controls" aria-label="Page controls">
+          <div class="lang-switch" aria-label="Language">
+            <button type="button" data-lang="zh" aria-pressed="true">中</button>
+            <button type="button" data-lang="en" aria-pressed="false">EN</button>
+          </div>
+          <button class="icon-button theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.7 6.7 0 0 0 21 12.8Z"></path>
+            </svg>
+            <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path>
+              <path d="M12 20v2"></path>
+              <path d="m4.93 4.93 1.41 1.41"></path>
+              <path d="m17.66 17.66 1.41 1.41"></path>
+              <path d="M2 12h2"></path>
+              <path d="M20 12h2"></path>
+              <path d="m6.34 17.66-1.41 1.41"></path>
+              <path d="m19.07 4.93-1.41 1.41"></path>
+            </svg>
+          </button>
+        </div>
       </div>
     </nav>
 
@@ -892,5 +1050,296 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
       <span>页面数据引用 2026-05-26 最新批量实验聚合结果。</span>
     </footer>
   </main>
+  <script>
+    const translations = {
+      zh: {
+        lang: "zh-CN",
+        description: "agentic-skill-router 项目介绍：Agent Skills 管理、禁用路由、安全恢复与批量实验结果。",
+        themeDark: "切换到暗色模式",
+        themeLight: "切换到亮色模式",
+        i18n: {
+          "nav.quick": "Quick Start",
+          "nav.features": "功能",
+          "nav.workflow": "机制",
+          "nav.experiments": "实验",
+          "nav.resources": "资源",
+        },
+        html: {
+          ".terminal-body": `<span class="prompt">$</span> npm install -g agentic-skill-router
+<span class="prompt">$</span> agentic-skill-router init
+<span class="output">选择 host：codex 或 claude-code
+选择 scope：project 或 global</span>
+
+<span class="prompt">$</span> agentic-skill-router skills suggest --json
+<span class="prompt">$</span> agentic-skill-router skills web`,
+        },
+        text: {
+          ".eyebrow": "Codex + Claude Code Agent Skills 管理器",
+          ".lead": "把不常用的 Agent Skills 移出常驻上下文，在真正需要时再通过路由找回。它让大型技能库保持轻量，同时保留可审计、可恢复、可实验验证的使用路径。",
+          ".hero .actions a[href='#quick-start']": "Quick Start",
+          ".hero .actions a[href='reports/report-all-experiments.html']": "实验报告",
+          ".metric:nth-child(1) span": "覆盖 Codex 与 Claude Code，支持项目级和全局级技能目录。",
+          ".metric:nth-child(2) span": "最新批量实验单元，来自 2026-05-26 的完整重跑。",
+          ".metric:nth-child(3) span": "匿名化 SkillRouter 技能语料，包含针对性 distractor。",
+          ".metric:nth-child(4) span": "Codex 最优路由变体在专家查询集上的命中结果。",
+          ".metric:nth-child(5) span": "最新完整重跑中的 timeout 与 API error 数量。",
+          "#quick-start h2": "Quick Start",
+          "#quick-start .section-copy": "常用安装和初始化路径直接放在页面里；完整参数仍以 README 和 CLI help 为准。",
+          "#quick-start .feature:nth-child(1) b": "全局安装",
+          "#quick-start .feature:nth-child(1) p": "推荐先全局安装，让生成的 skill 能引用稳定的 CLI 路径。",
+          "#quick-start .feature:nth-child(2) b": "Codex 项目级入口",
+          "#quick-start .feature:nth-child(2) p": "在当前项目写入 Codex 可发现的路由 skill，不影响其他项目。",
+          "#quick-start .feature:nth-child(3) b": "Claude Code 项目级入口",
+          "#quick-start .feature:nth-child(3) p": "初始化时会维护带 fence 的 CLAUDE.md routing block，重复运行保持幂等。",
+          "#quick-start .feature:nth-child(4) b": "本地 Web 管理页",
+          "#quick-start .feature:nth-child(4) p": "用于浏览、筛选、禁用和恢复本机技能；默认只绑定 loopback。",
+          "#quick-start .feature:nth-child(5) b": "路由禁用技能",
+          "#quick-start .feature:nth-child(5) p": "从禁用技能语料中选择匹配项，输出可被 agent workflow 消费的结构化结果。",
+          "#quick-start .feature:nth-child(6) b": "恢复技能",
+          "#quick-start .feature:nth-child(6) p": "通过状态记录恢复 SKILL.md；内置和系统技能保持受保护。",
+          "#features h2": "核心功能",
+          "#features .section-copy": "项目围绕一个目标设计：降低常驻 skill 元数据成本，同时保持禁用、恢复和按需路由都可控。",
+          "#features .feature:nth-child(1) b": "技能盘点",
+          "#features .feature:nth-child(1) p": "枚举 Codex、Claude Code、项目目录、用户目录和插件目录中的技能，并识别内置系统技能。",
+          "#features .feature:nth-child(2) b": "基于使用记录瘦身",
+          "#features .feature:nth-child(2) p": "读取本地 transcript，统计技能调用痕迹，按最近使用时间给出 stale 或 unused 建议。",
+          "#features .feature:nth-child(3) b": "安全禁用与恢复",
+          "#features .feature:nth-child(3) p": "通过重命名 SKILL.md 禁用技能，保留状态文件，保护内置和系统技能不被误改。",
+          "#features .feature:nth-child(4) b": "禁用技能路由",
+          "#features .feature:nth-child(4) p": "当已启用技能无法覆盖请求时，从禁用技能语料中检索并选择更合适的技能。",
+          "#features .feature:nth-child(5) b": "本地 Web 管理页",
+          "#features .feature:nth-child(5) p": "内置 localhost Web UI，可浏览、筛选、禁用和恢复技能；公网绑定需要显式危险开关。",
+          "#features .feature:nth-child(6) b": "CLI 与插件分发",
+          "#features .feature:nth-child(6) p": "提供 npm CLI、Codex slash prompt、Claude Code 插件资产和统一的技能工作流定义。",
+          "#workflow h2": "运行机制",
+          "#workflow .section-copy": "agentic-skill-router 不复制宿主的内置技能系统，而是在技能目录和宿主触发机制之间增加一层可审计的路由。",
+          "#workflow .step:nth-child(1) b": "初始化",
+          "#workflow .step:nth-child(1) span:last-child": "init 安装项目或全局技能入口，并写入对应宿主需要的触发资产。",
+          "#workflow .step:nth-child(2) b": "扫描",
+          "#workflow .step:nth-child(2) span:last-child": "汇总技能元数据、来源、冲突和禁用状态，形成当前可操作清单。",
+          "#workflow .step:nth-child(3) b": "瘦身",
+          "#workflow .step:nth-child(3) span:last-child": "suggest 结合使用记录生成候选项，再由用户确认禁用。",
+          "#workflow .step:nth-child(4) b": "路由",
+          "#workflow .step:nth-child(4) span:last-child": "请求需要禁用技能时，路由工作流在语料中选择目标 skill 并读取其指令。",
+          "#workflow .step:nth-child(5) b": "恢复",
+          "#workflow .step:nth-child(5) span:last-child": "enable 使用状态记录还原 SKILL.md，也能处理缺失状态的修复路径。",
+          "#experiments h2": "批量实验结果",
+          "#experiments .section-copy": "最新聚合数据来自 experiments/dci-compare/runs/rerun-150-full-2026-05-26：48 个聚合行，1,152 个实验单元，覆盖 Claude、Codex、16 个路由变体与 24 个专家查询。",
+          "#experiments .callout:nth-child(1) strong": "Codex 结果",
+          "#experiments .callout:nth-child(1) p": "I-meta 与 E-digest 达到 24/24；I-meta 成本为 $3.02，是最新 Codex 组的高准确率低成本点。",
+          "#experiments .callout:nth-child(2) strong": "Claude 结果",
+          "#experiments .callout:nth-child(2) p": "B-cc 最高为 23/24；更受控的 K-lite 以 22/24 和 $4.06 提供更低成本的折中点。",
+          ".report-actions a[href='reports/report-all-experiments.html']": "打开完整 HTML 报告",
+          ".report-actions a[href*='experiments/dci-compare']": "查看实验源码",
+          "#experiments th:nth-child(1)": "Host",
+          "#experiments th:nth-child(2)": "变体",
+          "#experiments th:nth-child(3)": "命中",
+          "#experiments th:nth-child(4)": "成本",
+          "#experiments th:nth-child(5)": "说明",
+          "#experiments tbody tr:nth-child(1) td:nth-child(5)": "仅读 metadata，trigger rate 100%。",
+          "#experiments tbody tr:nth-child(2) td:nth-child(5)": "目录摘要 + 单 skill 展开。",
+          "#experiments tbody tr:nth-child(3) td:nth-child(5)": "有界 DCI shell 路由，读取正文。",
+          "#experiments tbody tr:nth-child(4) td:nth-child(5)": "自由 shell DCI，准确率最高但成本更高。",
+          "#experiments tbody tr:nth-child(5) td:nth-child(5)": "轻量路由，保持 91.7% 命中率。",
+          "#experiments tbody tr:nth-child(6) td:nth-child(5)": "宿主原生选择基线，非禁用技能路由。",
+          "#resources h2": "资源入口",
+          "#resources .section-copy": "代码、文档和实验产物都保留在仓库中，便于复现实验或检查具体实现。",
+          "#resources .resource:nth-child(1) b": "完整实验 HTML 报告",
+          "#resources .resource:nth-child(1) span": "已渲染的 all-experiments 报告，可直接在站内浏览。",
+          "#resources .resource:nth-child(2) span": "安装、CLI 命令、宿主路径和运行细节。",
+          "#resources .resource:nth-child(3) b": "中文 README",
+          "#resources .resource:nth-child(3) span": "面向中文读者的项目说明和使用方式。",
+          "#resources .resource:nth-child(4) b": "路由 Skill",
+          "#resources .resource:nth-child(4) span": "agent-facing 工作流和引用文档。",
+          ".footer span:nth-child(2)": "页面数据引用 2026-05-26 最新批量实验聚合结果。",
+        },
+      },
+      en: {
+        lang: "en",
+        description: "agentic-skill-router project page: Agent Skills management, disabled-skill routing, safe restore workflows, and batch experiment results.",
+        themeDark: "Switch to dark mode",
+        themeLight: "Switch to light mode",
+        i18n: {
+          "nav.quick": "Quick Start",
+          "nav.features": "Features",
+          "nav.workflow": "Workflow",
+          "nav.experiments": "Experiments",
+          "nav.resources": "Resources",
+        },
+        html: {
+          ".terminal-body": `<span class="prompt">$</span> npm install -g agentic-skill-router
+<span class="prompt">$</span> agentic-skill-router init
+<span class="output">select host: codex or claude-code
+select scope: project or global</span>
+
+<span class="prompt">$</span> agentic-skill-router skills suggest --json
+<span class="prompt">$</span> agentic-skill-router skills web`,
+        },
+        text: {
+          ".eyebrow": "Codex + Claude Code Agent Skills manager",
+          ".lead": "Move rarely used Agent Skills out of the always-on context, then route them back in only when a task actually needs them. The result is a lighter skill library with auditable disable, restore, and experiment-backed routing paths.",
+          ".hero .actions a[href='#quick-start']": "Quick Start",
+          ".hero .actions a[href='reports/report-all-experiments.html']": "Experiment report",
+          ".metric:nth-child(1) span": "Supports Codex and Claude Code skill roots across project and global scopes.",
+          ".metric:nth-child(2) span": "Latest full batch rerun from May 26, 2026.",
+          ".metric:nth-child(3) span": "An anonymized SkillRouter corpus with targeted distractors.",
+          ".metric:nth-child(4) span": "Best Codex routing result on the expert query set.",
+          ".metric:nth-child(5) span": "Timeouts and API errors in the latest full rerun.",
+          "#quick-start h2": "Quick Start",
+          "#quick-start .section-copy": "Common install and initialization paths are rendered here; the README and CLI help remain the source of truth for the full option set.",
+          "#quick-start .feature:nth-child(1) b": "Global install",
+          "#quick-start .feature:nth-child(1) p": "Install globally first so generated skills can reference a stable CLI path.",
+          "#quick-start .feature:nth-child(2) b": "Codex project entry",
+          "#quick-start .feature:nth-child(2) p": "Add a Codex-discoverable routing skill to the current project without affecting other workspaces.",
+          "#quick-start .feature:nth-child(3) b": "Claude Code project entry",
+          "#quick-start .feature:nth-child(3) p": "Initialization maintains a fenced CLAUDE.md routing block and stays idempotent across reruns.",
+          "#quick-start .feature:nth-child(4) b": "Local web manager",
+          "#quick-start .feature:nth-child(4) p": "Browse, filter, disable, and restore local skills; the server binds to loopback by default.",
+          "#quick-start .feature:nth-child(5) b": "Route disabled skills",
+          "#quick-start .feature:nth-child(5) p": "Select a matching skill from the disabled corpus and emit structured output for agent workflows.",
+          "#quick-start .feature:nth-child(6) b": "Restore skills",
+          "#quick-start .feature:nth-child(6) p": "Restore SKILL.md from state records while keeping built-in and system skills protected.",
+          "#features h2": "Core Features",
+          "#features .section-copy": "The project has one job: reduce always-on skill metadata cost while keeping disable, restore, and on-demand routing controlled.",
+          "#features .feature:nth-child(1) b": "Skill inventory",
+          "#features .feature:nth-child(1) p": "Enumerate skills from Codex, Claude Code, project directories, user directories, and plugins, while identifying built-in system skills.",
+          "#features .feature:nth-child(2) b": "Usage-based slimming",
+          "#features .feature:nth-child(2) p": "Read local transcripts, extract skill usage signals, and suggest stale or unused entries by last-used time.",
+          "#features .feature:nth-child(3) b": "Safe disable and restore",
+          "#features .feature:nth-child(3) p": "Disable skills by renaming SKILL.md, keep state records, and prevent accidental mutation of built-in or system skills.",
+          "#features .feature:nth-child(4) b": "Disabled-skill routing",
+          "#features .feature:nth-child(4) p": "When enabled skills do not cover a request, search the disabled corpus and select the most relevant skill.",
+          "#features .feature:nth-child(5) b": "Local web manager",
+          "#features .feature:nth-child(5) p": "A localhost Web UI can browse, filter, disable, and restore skills; public binding requires an explicit danger flag.",
+          "#features .feature:nth-child(6) b": "CLI and plugin distribution",
+          "#features .feature:nth-child(6) p": "Ships an npm CLI, Codex slash prompt, Claude Code plugin assets, and one unified routing skill workflow.",
+          "#workflow h2": "How It Works",
+          "#workflow .section-copy": "agentic-skill-router does not replace the host skill system. It adds an auditable routing layer between skill directories and host triggers.",
+          "#workflow .step:nth-child(1) b": "Initialize",
+          "#workflow .step:nth-child(1) span:last-child": "init installs a project or global skill entry and writes the trigger assets needed by the selected host.",
+          "#workflow .step:nth-child(2) b": "Scan",
+          "#workflow .step:nth-child(2) span:last-child": "Collect metadata, source, conflict, and disabled-state information into one actionable inventory.",
+          "#workflow .step:nth-child(3) b": "Slim",
+          "#workflow .step:nth-child(3) span:last-child": "suggest combines transcript usage with policy rules, then leaves disable decisions explicit.",
+          "#workflow .step:nth-child(4) b": "Route",
+          "#workflow .step:nth-child(4) span:last-child": "When a disabled skill is needed, the routing workflow selects a target skill and reads its instructions.",
+          "#workflow .step:nth-child(5) b": "Restore",
+          "#workflow .step:nth-child(5) span:last-child": "enable restores SKILL.md through state records and supports repair paths for missing state.",
+          "#experiments h2": "Batch Experiment Results",
+          "#experiments .section-copy": "Latest aggregate data comes from experiments/dci-compare/runs/rerun-150-full-2026-05-26: 48 aggregate rows and 1,152 cells across Claude, Codex, 16 routing variants, and 24 expert queries.",
+          "#experiments .callout:nth-child(1) strong": "Codex results",
+          "#experiments .callout:nth-child(1) p": "I-meta and E-digest reached 24/24; I-meta cost $3.02, making it the high-accuracy low-cost point in the latest Codex group.",
+          "#experiments .callout:nth-child(2) strong": "Claude results",
+          "#experiments .callout:nth-child(2) p": "B-cc topped the Claude group at 23/24; the more controlled K-lite delivered 22/24 at $4.06 as a lower-cost tradeoff.",
+          ".report-actions a[href='reports/report-all-experiments.html']": "Open full HTML report",
+          ".report-actions a[href*='experiments/dci-compare']": "View experiment source",
+          "#experiments th:nth-child(1)": "Host",
+          "#experiments th:nth-child(2)": "Variant",
+          "#experiments th:nth-child(3)": "Hits",
+          "#experiments th:nth-child(4)": "Cost",
+          "#experiments th:nth-child(5)": "Notes",
+          "#experiments tbody tr:nth-child(1) td:nth-child(5)": "Metadata-only routing, 100% trigger rate.",
+          "#experiments tbody tr:nth-child(2) td:nth-child(5)": "Catalog digest plus one skill expansion.",
+          "#experiments tbody tr:nth-child(3) td:nth-child(5)": "Bounded DCI shell routing with body reads.",
+          "#experiments tbody tr:nth-child(4) td:nth-child(5)": "Free-form shell DCI; highest accuracy, higher cost.",
+          "#experiments tbody tr:nth-child(5) td:nth-child(5)": "Lightweight routing at 91.7% accuracy.",
+          "#experiments tbody tr:nth-child(6) td:nth-child(5)": "Host-native baseline, not disabled-skill routing.",
+          "#resources h2": "Resources",
+          "#resources .section-copy": "Code, docs, and experiment artifacts stay in the repository for reproduction and implementation review.",
+          "#resources .resource:nth-child(1) b": "Full experiment HTML report",
+          "#resources .resource:nth-child(1) span": "Rendered all-experiments report, browsable directly on this site.",
+          "#resources .resource:nth-child(2) span": "Install steps, CLI commands, host paths, and runtime details.",
+          "#resources .resource:nth-child(3) b": "Chinese README",
+          "#resources .resource:nth-child(3) span": "Project overview and usage notes for Chinese readers.",
+          "#resources .resource:nth-child(4) b": "Routing Skill",
+          "#resources .resource:nth-child(4) span": "Agent-facing workflow and reference documents.",
+          ".footer span:nth-child(2)": "Page data cites the latest batch experiment aggregates from May 26, 2026.",
+        },
+      },
+    };
+
+    const root = document.documentElement;
+    const themeToggle = document.querySelector(".theme-toggle");
+    const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+    function getLanguage() {
+      try {
+        return localStorage.getItem("asr-lang") === "en" ? "en" : "zh";
+      } catch {
+        return "zh";
+      }
+    }
+
+    function effectiveTheme() {
+      if (root.dataset.theme === "dark" || root.dataset.theme === "light") return root.dataset.theme;
+      return systemDark.matches ? "dark" : "light";
+    }
+
+    function syncThemeButton() {
+      const theme = effectiveTheme();
+      root.dataset.effectiveTheme = theme;
+      const lang = getLanguage();
+      const label = theme === "dark" ? translations[lang].themeLight : translations[lang].themeDark;
+      themeToggle.setAttribute("aria-label", label);
+      themeToggle.setAttribute("title", label);
+    }
+
+    function applyLanguage(lang) {
+      const dictionary = translations[lang] ?? translations.zh;
+      root.lang = dictionary.lang;
+      document.querySelector('meta[name="description"]').setAttribute("content", dictionary.description);
+      for (const [key, value] of Object.entries(dictionary.i18n)) {
+        document.querySelectorAll(`[data-i18n="${key}"]`).forEach((node) => {
+          node.textContent = value;
+        });
+      }
+      for (const [selector, value] of Object.entries(dictionary.text)) {
+        document.querySelectorAll(selector).forEach((node) => {
+          node.textContent = value;
+        });
+      }
+      for (const [selector, value] of Object.entries(dictionary.html)) {
+        document.querySelectorAll(selector).forEach((node) => {
+          node.innerHTML = value;
+        });
+      }
+      document.querySelectorAll("[data-lang]").forEach((button) => {
+        const active = button.dataset.lang === lang;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+      syncThemeButton();
+    }
+
+    document.querySelectorAll("[data-lang]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const lang = button.dataset.lang === "en" ? "en" : "zh";
+        try {
+          localStorage.setItem("asr-lang", lang);
+        } catch {
+          // Ignore storage errors; the current page can still switch language.
+        }
+        applyLanguage(lang);
+      });
+    });
+
+    themeToggle.addEventListener("click", () => {
+      const nextTheme = effectiveTheme() === "dark" ? "light" : "dark";
+      root.dataset.theme = nextTheme;
+      try {
+        localStorage.setItem("asr-theme", nextTheme);
+      } catch {
+        // Ignore storage errors; the current page can still switch theme.
+      }
+      syncThemeButton();
+    });
+
+    systemDark.addEventListener("change", () => {
+      if (!root.dataset.theme) syncThemeButton();
+    });
+
+    applyLanguage(getLanguage());
+    syncThemeButton();
+  </script>
 </body>
 </html>
