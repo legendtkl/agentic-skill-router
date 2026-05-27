@@ -2,7 +2,15 @@
 
 [English](README.md) | 简体中文
 
-`agentic-skill-router` 是面向受支持宿主的 Agent Skills 管理 CLI 与安装资产。它会枚举已安装 skills、读取本地会话记录中的使用情况、建议过期或长期未使用的 skills，并通过重命名 `SKILL.md` 的方式安全禁用或恢复指定 skill。
+`agentic-skill-router` 是受 Agentic Search 启发、面向 Agent Skills
+管理的无向量化路由方案。它把已安装 skill 的 metadata 当成本地可搜索语料，
+让 agent 做有边界的证据检索，并且只在 metadata 支持时记录一次路由选择。
+它也会枚举已安装 skills、读取本地会话记录中的使用情况、建议过期或长期未使用的
+skills，并通过重命名 `SKILL.md` 的方式安全禁用或恢复指定 skill。
+
+本项目不是通用 RAG 栈，不依赖 embedding、向量数据库或后台索引服务。目标是为
+skill 管理提供一个轻量、可审计的路由层：保持启用 skill 集合精简，为已禁用
+skills 保留仅基于 metadata 的找回路径，并让最终选择仍由 agent 控制。
 
 Subagent 管理不属于本仓库范围。
 
@@ -145,7 +153,12 @@ Skill 来源：
 
 已禁用 skill 路由：
 
-- 默认 agent workflow 是 L-agentic：agent 先从用户请求里构造 must/probe terms，用 `skills corpus search` 搜索已禁用 skill 元数据；必要时用 `skills corpus inspect` 检查小候选集；最后用 `skills corpus select` 记录且只选择一个 skill。
+- 默认 agent workflow 是受 Agentic Search 启发的 L-agentic 路由：agent
+  先从用户请求里构造 must/probe terms，用 `skills corpus search` 搜索已禁用
+  skill 元数据；必要时用 `skills corpus inspect` 检查小候选集；最后用
+  `skills corpus select` 记录且只选择一个 skill。
+- 路由刻意保持无向量化。检索只面向结构化 frontmatter 和短 metadata 字段；
+  不需要 embedding、向量库或隐藏的语义索引。
 - 检索阶段不能读取已禁用 skill 正文；选择依据只来自元数据。
 - `skills corpus search` 读取 `id`、`name`、`description`、aliases、tags、tools、domains、intents 和 examples，返回稳定 `corpus-...` refs，不暴露本地文件路径。
 - `skills corpus select <ref>` 会写入路由使用记录，并返回 `selected.skillMdPath`；返回路径可能以 `SKILL.md.agentic-skill-router-disabled` 结尾，仍可作为指令安全读取。

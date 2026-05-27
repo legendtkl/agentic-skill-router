@@ -1,7 +1,9 @@
 # Disabled-skill L-agentic routing
 
-Agentic Skill Router routes to disabled skill instructions through metadata-only
-AgenticRAG primitives. Use the `agentic_skill_router` helper from `SKILL.md`.
+Agentic Skill Router routes to disabled skill instructions through
+Agentic Search-inspired, metadata-only corpus primitives. It is deliberately
+non-vectorized: do not assume embeddings, a vector database, or a hidden
+semantic index. Use the `agentic_skill_router` helper from `SKILL.md`.
 
 Do not call `skills route`. Do not call `skills dci` or `skills body`. During
 retrieval, do not read disabled skill bodies.

@@ -2,9 +2,10 @@
 
 ## Project Overview
 
-Small TypeScript CLI/plugin project for managing installed Claude Code and Codex
-skills based on usage. It scans skill roots and session logs, suggests stale
-entries, and disables/restores skills by renaming `SKILL.md`.
+Small TypeScript CLI/plugin project for Agentic Search-inspired, non-vectorized
+routing and management of installed Claude Code and Codex skills. It treats
+skill metadata as a local searchable corpus, scans skill roots and session logs,
+suggests stale entries, and disables/restores skills by renaming `SKILL.md`.
 
 Subagent management is intentionally out of scope in this repository.
 

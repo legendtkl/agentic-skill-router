@@ -1,7 +1,7 @@
 {
   "name": "agentic-skill-router",
   "version": "0.1.0",
-  "description": "Manage installed Agent Skills across supported hosts based on usage",
+  "description": "Agentic Search-inspired non-vectorized routing and management for Agent Skills",
   "license": "MIT",
   "engines": {
     "node": ">=20"

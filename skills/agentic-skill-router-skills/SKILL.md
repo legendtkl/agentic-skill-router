@@ -1,13 +1,13 @@
 ---
 name: agentic-skill-router-skills
-description: Use as a fallback after enabled skills have been considered and none clearly match a skill-shaped request, and use directly when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills across supported hosts.
+description: Use as a fallback after enabled skills have been considered and none clearly match a skill-shaped request, and use directly when the user asks to audit, slim, disable, restore, or route locally installed Agent Skills; provides Agentic Search-inspired, non-vectorized routing and management across supported hosts.
 metadata:
   agentic-skill-router.version: "1"
   agentic-skill-router.variant: "L-agentic"
   agentic-skill-router.hosts: "claude-code,codex"
 ---
 
-# agentic-skill-router - Agent Skills L-agentic routing and slimming
+# agentic-skill-router - Agentic Search-inspired skill routing and slimming
 
 Use this skill when the user wants to inspect installed Agent Skills, identify
 unused or stale skills, disable or restore skills, or route a request to a
@@ -73,10 +73,11 @@ deploying, inspecting, or troubleshooting a named tool, API, service,
 dashboard, datastore, CLI, DSL, URL, file format, platform workflow, or domain
 method.
 
-Use the `agentic-skill-router` corpus primitives as an AgenticRAG-style retrieval
-harness. Do not call `skills route`. Do not call `skills dci` or `skills body`.
-During retrieval, do not read disabled skill bodies. Route from disabled-skill
-metadata only.
+Use the `agentic-skill-router` corpus primitives as an Agentic Search-inspired,
+non-vectorized retrieval harness for skill management. Do not call
+`skills route`. Do not call `skills dci` or `skills body`. During retrieval, do
+not read disabled skill bodies. Route from disabled-skill metadata only. Do not
+assume embeddings, a vector database, or any hidden semantic index exists.
 
 1. Build two term sets from the current user request:
    - **must terms**: 1-3 narrow terms that the correct skill should mention
