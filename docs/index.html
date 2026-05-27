@@ -931,19 +931,26 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
       </div>
 
       <div class="results-grid">
-        <div>
-          <div class="callout">
-            <strong>Codex 结果</strong>
+        <div class="strategy-list">
+          <div class="callout strategy-card">
+            <strong>Bash-based agentic retriever</strong>
             <p>
-              <code>I-meta</code> 与 <code>E-digest</code> 达到 24/24；
-              <code>I-meta</code> 成本为 $3.02，是最新 Codex 组的高准确率低成本点。
+              让 agent 用 <code>find</code>、<code>rg</code>、<code>sed</code> 等通用命令直接搜索禁用 skill 语料。
+              优点是 no embedding、可读完整正文、可解释；代价是需要约束输出和轮次，否则容易增加上下文与工具调用。
             </p>
           </div>
-          <div class="callout amber" style="margin-top: 12px;">
-            <strong>Claude 结果</strong>
+          <div class="callout amber strategy-card" style="margin-top: 12px;">
+            <strong>Tool-wrapped agentic retrieval</strong>
             <p>
-              <code>B-cc</code> 最高为 23/24；更受控的 <code>K-lite</code> 以 22/24 和 $4.06
-              提供更低成本的折中点。
+              把搜索、打开、读取等步骤包装成受控工具接口，让 agent 在固定动作空间内检索。
+              优点是行为更稳定、边界更清晰；代价是工具设计会影响召回率和调试复杂度。
+            </p>
+          </div>
+          <div class="callout strategy-card" style="margin-top: 12px;">
+            <strong>Metadata / catalog retrieval</strong>
+            <p>
+              先读取 skill description 或预生成 catalog，再按需展开候选 skill。
+              优点是便宜、快、上下文更可控；风险是 metadata 不足时容易被近义 distractor 带偏。
             </p>
           </div>
           <div class="report-actions">
@@ -1117,10 +1124,12 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
           "#workflow .step:nth-child(5) span:last-child": "enable 使用状态记录还原 SKILL.md，也能处理缺失状态的修复路径。",
           "#experiments h2": "批量实验结果",
           "#experiments .section-copy": "最新聚合数据来自 experiments/dci-compare/runs/rerun-150-full-2026-05-26：48 个聚合行，1,152 个实验单元，覆盖 Claude、Codex、16 个路由变体与 24 个专家查询。",
-          "#experiments .callout:nth-child(1) strong": "Codex 结果",
-          "#experiments .callout:nth-child(1) p": "I-meta 与 E-digest 达到 24/24；I-meta 成本为 $3.02，是最新 Codex 组的高准确率低成本点。",
-          "#experiments .callout:nth-child(2) strong": "Claude 结果",
-          "#experiments .callout:nth-child(2) p": "B-cc 最高为 23/24；更受控的 K-lite 以 22/24 和 $4.06 提供更低成本的折中点。",
+          "#experiments .strategy-card:nth-child(1) strong": "Bash-based agentic retriever",
+          "#experiments .strategy-card:nth-child(1) p": "让 agent 用 find、rg、sed 等通用命令直接搜索禁用 skill 语料。优点是 no embedding、可读完整正文、可解释；代价是需要约束输出和轮次，否则容易增加上下文与工具调用。",
+          "#experiments .strategy-card:nth-child(2) strong": "Tool-wrapped agentic retrieval",
+          "#experiments .strategy-card:nth-child(2) p": "把搜索、打开、读取等步骤包装成受控工具接口，让 agent 在固定动作空间内检索。优点是行为更稳定、边界更清晰；代价是工具设计会影响召回率和调试复杂度。",
+          "#experiments .strategy-card:nth-child(3) strong": "Metadata / catalog retrieval",
+          "#experiments .strategy-card:nth-child(3) p": "先读取 skill description 或预生成 catalog，再按需展开候选 skill。优点是便宜、快、上下文更可控；风险是 metadata 不足时容易被近义 distractor 带偏。",
           ".report-actions a[href='reports/report-all-experiments.html']": "打开完整 HTML 报告",
           ".report-actions a[href*='experiments/dci-compare']": "查看实验源码",
           "#experiments th:nth-child(1)": "Host",
@@ -1218,10 +1227,12 @@ select scope: project or global</span>
           "#workflow .step:nth-child(5) span:last-child": "enable restores SKILL.md through state records and supports repair paths for missing state.",
           "#experiments h2": "Batch Experiment Results",
           "#experiments .section-copy": "Latest aggregate data comes from experiments/dci-compare/runs/rerun-150-full-2026-05-26: 48 aggregate rows and 1,152 cells across Claude, Codex, 16 routing variants, and 24 expert queries.",
-          "#experiments .callout:nth-child(1) strong": "Codex results",
-          "#experiments .callout:nth-child(1) p": "I-meta and E-digest reached 24/24; I-meta cost $3.02, making it the high-accuracy low-cost point in the latest Codex group.",
-          "#experiments .callout:nth-child(2) strong": "Claude results",
-          "#experiments .callout:nth-child(2) p": "B-cc topped the Claude group at 23/24; the more controlled K-lite delivered 22/24 at $4.06 as a lower-cost tradeoff.",
+          "#experiments .strategy-card:nth-child(1) strong": "Bash-based agentic retriever",
+          "#experiments .strategy-card:nth-child(1) p": "The agent searches disabled skills directly with general shell commands such as find, rg, and sed. Pros: no embeddings, full-body evidence, and explainable traces. Tradeoff: output and turns need bounds, or context and tool calls can grow quickly.",
+          "#experiments .strategy-card:nth-child(2) strong": "Tool-wrapped agentic retrieval",
+          "#experiments .strategy-card:nth-child(2) p": "Search, open, and read actions are wrapped behind controlled tool interfaces while the agent still plans the retrieval path. Pros: steadier behavior and clearer boundaries. Tradeoff: tool design shapes recall and debugging complexity.",
+          "#experiments .strategy-card:nth-child(3) strong": "Metadata / catalog retrieval",
+          "#experiments .strategy-card:nth-child(3) p": "The workflow reads skill descriptions or a prebuilt catalog first, then expands candidates only when needed. Pros: cheaper, faster, and easier to bound. Risk: weak metadata can be pulled toward near-miss distractors.",
           ".report-actions a[href='reports/report-all-experiments.html']": "Open full HTML report",
           ".report-actions a[href*='experiments/dci-compare']": "View experiment source",
           "#experiments th:nth-child(1)": "Host",
