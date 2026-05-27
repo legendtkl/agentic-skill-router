@@ -4,9 +4,11 @@ import type { Host, HostUsageOptions } from "./base.ts";
 import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageDiagnostics, UsageStat } from "../types.ts";
 import {
+  buildStrictProjectWalkOpts,
   readClaudeSettings,
   readInstalledPlugins,
   readSkillFrontmatterDetailed,
+  reportEscapedProjectEntries,
   walkSkillsDir,
 } from "../scan.ts";
 import { collectUsageStatsDetailed } from "../usage.ts";
@@ -51,6 +53,15 @@ export interface ClaudeCodeHostOptions {
   projectsDir?: string;
   /** current project directory for .claude/skills discovery */
   cwd?: string;
+  /**
+   * When set, project-scope skill scans run in strict-mode TOCTOU narrowing
+   * (#133): the project skills root is realpath-ed and any per-skill entry
+   * whose realpath escapes that canonical is dropped from results (instead
+   * of surfacing with `outOfRoot=true`). The value is the canonical project
+   * path captured at validation time by the web allowlist
+   * (`src/commands/web.ts`). Unset means default CLI behaviour.
+   */
+  enforceProjectScopeCanonical?: string;
 }
 
 export class ClaudeCodeHost implements Host {
@@ -58,11 +69,13 @@ export class ClaudeCodeHost implements Host {
   private readonly claudeHome: string;
   private readonly projectsDir: string;
   private readonly cwd: string;
+  private readonly enforceProjectScopeCanonical: string | undefined;
 
   constructor(opts: ClaudeCodeHostOptions = {}) {
     this.claudeHome = opts.claudeHome ?? join(homedir(), ".claude");
     this.projectsDir = opts.projectsDir ?? join(this.claudeHome, "projects");
     this.cwd = opts.cwd ?? process.env["AGENTIC_SKILL_ROUTER_CWD"] ?? process.cwd();
+    this.enforceProjectScopeCanonical = opts.enforceProjectScopeCanonical;
   }
 
   async listSkills(): Promise<Skill[]> {
@@ -92,7 +105,16 @@ export class ClaudeCodeHost implements Host {
 
     // 2. Project-level skills from CWD up to the repository root:
     // <repo>/.claude/skills and nested <repo>/<subdir>/.claude/skills.
+    //
+    // When the web allowlist set `enforceProjectScopeCanonical`, every
+    // project skill root we visit gets the strict-mode `walkSkillsDir`
+    // contract (#133): we realpath the skills-root container itself, hand
+    // that canonical to the walker, and supply an `escaped` sink so any
+    // per-skill entry whose realpath escapes the canonical is DROPPED
+    // instead of surfaced with `outOfRoot=true`. Default CLI flows leave
+    // `enforceProjectScopeCanonical` unset and retain legacy behaviour.
     for (const projectRoot of await projectSkillRoots(this.cwd, ".claude/skills")) {
+      const walkOpts = await buildStrictProjectWalkOpts(projectRoot.root, this.enforceProjectScopeCanonical);
       const projectSkills = await walkSkillsDir(projectRoot.root, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
         const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
         return {
@@ -110,7 +132,10 @@ export class ClaudeCodeHost implements Host {
           outOfRoot,
           ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
         };
-      });
+      }, walkOpts);
+      if (walkOpts.escaped && walkOpts.escaped.length > 0) {
+        reportEscapedProjectEntries(projectRoot.root, walkOpts.escaped);
+      }
       out.push(...projectSkills);
     }
 

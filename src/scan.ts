@@ -552,6 +552,52 @@ export async function walkSkillsDir(
   return out;
 }
 
+/**
+ * Build the `walkSkillsDir` options that opt a project-scope scan into
+ * strict-mode TOCTOU narrowing (#133). Used by both host implementations
+ * for their project-scope `walkSkillsDir` call sites so the web allowlist
+ * can rely on the same drop-on-escape contract regardless of host.
+ *
+ * When `enforced` is undefined (default CLI flows), the returned options
+ * carry no `rootCanonical` / `escaped`, so the walker falls back to its
+ * legacy "show out-of-root with `outOfRoot=true`" behaviour.
+ *
+ * When `enforced` is set, we realpath the per-host skills-root container
+ * (e.g. `<project>/.claude/skills` or `<project>/.agents/skills`) and
+ * pass the canonical plus a fresh `escaped` sink. The walker then drops
+ * any entry whose realpath escapes the canonical. A realpath failure on
+ * the skills root itself (ENOENT, broken symlink, etc.) is treated as
+ * "no canonical available" and the strict mode silently downgrades to
+ * the legacy behaviour for THAT root — the broader allowlist guard in
+ * `src/commands/web.ts` will still refuse the request if the root
+ * actually points outside the allowlist.
+ */
+export async function buildStrictProjectWalkOpts(
+  projectSkillsRoot: string,
+  enforced: string | undefined,
+): Promise<WalkSkillsDirOptions> {
+  if (!enforced) return {};
+  const rootCanonical = await canonicalizeRoot(projectSkillsRoot);
+  if (rootCanonical === null) return {};
+  return { rootCanonical, escaped: [] };
+}
+
+/**
+ * Surface escaped-entry diagnostics from a strict-mode project scan to
+ * stderr. We intentionally keep this lightweight — a one-line warning per
+ * escape is enough for the operator to spot tampering; richer reporting
+ * would require threading a diagnostics channel through every host and is
+ * out of scope for the partial #133 fix.
+ */
+export function reportEscapedProjectEntries(skillsRoot: string, escaped: string[]): void {
+  if (escaped.length === 0) return;
+  for (const path of escaped) {
+    process.stderr.write(
+      `warning: skipped project skill ${path} under ${skillsRoot}: realpath escapes the validated project root (#133)\n`,
+    );
+  }
+}
+
 async function canonicalizeRoot(root: string): Promise<string | null> {
   try {
     return await realpath(root);

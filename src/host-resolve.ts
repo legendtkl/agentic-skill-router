@@ -55,19 +55,34 @@ function parseHostName(value: string | undefined): HostName | null {
 export interface CreateHostOptions {
   /** Project directory used for project-scope skill discovery. */
   cwd?: string;
+  /**
+   * When set, the host opts into strict-mode TOCTOU narrowing (#133) for
+   * its project-scope skill scans. The value MUST be the canonical realpath
+   * the caller already validated against its allowlist (typically
+   * `canonicalizeWithMissingTail(projectPath)` in `src/commands/web.ts`).
+   *
+   * Project-scope `walkSkillsDir` calls receive `{ rootCanonical, escaped }`
+   * derived from this value, and entries whose realpath escapes the
+   * canonical at scan time are dropped from results instead of surfaced
+   * with `outOfRoot=true`. Default CLI flows leave this unset to preserve
+   * the historical "show out-of-root skills with canDisable=false" surface.
+   */
+  enforceProjectScopeCanonical?: string;
 }
 
 /** Constructs the appropriate {@link Host} implementation for `hostName`. */
 export function createHost(hostName: HostName, opts: CreateHostOptions = {}): Host {
   if (hostName === "codex") {
-    const codexOpts: { cwd?: string } = {};
+    const codexOpts: { cwd?: string; enforceProjectScopeCanonical?: string } = {};
     if (opts.cwd) codexOpts.cwd = opts.cwd;
+    if (opts.enforceProjectScopeCanonical) codexOpts.enforceProjectScopeCanonical = opts.enforceProjectScopeCanonical;
     return new CodexHost(codexOpts);
   }
   const claudeHome = process.env["CLAUDE_HOME"];
-  const hostOpts: { claudeHome?: string; cwd?: string } = {};
+  const hostOpts: { claudeHome?: string; cwd?: string; enforceProjectScopeCanonical?: string } = {};
   if (claudeHome) hostOpts.claudeHome = claudeHome;
   if (opts.cwd) hostOpts.cwd = opts.cwd;
+  if (opts.enforceProjectScopeCanonical) hostOpts.enforceProjectScopeCanonical = opts.enforceProjectScopeCanonical;
   return new ClaudeCodeHost(hostOpts);
 }
 

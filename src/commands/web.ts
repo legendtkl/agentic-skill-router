@@ -571,8 +571,11 @@ async function createScopedHost(
   // which would violate this repo's runtime-dep-free charter, so the
   // narrowing above is the current best-effort defense and the threat
   // model still assumes the allowlisted directory tree is not
-  // attacker-writable.
-  return createHost(hostName, { cwd: canonical });
+  // attacker-writable. `enforceProjectScopeCanonical` opts the host into
+  // the strict-mode `walkSkillsDir` path for project-scope scans (it drops
+  // escaping entries instead of surfacing them with `outOfRoot=true`),
+  // so the in-loop revalidation is actually wired up for the web flow.
+  return createHost(hostName, { cwd: canonical, enforceProjectScopeCanonical: canonical });
 }
 
 async function pathExists(path: string): Promise<boolean> {
