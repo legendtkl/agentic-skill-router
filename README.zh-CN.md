@@ -2,6 +2,9 @@
 
 [English](README.md) | 简体中文
 
+> 本项目曾用名 **skill-router**。仓库已重命名，CLI 二进制与 npm 包现为
+> `agentic-skill-router`。仍引用 `skill-router` 的脚本或链接请同步更新。
+
 `agentic-skill-router` 是面向受支持宿主的 Agent Skills 管理 CLI 与安装资产。它会枚举已安装 skills、读取本地会话记录中的使用情况、建议过期或长期未使用的 skills，并通过重命名 `SKILL.md` 的方式安全禁用或恢复指定 skill。
 
 Subagent 管理不属于本仓库范围。
@@ -201,9 +204,38 @@ frontmatter: skipped nested mapping under `metadata` (line 7)
 `skills list --json` 输出中体现，便于发现被静默跳过的字段。请把所有路由相关
 metadata 放在顶层（参考上面的 `lark-mail` 示例）。
 
+## Web UI 安全
+
+`agentic-skill-router skills web` 启动本地 UI，可以浏览、禁用、恢复 skill。它会真正
+mutate 磁盘文件，也可能跟随 symlink 进入 host skills root 之外的位置，因此默认
+绑定策略是保守的。
+
+- **默认**：只绑定 loopback (`127.0.0.1`)。同机用户可以 mutate；同网用户不行。
+- **暴露到非 loopback** (`--bind=0.0.0.0` 等) 必须显式加 `--dangerously-bind-public`。
+  会打印警告、生成随机 HTTP Basic Auth 密码到 stderr，并在每次 mutation 时强制
+  Origin / Referer / Host 同源校验。只在可信网络中使用。
+- **Project-scope 扫描** (`/api/skills?scope=project`) 被一个 project root allowlist
+  约束。CLI 默认 allowlist 是 `cwd()`；用 `--project-root=<dir>`（可重复）扩展。
+  resolve 后落在 allowlist 之外的 `projectPath` 直接返回 `403`。
+- **逐 skill mutation** 也会再校验一次：如果该 skill 的 `skillMdPath` realpath
+  逃出 allowlist（例如 in-allowlist 的 `.claude/skills/foo` 自身是指向
+  `/outside/foo` 的 symlink），mutation 也会被拒绝。
+
+可信局域网启动示例：
+
+```bash
+agentic-skill-router skills web \
+  --bind=0.0.0.0 \
+  --dangerously-bind-public \
+  --project-root=/srv/agents/projects/alpha
+```
+
+runtime 会把 URL、用户名、密码打印到 stderr。用完后 Ctrl-C 停止。
+
 ## 故障排查
 
-参见 [`docs/troubleshooting.md`](docs/troubleshooting.md)（暂为英文，中文版后续补齐），
+参见 [`docs/troubleshooting.md`](docs/troubleshooting.md)（英文）或
+[`docs/troubleshooting.zh-CN.md`](docs/troubleshooting.zh-CN.md)（简体中文），
 覆盖 `agentic-skill-router skills status` 可能打印的每一类异常段落的恢复流程：split-brain 冲突、
 孤立的禁用标记文件、孤立的 state 记录、损坏的 state 文件、插件升级后的 reapply 行为、
 以及禁用 skill 后再卸载的安全顺序。能用 `agentic-skill-router skills enable <id>` 解决就不要直接 `rm`。

@@ -2,6 +2,10 @@
 
 English | [简体中文](README.zh-CN.md)
 
+> Formerly known as **skill-router**. The repository was renamed; the CLI binary
+> and npm package are now `agentic-skill-router`. Any scripts or links that still
+> reference `skill-router` should be updated.
+
 Skill management CLI and installation assets for Agent Skills across supported
 hosts. It enumerates installed skills, reads usage from local transcripts,
 suggests stale or unused skills, and safely disables or restores selected skills
@@ -288,6 +292,40 @@ and ship. The script itself only prints the checklist — it does not call
 out to the network or a Claude Code binary, so the runtime stays
 dependency-free.
 
+## Web UI safety
+
+`agentic-skill-router skills web` opens a local UI for browsing, disabling, and
+re-enabling skills. It mutates real files on disk and can follow symlinks into
+locations outside the host's skills root, so the bind defaults are
+intentionally conservative.
+
+- **Default**: binds loopback only (`127.0.0.1`). Anyone with shell access to
+  the same machine can mutate skill files; nobody on the LAN can.
+- **Exposing the UI** (`--bind=0.0.0.0` etc.) requires
+  `--dangerously-bind-public`. The flag prints a warning, generates a random
+  HTTP Basic Auth password to stderr, and enforces Origin / Referer / Host
+  same-origin checks on every mutation. Only use this on trusted networks.
+- **Project-scope scans** (`/api/skills?scope=project`) are bounded by an
+  allowlist of project roots. The CLI defaults the allowlist to `cwd()`; pass
+  `--project-root=<dir>` (repeatable) to extend it. A request whose
+  `projectPath` resolves outside every allowlisted root is rejected with `403`.
+- **Per-skill mutations** are additionally validated: if the skill's
+  `skillMdPath` realpath escapes the allowlist (e.g. an in-allowlist
+  `.claude/skills/foo` is itself a symlink to `/outside/foo`), the mutation
+  is refused.
+
+Example for a trusted LAN bind:
+
+```bash
+agentic-skill-router skills web \
+  --bind=0.0.0.0 \
+  --dangerously-bind-public \
+  --project-root=/srv/agents/projects/alpha
+```
+
+The runtime prints the URL, username, and password to stderr. Stop the
+server (Ctrl-C) when you're done.
+
 ## Troubleshooting
 
 See [`docs/troubleshooting.md`](docs/troubleshooting.md) for recovery
@@ -296,6 +334,8 @@ can print: split-brain conflicts, orphan disable markers, orphaned state
 records, malformed state files, plugin-upgrade reapply, and the safe order
 for uninstalling after disabling skills. Default to `agentic-skill-router skills
 enable <id>` rather than `rm` whenever a recovery path is available.
+
+[简体中文版本](docs/troubleshooting.zh-CN.md) covers the same recovery flows.
 
 ## Development
 
@@ -325,6 +365,20 @@ npm test
 npm run build
 npm run check:pack
 ```
+
+To inspect the live CI state of a commit or PR from the command line:
+
+```bash
+gh run list --workflow=ci.yml --limit=5
+gh pr checks <number>
+gh run view <run-id>
+```
+
+The `test` job (typecheck + unit tests + build + `check:pack` + offline e2e)
+runs on every PR and every push to `main`. If a commit lands on `main` and you
+cannot find a matching CI run, check `gh run list --branch=main --workflow=ci.yml`
+to confirm whether the workflow was triggered (private-repo / fork-PR rules
+sometimes suppress status reporting).
 
 `npm run check:pack` runs after `npm run build` and verifies that
 `bin/agentic-skill-router --help` exits cleanly and `npm pack --dry-run` includes the
