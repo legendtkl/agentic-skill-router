@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Host, HostUsageOptions } from "./base.ts";
@@ -35,6 +35,11 @@ interface CodexPluginManifest {
   skills?: unknown;
 }
 
+interface InstalledPluginsCacheEntry {
+  cacheRootKey: string;
+  installs: CodexPluginInstall[];
+}
+
 export class CodexHost implements Host {
   readonly name = "codex" as const;
   private readonly codexHome: string;
@@ -42,6 +47,19 @@ export class CodexHost implements Host {
   private readonly sessionsDir: string;
   private readonly cwd: string;
   private readonly adminSkillsRoot: string;
+  // Per-instance memo for installedPlugins(). The Codex host is constructed
+  // once per CLI invocation, so this is effectively a per-invocation cache.
+  // The web UI keeps the host alive across requests; the cacheRootKey below
+  // (mtime + size of the marketplace cache root) lets us re-detect when a
+  // new plugin or marketplace directory appears at the top level.
+  //
+  // Note: this does NOT detect a new *version* being dropped under an
+  // existing `<marketplace>/<plugin>/` dir, because that only changes that
+  // plugin dir's mtime, not the cache root's. In the common case the readdir
+  // is tiny and the value is in not duplicating work across multiple
+  // host.listSkills() calls within a single CLI invocation. Plugin install
+  // flows (which add new marketplace or plugin dirs) ARE detected.
+  private installedPluginsCache: InstalledPluginsCacheEntry | null = null;
 
   constructor(opts: CodexHostOptions = {}) {
     this.codexHome = opts.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
@@ -168,6 +186,17 @@ export class CodexHost implements Host {
 
   private async installedPlugins(): Promise<CodexPluginInstall[]> {
     const cacheRoot = join(this.codexHome, "plugins", "cache");
+    const cacheRootKey = await statCacheKey(cacheRoot);
+    if (this.installedPluginsCache && this.installedPluginsCache.cacheRootKey === cacheRootKey) {
+      return this.installedPluginsCache.installs;
+    }
+
+    const installs = await this.scanInstalledPlugins(cacheRoot);
+    this.installedPluginsCache = { cacheRootKey, installs };
+    return installs;
+  }
+
+  private async scanInstalledPlugins(cacheRoot: string): Promise<CodexPluginInstall[]> {
     let marketplaces;
     try {
       marketplaces = await readdir(cacheRoot, { withFileTypes: true });
@@ -231,6 +260,18 @@ function isNewerCodexPluginInstall(candidate: CodexPluginInstall, current: Codex
   const byVersion = compareVersions(candidate.version, current.version);
   if (byVersion !== 0) return byVersion > 0;
   return candidate.installPath > current.installPath;
+}
+
+async function statCacheKey(path: string): Promise<string> {
+  try {
+    const st = await stat(path);
+    // mtimeMs covers add/remove of direct children; size guards against
+    // filesystems that round mtime coarsely while children change.
+    return `present:${st.mtimeMs}:${st.size}`;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return "absent";
+    throw err;
+  }
 }
 
 async function readCodexPluginManifest(path: string): Promise<CodexPluginManifest | null> {

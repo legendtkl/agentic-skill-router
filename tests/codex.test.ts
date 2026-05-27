@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -1276,6 +1276,98 @@ test("CodexHost does not expose disable/enable", async () => {
       "undefined",
       "CodexHost.enable must not be a function",
     );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("CodexHost memoizes plugin marketplace enumeration within a single host", async () => {
+  // Regression for issue #113: every host.listSkills() call used to re-walk
+  // ~/.codex/plugins/cache/*/*/*. We now cache the installed-plugins result
+  // per host instance, keyed by the marketplace cache root's mtime+size, and
+  // only re-scan when that key changes (i.e. a top-level marketplace or
+  // plugin dir was added/removed).
+  const fake = await makeFakeCodexUser();
+  try {
+    // Pin the cache root mtime to a known whole-second value so we can later
+    // restore it exactly (utimes() rounds to seconds on most filesystems,
+    // which would otherwise drift the cache key off the original fractional
+    // mtimeMs the host saw on the first listSkills call).
+    const cacheRoot = join(fake.codexHome, "plugins", "cache");
+    const pinned = new Date(Math.floor(Date.now() / 1000) * 1000);
+    await utimes(cacheRoot, pinned, pinned);
+
+    const host = new CodexHost({
+      codexHome: fake.codexHome,
+      agentsHome: fake.agentsHome,
+      cwd: fake.cwd,
+      adminSkillsRoot: fake.adminSkillsRoot,
+    });
+
+    const first = await host.listSkills();
+    const firstGmail = first.find((s) => s.id === "plugin:gmail@openai-curated:gmail");
+    assert.ok(firstGmail, "expected gmail plugin skill on the first listSkills call");
+    assert.equal(firstGmail!.description, "Gmail mailbox workflows");
+
+    // Mutate the manifest deep inside the cache. The cache root's own
+    // mtime should NOT change from a nested file write, so the memoized
+    // installed-plugins result must be reused. To make the test robust to
+    // filesystems where the parent mtime could drift, we explicitly restore
+    // the pinned cache root mtime after the manifest write.
+    const manifestPath = join(
+      fake.codexHome,
+      "plugins",
+      "cache",
+      "openai-curated",
+      "gmail",
+      "3c463363",
+      ".codex-plugin",
+      "plugin.json",
+    );
+    const originalManifest = await readFile(manifestPath, "utf8");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({ name: "gmail", version: "0.1.0", skills: "./other-skills/" }),
+    );
+    try {
+      await utimes(cacheRoot, pinned, pinned);
+
+      const second = await host.listSkills();
+      const secondGmail = second.find((s) => s.id === "plugin:gmail@openai-curated:gmail");
+      assert.ok(secondGmail, "memoized scan must still resolve the gmail plugin");
+      // If the cache were bypassed, the new manifest would point at
+      // ./other-skills/ and the gmail skill would no longer be enumerated
+      // under the old skillMdPath.
+      assert.equal(secondGmail!.skillMdPath, firstGmail!.skillMdPath);
+    } finally {
+      await writeFile(manifestPath, originalManifest);
+    }
+
+    // Now add a brand new marketplace at the top level. That changes the
+    // cache root's mtime+size, which MUST invalidate the memo and let the
+    // newly installed plugin surface on the next listSkills call.
+    const newPluginRoot = join(
+      fake.codexHome,
+      "plugins",
+      "cache",
+      "openai-curated-extra",
+      "calendar",
+      "1.2.3",
+    );
+    await writeCodexPluginInstall(newPluginRoot, {
+      name: "calendar",
+      version: "1.2.3",
+      skillName: "calendar",
+      skillDescription: "Calendar workflows installed after the first scan",
+    });
+
+    const third = await host.listSkills();
+    const thirdCalendar = third.find((s) => s.id === "plugin:calendar@openai-curated-extra:calendar");
+    assert.ok(
+      thirdCalendar,
+      "mtime change on the marketplace cache root must invalidate the memo and surface the new plugin",
+    );
+    assert.equal(thirdCalendar!.description, "Calendar workflows installed after the first scan");
   } finally {
     await fake.cleanup();
   }
