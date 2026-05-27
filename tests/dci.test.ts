@@ -609,6 +609,39 @@ test("DCI search lifts the distinctive-cap for a single short alias hitting id/n
   }
 });
 
+test("DCI search keeps the distinctive-cap for short alias matching id/name as substring only (#150 P1 token-boundary)", async () => {
+  // Codex P1 follow-up: the bypass must require a TOKEN-boundary hit on
+  // `id` / `name`, not a substring of the compacted phrase. `daily-planner`
+  // compacts to `dailyplanner`, which contains `"ai"` as a substring; the
+  // pre-fix bypass used the substring-leaky `fieldHits` map and would have
+  // promoted the candidate to high confidence on a single-letter alias
+  // query. The fix threads a tokenized-only field hit map into
+  // `scoreSearchMatch` so this case stays capped.
+  const corpus = await makeCorpus(0);
+  try {
+    const skill = await writeCorpusSkill(corpus.root, {
+      id: "user:codex:daily-planner",
+      name: "daily-planner",
+      description: "Plans the day; unrelated to the alias query.",
+      body: "Daily planner helper.",
+      isDisabled: true,
+    });
+
+    const search = await dciSearchDisabledSkills([skill], "ai", { topK: 1 });
+    assert.equal(search.matches.length, 1);
+    assert.ok(
+      (search.matches[0]?.score ?? 1) < 0.5,
+      `expected substring-only short alias score < 0.5, got ${search.matches[0]?.score}`,
+    );
+
+    const route = await dciRouteDisabledSkills([skill], "ai", { topK: 1 });
+    assert.equal(route.matches[0]?.confidence, "low");
+    assert.equal(route.selected, null);
+  } finally {
+    await corpus.cleanup();
+  }
+});
+
 test("DCI search keeps the distinctive-cap for short alias hitting only the body (#150 P1)", async () => {
   // Codex P1 regression guard: a short generic that hits only the body
   // (not id/name) must still be capped. The bypass is reserved for the

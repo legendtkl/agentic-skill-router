@@ -288,12 +288,15 @@ export async function dciSearchDisabledSkills(
       let weightedHit = 0;
       let weightedQueryWeight = 0;
       let distinctiveHit = 0;
-      // Per-field hit map: which structured sub-field each matched term came
-      // from. Threaded into `scoreSearchMatch` so the short-alias cap-bypass
-      // (#150) can require the alias to land on `id` or `name`, not just
-      // anywhere in the body. Built from the same `locateTermField` lookup
-      // that drives evidence attribution (#151) so the two stay in sync.
-      const fieldHits: FieldHitMap = { id: new Set(), name: new Set(), description: new Set(), body: new Set() };
+      // Token-boundary hit map: ONLY tokenized hits, no substring fallback.
+      // Threaded into `scoreSearchMatch` so the short-alias cap-bypass (#150)
+      // can require a real token-level match on `id` / `name`, not a
+      // substring like `"ai"` happening to appear inside `daily-planner`
+      // (compact → `"dailyplanner"` contains `"ai"`). The general scoring,
+      // evidence emission (built independently in `evidenceForDciSearch`),
+      // and `hitCount` keep their substring-inclusive behavior for
+      // richness; only the cap-bypass predicate uses this tighter map.
+      const tokenFieldHits: FieldHitMap = { id: new Set(), name: new Set(), description: new Set(), body: new Set() };
       for (const term of queryTerms) {
         const generic = isGenericTerm(term, "dci");
         const weight = generic ? GENERIC_TERM_WEIGHT : 1;
@@ -302,8 +305,9 @@ export async function dciSearchDisabledSkills(
           hitCount++;
           weightedHit += weight;
           if (!generic) distinctiveHit++;
-          const located = locateTermField(term, haystackFields.fields);
-          if (located) fieldHits[located.field].add(term);
+          for (const sub of haystackFields.fields) {
+            if (sub.terms.has(term)) tokenFieldHits[sub.field].add(term);
+          }
         }
       }
       const phraseMatched = queryPhrase.length >= 4 && haystackPhrase.includes(queryPhrase);
@@ -314,7 +318,7 @@ export async function dciSearchDisabledSkills(
         distinctiveHit,
         queryTerms,
         hitCount,
-        fieldHits,
+        tokenFieldHits,
       );
       if (score <= 0) continue;
       const snippets = snippetsForTerms(item.lines, queryTerms, queryPhrase, maxSnippets);
@@ -1236,10 +1240,12 @@ function locateTermField(
  * for the narrow short-alias case (#150): a single-term query whose only
  * term is a short Latin token (`isGenericTerm` treats every <=2-char Latin
  * token as generic in `dci` mode) AND that term lands on a structured
- * identifier field (`id` or `name`), not just a body substring. A short
- * generic that hits only the body — or a multi-term generic query like
- * `"api config"` — still hits the cap so the generic-only floor from
- * issue #110 is preserved.
+ * identifier field (`id` or `name`) as a TOKEN-boundary hit — substring
+ * hits do not count (e.g. `"ai"` inside `daily-planner` → `"dailyplanner"`
+ * must not promote the candidate). The caller passes a tokenized-only
+ * `fieldHits` map for this reason; a short generic that hits only the
+ * body — or a multi-term generic query like `"api config"` — still hits
+ * the cap so the generic-only floor from issue #110 is preserved.
  */
 function scoreSearchMatch(
   weightedHit: number,
@@ -1270,8 +1276,12 @@ interface FieldHitMap {
 
 /**
  * True iff the query is a single short Latin token that hit on the skill's
- * `id` or `name`. This is the only case the distinctive-cap is allowed to
- * bypass (#150) — see {@link scoreSearchMatch}.
+ * `id` or `name` at a TOKEN boundary. This is the only case the
+ * distinctive-cap is allowed to bypass (#150) — see {@link scoreSearchMatch}.
+ *
+ * Callers must pass a tokenized-only field hit map (built from
+ * `DciHaystackField.terms`, not `.phrase`), so a substring hit like `"ai"`
+ * inside the compacted `dailyplanner` cannot satisfy this predicate.
  */
 function isShortAliasIdentifierHit(
   queryTerms: Set<string>,
