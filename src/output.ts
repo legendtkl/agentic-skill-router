@@ -21,7 +21,7 @@ export function usage(code = 0): number {
   console.log(`agentic-skill-router — manage installed Agent Skills across supported hosts
 
 USAGE
-  agentic-skill-router init [codex|claude-code] [project|global] [--cwd=<dir>] [--force] [--json]
+  agentic-skill-router init [codex|claude-code|all] [project|global|all] [--cwd=<dir>] [--force] [--json]
   agentic-skill-router skills list [--json]
   agentic-skill-router skills suggest [--unused-for=<dur>] [--json]
   agentic-skill-router skills route --query=<text> [--mode=auto|metadata|lexical|dci|body] [--json] [--top-k=N] [--no-record]
