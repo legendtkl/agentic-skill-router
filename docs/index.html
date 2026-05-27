@@ -275,7 +275,8 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 12px;
       line-height: 1.6;
-      white-space: pre;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
     }
 
     .metric-strip {
@@ -910,14 +911,15 @@ agentic-skill-router init</pre>
         <article class="feature">
           <b>Codex project skill</b>
           <pre class="code-panel">agentic-skill-router init codex project
-agentic-skill-router skills list</pre>
-          <p>Add a Codex-discoverable routing skill to the current project without affecting other workspaces.</p>
+/agentic-skill-router:skills list</pre>
+          <p>After restarting Codex, invoke the installed routing skill through the Codex slash command.</p>
         </article>
         <article class="feature">
           <b>Claude Code project skill</b>
           <pre class="code-panel">agentic-skill-router init claude-code project
-agentic-skill-router skills suggest</pre>
-          <p>Maintain a fenced CLAUDE.md routing block and keep initialization idempotent across reruns.</p>
+Use agentic-skill-router-skills
+to suggest stale skills.</pre>
+          <p>After restarting Claude Code, ask for the installed skill by name; the CLAUDE.md block helps trigger routing.</p>
         </article>
         <article class="feature">
           <b>Local skill manager</b>
@@ -1268,9 +1270,9 @@ agentic-skill-router skills enable user:codex:lark-mail</pre>
           "#quick-start .feature:nth-child(1) b": "安装为 skill",
           "#quick-start .feature:nth-child(1) p": "安装 CLI 后写入 agent 可发现、可调用的 routing skill 入口。",
           "#quick-start .feature:nth-child(2) b": "Codex 项目级 skill",
-          "#quick-start .feature:nth-child(2) p": "在当前项目写入 Codex 可发现的路由 skill，不影响其他项目。",
+          "#quick-start .feature:nth-child(2) p": "重启 Codex 后，通过 Codex slash command 调用已安装的 routing skill。",
           "#quick-start .feature:nth-child(3) b": "Claude Code 项目级 skill",
-          "#quick-start .feature:nth-child(3) p": "初始化时会维护带 fence 的 CLAUDE.md routing block，重复运行保持幂等。",
+          "#quick-start .feature:nth-child(3) p": "重启 Claude Code 后，在对话里按名称请求已安装的 skill；CLAUDE.md block 会辅助触发路由。",
           "#quick-start .feature:nth-child(4) b": "本地 skill 管理页",
           "#quick-start .feature:nth-child(4) p": "用于浏览、筛选、禁用和恢复本机技能；默认只绑定 loopback。",
           "#quick-start .feature:nth-child(5) b": "路由禁用技能",
@@ -1395,9 +1397,9 @@ select scope: project or global</span>
           "#quick-start .feature:nth-child(1) b": "Install as a skill",
           "#quick-start .feature:nth-child(1) p": "Install the CLI, then write the routing skill entry that agents can discover and invoke.",
           "#quick-start .feature:nth-child(2) b": "Codex project skill",
-          "#quick-start .feature:nth-child(2) p": "Add a Codex-discoverable routing skill to the current project without affecting other workspaces.",
+          "#quick-start .feature:nth-child(2) p": "After restarting Codex, invoke the installed routing skill through the Codex slash command.",
           "#quick-start .feature:nth-child(3) b": "Claude Code project skill",
-          "#quick-start .feature:nth-child(3) p": "Maintain a fenced CLAUDE.md routing block and keep initialization idempotent across reruns.",
+          "#quick-start .feature:nth-child(3) p": "After restarting Claude Code, ask for the installed skill by name; the CLAUDE.md block helps trigger routing.",
           "#quick-start .feature:nth-child(4) b": "Local skill manager",
           "#quick-start .feature:nth-child(4) p": "Browse, filter, disable, and restore local skills; the server binds to loopback by default.",
           "#quick-start .feature:nth-child(5) b": "Route disabled skills",
