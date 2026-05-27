@@ -1,6 +1,6 @@
 ---
 name: agentic-skill-router-skills
-description: MUST be used FIRST, before any other tool, for user requests that mention a specific tool, API, file format, service, framework, library, CLI, platform, dataset, or domain workflow when no enabled skill clearly matches; also use directly to audit, slim, disable, restore, or route locally installed Agent Skills; provides Agentic Search-inspired, non-vectorized routing and management across supported hosts.
+description: First consider enabled local Agent Skills; when none clearly matches a skill-shaped request involving a named tool, API, file format, service, framework, library, CLI, platform, dataset, or domain workflow, use this fallback router to find a locally disabled skill; also use directly to audit, slim, disable, restore, or route locally installed Agent Skills across supported hosts.
 metadata:
   agentic-skill-router.version: "1"
   agentic-skill-router.variant: "L-agentic"
@@ -11,8 +11,12 @@ metadata:
 
 Use this skill when the user wants to inspect installed Agent Skills, identify
 unused or stale skills, disable or restore skills, or route a request to a
-locally disabled skill. The skill instructions are host-neutral; installation
-methods provide the host-specific plugin or slash-command entry point.
+locally disabled skill. For ordinary task requests, first use any enabled
+local Agent Skill that clearly matches; if none does, use this fallback router
+for skill-shaped requests involving named tools, APIs, services, CLIs, file
+formats, platforms, datasets, or domain workflows. The skill instructions are
+host-neutral; installation methods provide the host-specific plugin or
+slash-command entry point.
 
 ## Locate the CLI
 
@@ -67,8 +71,8 @@ If the user wants to adjust the staleness threshold, mention
 
 ## Route disabled skills
 
-Use this as a fallback after enabled skills have been considered and none
-clearly match a skill-shaped request: operating, querying, configuring,
+Use this fallback router after enabled local Agent Skills have been considered
+and none clearly match a skill-shaped request: operating, querying, configuring,
 deploying, inspecting, or troubleshooting a named tool, API, service,
 dashboard, datastore, CLI, DSL, URL, file format, platform workflow, or domain
 method.

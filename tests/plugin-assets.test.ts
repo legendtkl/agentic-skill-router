@@ -22,8 +22,14 @@ test("shared router skill uses Agent Skills frontmatter as the source of truth",
   assert.equal(fm.name, "agentic-skill-router-skills");
   const description = fm.description;
   assert.ok(typeof description === "string");
+  assert.match(description, /First consider enabled local Agent Skills/);
+  assert.match(description, /use this fallback router/);
   assert.match(description, /audit, slim, disable, restore, or route/);
+  assert.doesNotMatch(description, /MUST be used FIRST|before any other tool/);
   assert.doesNotMatch(description, /For Codex/);
+  assert.match(shared, /first use any enabled\s+local Agent Skill that clearly matches/);
+  assert.match(shared, /Use this fallback router after enabled local Agent Skills/);
+  assert.doesNotMatch(shared, /MUST be used FIRST|before any other tool/);
   assert.deepEqual(topLevelKeys, ["name", "description", "metadata"]);
   assert.match(frontmatter, /metadata:\n  agentic-skill-router\.version: "1"\n  agentic-skill-router\.variant: "L-agentic"\n  agentic-skill-router\.hosts: "claude-code,codex"/);
 });
