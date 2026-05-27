@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="agentic-skill-router 项目介绍：Agent Skills 管理、禁用路由、安全恢复与批量实验结果。">
+  <title>agentic-skill-router</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f2;
+      --panel: rgba(255, 255, 255, 0.82);
+      --panel-strong: #ffffff;
+      --ink: #161616;
+      --ink-soft: #363a3f;
+      --muted: #686c73;
+      --line: rgba(22, 22, 22, 0.12);
+      --accent: #1f7a5a;
+      --accent-soft: #dcece5;
+      --blue: #3b5f91;
+      --blue-soft: #e4ebf6;
+      --amber: #926b2c;
+      --amber-soft: #f4ead9;
+      --field: rgba(255, 255, 255, 0.72);
+      --shadow: 0 18px 50px rgba(20, 30, 25, 0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 20% 12%, rgba(31, 122, 90, 0.10), transparent 28rem),
+        linear-gradient(180deg, #fbfbf8 0%, var(--bg) 52%, #f0f1eb 100%);
+      color: var(--ink);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .shell {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 26px 0 52px;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 12px 0 28px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      font-weight: 750;
+      color: var(--accent);
+    }
+
+    .brand img {
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-strong);
+      object-fit: cover;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .nav-links a:hover { color: var(--ink); }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.72fr);
+      align-items: center;
+      gap: 36px;
+      min-height: 470px;
+      padding: 22px 0 38px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--accent);
+      background: rgba(255, 255, 255, 0.50);
+      font-size: 13px;
+      font-weight: 720;
+    }
+
+    h1 {
+      margin: 18px 0 16px;
+      color: var(--accent);
+      font-size: clamp(42px, 7vw, 78px);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 680px;
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 20px;
+      line-height: 1.6;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--panel-strong);
+      box-shadow: 0 1px 8px rgba(20, 30, 25, 0.08);
+      font-weight: 680;
+    }
+
+    .button.primary {
+      color: #ffffff;
+      border-color: rgba(31, 122, 90, 0.55);
+      background: var(--accent);
+    }
+
+    .terminal {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(22, 22, 22, 0.92);
+      box-shadow: var(--shadow);
+      color: #f4f3ee;
+      overflow: hidden;
+    }
+
+    .terminal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 42px;
+      padding: 0 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      color: rgba(255, 255, 255, 0.66);
+      font-size: 12px;
+    }
+
+    .terminal-body {
+      margin: 0;
+      padding: 18px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.75;
+      white-space: pre;
+    }
+
+    .prompt { color: #86d8aa; }
+    .output { color: rgba(244, 243, 238, 0.70); }
+
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin: 0 0 28px;
+    }
+
+    .metric {
+      min-height: 118px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--accent);
+      font-size: 26px;
+      line-height: 1.05;
+      overflow-wrap: anywhere;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    section {
+      margin-top: 24px;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .section-copy {
+      max-width: 660px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .feature {
+      min-height: 168px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.34);
+    }
+
+    .feature b {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--ink);
+      font-size: 15px;
+    }
+
+    .feature p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .step {
+      position: relative;
+      min-height: 132px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+    }
+
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      color: var(--accent);
+      background: var(--accent-soft);
+      font-weight: 760;
+      font-size: 13px;
+    }
+
+    .step b {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .step span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .callout {
+      padding: 18px;
+      border: 1px solid rgba(59, 95, 145, 0.22);
+      border-radius: 8px;
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    .callout.amber {
+      border-color: rgba(146, 107, 44, 0.24);
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 8px;
+      color: inherit;
+      font-size: 16px;
+    }
+
+    .callout p {
+      margin: 0;
+      color: rgba(31, 39, 49, 0.78);
+      line-height: 1.6;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.34);
+    }
+
+    table {
+      width: 100%;
+      min-width: 620px;
+      border-collapse: collapse;
+      background: transparent;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 780;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    td code,
+    .terminal code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.94em;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0 8px;
+      border-radius: 999px;
+      color: var(--accent);
+      background: var(--accent-soft);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .tag.blue {
+      color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .links {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .resource {
+      min-height: 96px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.34);
+    }
+
+    .resource b {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .resource span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 26px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg: #10110f;
+        --panel: rgba(26, 28, 25, 0.86);
+        --panel-strong: #1d201c;
+        --ink: #f4f3ee;
+        --ink-soft: #d7d9d2;
+        --muted: #a2a79f;
+        --line: rgba(255, 255, 255, 0.14);
+        --accent: #86d8aa;
+        --accent-soft: rgba(134, 216, 170, 0.16);
+        --blue: #a9c7f5;
+        --blue-soft: rgba(95, 138, 199, 0.18);
+        --amber: #e5c17a;
+        --amber-soft: rgba(190, 145, 68, 0.18);
+        --field: rgba(255, 255, 255, 0.08);
+        --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+      }
+
+      body {
+        background:
+          radial-gradient(circle at 18% 10%, rgba(134, 216, 170, 0.10), transparent 27rem),
+          linear-gradient(180deg, #151713 0%, var(--bg) 55%, #0c0d0b 100%);
+      }
+
+      .eyebrow,
+      .feature,
+      table,
+      .resource {
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .callout p { color: rgba(244, 243, 238, 0.78); }
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .results-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metric-strip,
+      .feature-grid,
+      .flow,
+      .links {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 700px) {
+      .shell {
+        width: min(100vw - 20px, 1120px);
+        padding-top: 18px;
+      }
+
+      .nav {
+        display: block;
+        padding-bottom: 18px;
+      }
+
+      .nav-links {
+        gap: 12px;
+        margin-top: 14px;
+        overflow-x: auto;
+        padding-bottom: 4px;
+      }
+
+      .hero {
+        gap: 22px;
+        min-height: 0;
+        padding-top: 14px;
+      }
+
+      .lead {
+        font-size: 17px;
+      }
+
+      .terminal-body {
+        font-size: 12px;
+      }
+
+      .metric-strip,
+      .feature-grid,
+      .flow,
+      .links {
+        grid-template-columns: 1fr;
+      }
+
+      section {
+        padding: 20px;
+      }
+
+      .section-head {
+        display: block;
+      }
+
+      .section-copy {
+        margin-top: 10px;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      .footer {
+        display: block;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <nav class="nav" aria-label="主导航">
+      <a class="brand" href="#">
+        <img src="assets/agentic-skill-router-logo.png" alt="">
+        <span>agentic-skill-router</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">功能</a>
+        <a href="#workflow">机制</a>
+        <a href="#experiments">实验</a>
+        <a href="#resources">资源</a>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div>
+        <span class="eyebrow">Codex + Claude Code Agent Skills 管理器</span>
+        <h1>agentic-skill-router</h1>
+        <p class="lead">
+          把不常用的 Agent Skills 移出常驻上下文，在真正需要时再通过路由找回。
+          它让大型技能库保持轻量，同时保留可审计、可恢复、可实验验证的使用路径。
+        </p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/legendtkl/agentic-skill-router">GitHub</a>
+          <a class="button" href="https://github.com/legendtkl/agentic-skill-router#quick-start">Quick Start</a>
+          <a class="button" href="https://github.com/legendtkl/agentic-skill-router/blob/main/experiments/dci-compare/REPORT-skillrouter.md">实验报告</a>
+        </div>
+      </div>
+
+      <aside class="terminal" aria-label="安装命令">
+        <div class="terminal-head">
+          <span>install</span>
+          <span>Node.js 20+</span>
+        </div>
+        <pre class="terminal-body"><span class="prompt">$</span> npm install -g agentic-skill-router
+<span class="prompt">$</span> agentic-skill-router init
+<span class="output">select host: codex or claude-code
+select scope: project or global</span>
+
+<span class="prompt">$</span> agentic-skill-router skills suggest --json
+<span class="prompt">$</span> agentic-skill-router skills web</pre>
+      </aside>
+    </header>
+
+    <div class="metric-strip" aria-label="项目关键数字">
+      <div class="metric">
+        <strong>2 hosts</strong>
+        <span>覆盖 Codex 与 Claude Code，支持项目级和全局级技能目录。</span>
+      </div>
+      <div class="metric">
+        <strong>1,152</strong>
+        <span>最新批量实验单元，来自 2026-05-26 的完整重跑。</span>
+      </div>
+      <div class="metric">
+        <strong>150</strong>
+        <span>匿名化 SkillRouter 技能语料，包含针对性 distractor。</span>
+      </div>
+      <div class="metric">
+        <strong>24/24</strong>
+        <span>Codex 最优路由变体在专家查询集上的命中结果。</span>
+      </div>
+      <div class="metric">
+        <strong>0</strong>
+        <span>最新完整重跑中的 timeout 与 API error 数量。</span>
+      </div>
+    </div>
+
+    <section id="features">
+      <div class="section-head">
+        <h2>核心功能</h2>
+        <p class="section-copy">
+          项目围绕一个目标设计：降低常驻 skill 元数据成本，同时保持禁用、恢复和按需路由都可控。
+        </p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature">
+          <b>技能盘点</b>
+          <p>枚举 Codex、Claude Code、项目目录、用户目录和插件目录中的技能，并识别内置系统技能。</p>
+        </article>
+        <article class="feature">
+          <b>基于使用记录瘦身</b>
+          <p>读取本地 transcript，统计技能调用痕迹，按最近使用时间给出 stale 或 unused 建议。</p>
+        </article>
+        <article class="feature">
+          <b>安全禁用与恢复</b>
+          <p>通过重命名 <code>SKILL.md</code> 禁用技能，保留状态文件，保护内置和系统技能不被误改。</p>
+        </article>
+        <article class="feature">
+          <b>禁用技能路由</b>
+          <p>当已启用技能无法覆盖请求时，从禁用技能语料中检索并选择更合适的技能。</p>
+        </article>
+        <article class="feature">
+          <b>本地 Web 管理页</b>
+          <p>内置 localhost Web UI，可浏览、筛选、禁用和恢复技能；公网绑定需要显式危险开关。</p>
+        </article>
+        <article class="feature">
+          <b>CLI 与插件分发</b>
+          <p>提供 npm CLI、Codex slash prompt、Claude Code 插件资产和统一的技能工作流定义。</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="workflow">
+      <div class="section-head">
+        <h2>运行机制</h2>
+        <p class="section-copy">
+          agentic-skill-router 不复制宿主的内置技能系统，而是在技能目录和宿主触发机制之间增加一层可审计的路由。
+        </p>
+      </div>
+
+      <div class="flow">
+        <div class="step">
+          <span class="step-num">1</span>
+          <b>初始化</b>
+          <span><code>init</code> 安装项目或全局技能入口，并写入对应宿主需要的触发资产。</span>
+        </div>
+        <div class="step">
+          <span class="step-num">2</span>
+          <b>扫描</b>
+          <span>汇总技能元数据、来源、冲突和禁用状态，形成当前可操作清单。</span>
+        </div>
+        <div class="step">
+          <span class="step-num">3</span>
+          <b>瘦身</b>
+          <span><code>suggest</code> 结合使用记录生成候选项，再由用户确认禁用。</span>
+        </div>
+        <div class="step">
+          <span class="step-num">4</span>
+          <b>路由</b>
+          <span>请求需要禁用技能时，路由工作流在语料中选择目标 skill 并读取其指令。</span>
+        </div>
+        <div class="step">
+          <span class="step-num">5</span>
+          <b>恢复</b>
+          <span><code>enable</code> 使用状态记录还原 <code>SKILL.md</code>，也能处理缺失状态的修复路径。</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="experiments">
+      <div class="section-head">
+        <h2>批量实验结果</h2>
+        <p class="section-copy">
+          最新聚合数据来自 <code>experiments/dci-compare/runs/rerun-150-full-2026-05-26</code>：
+          48 个聚合行，1,152 个实验单元，覆盖 Claude、Codex、16 个路由变体与 24 个专家查询。
+        </p>
+      </div>
+
+      <div class="results-grid">
+        <div>
+          <div class="callout">
+            <strong>Codex 结果</strong>
+            <p>
+              <code>I-meta</code> 与 <code>E-digest</code> 达到 24/24；
+              <code>I-meta</code> 成本为 $3.02，是最新 Codex 组的高准确率低成本点。
+            </p>
+          </div>
+          <div class="callout amber" style="margin-top: 12px;">
+            <strong>Claude 结果</strong>
+            <p>
+              <code>B-cc</code> 最高为 23/24；更受控的 <code>K-lite</code> 以 22/24 和 $4.06
+              提供更低成本的折中点。
+            </p>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table aria-label="批量实验摘要">
+            <thead>
+              <tr>
+                <th>Host</th>
+                <th>变体</th>
+                <th>命中</th>
+                <th>成本</th>
+                <th>说明</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="tag">Codex</span></td>
+                <td><code>I-meta</code></td>
+                <td>24/24</td>
+                <td>$3.02</td>
+                <td>仅读 metadata，trigger rate 100%。</td>
+              </tr>
+              <tr>
+                <td><span class="tag">Codex</span></td>
+                <td><code>E-digest</code></td>
+                <td>24/24</td>
+                <td>$3.05</td>
+                <td>目录摘要 + 单 skill 展开。</td>
+              </tr>
+              <tr>
+                <td><span class="tag">Codex</span></td>
+                <td><code>C-lite</code></td>
+                <td>24/24</td>
+                <td>$4.36</td>
+                <td>有界 DCI shell 路由，读取正文。</td>
+              </tr>
+              <tr>
+                <td><span class="tag blue">Claude</span></td>
+                <td><code>B-cc</code></td>
+                <td>23/24</td>
+                <td>$5.61</td>
+                <td>自由 shell DCI，准确率最高但成本更高。</td>
+              </tr>
+              <tr>
+                <td><span class="tag blue">Claude</span></td>
+                <td><code>K-lite</code></td>
+                <td>22/24</td>
+                <td>$4.06</td>
+                <td>轻量路由，保持 91.7% 命中率。</td>
+              </tr>
+              <tr>
+                <td><span class="tag blue">Claude</span></td>
+                <td><code>G-native</code></td>
+                <td>14/24</td>
+                <td>$2.82</td>
+                <td>宿主原生选择基线，非禁用技能路由。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="resources">
+      <div class="section-head">
+        <h2>资源入口</h2>
+        <p class="section-copy">代码、文档和实验产物都保留在仓库中，便于复现实验或检查具体实现。</p>
+      </div>
+
+      <div class="links">
+        <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/blob/main/README.md">
+          <b>README</b>
+          <span>安装、CLI 命令、宿主路径和运行细节。</span>
+        </a>
+        <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/blob/main/README.zh-CN.md">
+          <b>中文 README</b>
+          <span>面向中文读者的项目说明和使用方式。</span>
+        </a>
+        <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/tree/main/experiments/dci-compare">
+          <b>实验目录</b>
+          <span>路由变体、harness、聚合数据和 HTML 报告。</span>
+        </a>
+        <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/tree/main/skills/agentic-skill-router-skills">
+          <b>路由 Skill</b>
+          <span>agent-facing 工作流和引用文档。</span>
+        </a>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>MIT License · agentic-skill-router</span>
+      <span>页面数据引用 2026-05-26 最新批量实验聚合结果。</span>
+    </footer>
+  </main>
+</body>
+</html>
