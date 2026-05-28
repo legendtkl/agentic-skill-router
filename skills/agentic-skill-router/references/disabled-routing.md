@@ -5,7 +5,7 @@ Agentic Search-inspired, metadata-only corpus primitives. It is deliberately
 non-vectorized: do not assume embeddings, a vector database, or a hidden
 semantic index. Use the `agentic_skill_router` helper from `SKILL.md`.
 
-Do not call `skills route`. Do not call `skills dci` or `skills body`. During
+Do not call `route`. Do not call `dci` or `body`. During
 retrieval, do not read disabled skill bodies.
 
 ## Search
@@ -18,7 +18,7 @@ Build two term sets from the user request:
 Search with a bounded expression:
 
 ```bash
-agentic_skill_router skills corpus search \
+agentic_skill_router corpus search \
   --all "<must1>" --any "<probe1>" --any "<probe2>" --any "<probe3>" \
   --limit 30 --json
 ```
@@ -32,7 +32,7 @@ with another `--all` term or more specific probes.
 Inspect only plausible metadata records:
 
 ```bash
-agentic_skill_router skills corpus inspect corpus-REF1 corpus-REF2 corpus-REF3 --json
+agentic_skill_router corpus inspect corpus-REF1 corpus-REF2 corpus-REF3 --json
 ```
 
 Choose by explicit metadata evidence, not nearby topic similarity.
@@ -42,7 +42,7 @@ Choose by explicit metadata evidence, not nearby topic similarity.
 Record exactly one supported selection:
 
 ```bash
-agentic_skill_router skills corpus select "<corpus-ref-or-id>" \
+agentic_skill_router corpus select "<corpus-ref-or-id>" \
   --query "<current user request>" \
   --confidence high \
   --reason "<brief metadata evidence>" \

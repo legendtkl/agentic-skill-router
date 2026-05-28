@@ -9,7 +9,7 @@ import type { Skill, Suggestion, UsageStat } from "./types.ts";
  * with the same display name is NOT auto-kept.
  */
 const AGENTIC_SKILL_ROUTER_PLUGIN_KEY_PREFIX = "agentic-skill-router@";
-const AGENTIC_SKILL_ROUTER_WORKFLOW_NAME = "agentic-skill-router-skills";
+const AGENTIC_SKILL_ROUTER_WORKFLOW_NAME = "agentic-skill-router";
 
 function isSkillRouterOwnSkill(skill: Skill): boolean {
   return (

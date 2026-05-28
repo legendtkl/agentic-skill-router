@@ -49,14 +49,14 @@ block written is:
 <!-- agentic-skill-router:claude-md:begin -->
 ## Skill routing
 
-`agentic-skill-router-skills` is a routing Skill that searches a catalog of
+`agentic-skill-router` is a routing Skill that searches a catalog of
 locally-installed disabled skills.
 
-When the `agentic-skill-router-skills` Skill is available and no other
+When the `agentic-skill-router` Skill is available and no other
 enabled Skill clearly matches the user's query, call
-`agentic-skill-router-skills` before answering. Do not invent a Skill name
+`agentic-skill-router` before answering. Do not invent a Skill name
 or fabricate a routing result without a Skill/tool result. If
-`agentic-skill-router-skills` is not installed in this environment, this
+`agentic-skill-router` is not installed in this environment, this
 section does not apply.
 ```
 
@@ -84,7 +84,7 @@ Code run. Pass `--no-claude-md` to skip this write. Codex `init` never
 touches CLAUDE.md.
 
 After init, restart the target agent if it was already running, then ask the
-installed `agentic-skill-router-skills` skill to audit, slim, or route installed skills.
+installed `agentic-skill-router` skill to audit, slim, or route installed skills.
 
 One-off project init is also available with `npx` for trial use, but global
 install is recommended so generated skills can reference a stable CLI path:
@@ -99,13 +99,14 @@ or for the Codex slash-command shim:
 ```bash
 npm install
 npm run install:plugin        # Claude Code plugin
-npm run install:codex-plugin  # Codex plugin and /agentic-skill-router:skills prompt
+npm run install:codex-plugin  # Codex plugin and /agentic-skill-router prompt
 ```
 
 After installing the Codex plugin, restart Codex and run:
 
 ```text
-/agentic-skill-router:skills
+$agentic-skill-router list
+/agentic-skill-router list
 ```
 
 ## CLI
@@ -117,27 +118,27 @@ the installer.
 Installed Claude Code plugin:
 
 ```bash
-bin/agentic-skill-router skills list
-bin/agentic-skill-router skills suggest --json
-bin/agentic-skill-router skills corpus search --all mail --any lark --limit 30 --json
-bin/agentic-skill-router skills corpus inspect corpus-abc123def0 --json
-bin/agentic-skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
-bin/agentic-skill-router skills disable user:lark-mail --yes
-bin/agentic-skill-router skills enable user:lark-mail
-bin/agentic-skill-router skills status
+bin/agentic-skill-router list
+bin/agentic-skill-router suggest --json
+bin/agentic-skill-router corpus search --all mail --any lark --limit 30 --json
+bin/agentic-skill-router corpus inspect corpus-abc123def0 --json
+bin/agentic-skill-router corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
+bin/agentic-skill-router disable user:lark-mail --yes
+bin/agentic-skill-router enable user:lark-mail
+bin/agentic-skill-router status
 ```
 
 Installed Codex plugin:
 
 ```bash
-bin/agentic-skill-router skills list
-bin/agentic-skill-router skills suggest --json
-bin/agentic-skill-router skills corpus search --all mail --any lark --limit 30 --json
-bin/agentic-skill-router skills corpus inspect corpus-abc123def0 --json
-bin/agentic-skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
-bin/agentic-skill-router skills disable user:codex:lark-mail --yes
-bin/agentic-skill-router skills enable user:codex:lark-mail
-bin/agentic-skill-router skills status
+bin/agentic-skill-router list
+bin/agentic-skill-router suggest --json
+bin/agentic-skill-router corpus search --all mail --any lark --limit 30 --json
+bin/agentic-skill-router corpus inspect corpus-abc123def0 --json
+bin/agentic-skill-router corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
+bin/agentic-skill-router disable user:codex:lark-mail --yes
+bin/agentic-skill-router enable user:codex:lark-mail
+bin/agentic-skill-router status
 ```
 
 `--unused-for=<duration>` accepts `30`, `30d`, `2w`, `3m`, and `1y`.
@@ -156,8 +157,8 @@ local development.
 One Agent Skills source is installed through multiple host-specific entry
 points:
 
-- `skills/agentic-skill-router-skills/SKILL.md` is the single source of truth.
-- `skills/agentic-skill-router-skills/references/` holds shared workflow details.
+- `skills/agentic-skill-router/SKILL.md` is the single source of truth.
+- `skills/agentic-skill-router/references/` holds shared workflow details.
 - `bin/agentic-skill-router` and `lib/agentic-skill-router.mjs` are the shared CLI runtime.
 - `plugins/claude-code/` and `plugins/codex/` only provide host manifests and
   host-specific entry points.
@@ -165,7 +166,7 @@ points:
   `~/.agentic-skill-router/runtime/<version>/`, then copy host manifests, skills, and a
   tiny host-specific wrapper into the selected host's local plugin cache. The
   wrapper sets `AGENTIC_SKILL_ROUTER_HOST` before delegating to the shared runtime.
-- `plugins/codex/prompts/agentic-skill-router-skills.md` is a generated slash-command
+- `plugins/codex/prompts/agentic-skill-router.md` is a generated slash-command
   shim for Codex.
 - `agentic-skill-router init` can create a project or global skill entry for Codex or
   Claude Code without installing a host plugin.
@@ -201,17 +202,17 @@ Disabled-skill routing:
 
 - The default agent workflow is Agentic Search-inspired L-agentic routing: the
   agent builds must/probe terms, searches disabled-skill metadata with
-  `skills corpus search`, optionally inspects a small shortlist with
-  `skills corpus inspect`, then records one choice with `skills corpus select`.
+  `corpus search`, optionally inspects a small shortlist with
+  `corpus inspect`, then records one choice with `corpus select`.
 - Routing is deliberately non-vectorized. Search runs over structured
   frontmatter and short metadata fields; no embeddings, vector store, or hidden
   semantic index is required.
 - During retrieval, the agent must not read disabled skill bodies. Selection is
   based on metadata only.
-- `skills corpus search` reads `id`, `name`, `description`, aliases, tags,
+- `corpus search` reads `id`, `name`, `description`, aliases, tags,
   tools, domains, intents, and examples. It returns stable `corpus-...` refs
   without exposing local file paths.
-- `skills corpus select <ref>` records routed use and returns
+- `corpus select <ref>` records routed use and returns
   `selected.skillMdPath`; the returned path may end in
   `SKILL.md.agentic-skill-router-disabled` and is safe to read as instructions.
 - If metadata evidence is weak or ambiguous, the agent should stop the router
@@ -271,7 +272,7 @@ frontmatter: skipped nested mapping under `metadata` (line 7)
 ```
 
 Warnings are attached to the skill record as the optional
-`frontmatterWarnings` field and surfaced in `skills list --json` output so
+`frontmatterWarnings` field and surfaced in `list --json` output so
 authors can spot silently-skipped metadata. Keep all routing metadata at the
 top level (see the `lark-mail` example above) so it parses reliably.
 
@@ -289,7 +290,7 @@ when the snapshot was last checked:
 - `BUILTIN_SKILLS_VERIFIED_AT` — ISO date (`YYYY-MM-DD`) of that
   verification.
 
-Both values are surfaced for every builtin entry in `skills list --json`
+Both values are surfaced for every builtin entry in `list --json`
 under a `builtinListSource` field of the form
 `{ kind: "static-snapshot", version, verifiedAt }`. Consumers that care
 about drift can read those values and warn when they go stale, without
@@ -403,7 +404,7 @@ behaves identically to `... routeMode dci`).
 
 ### DCI grep/find `--regex` is power-user mode
 
-`skills dci grep` and `skills dci find` default to literal substring matching,
+`dci grep` and `dci find` default to literal substring matching,
 which is the recommended path for both humans and agents. Passing `--regex`
 enables ECMAScript regex matching against every line of every disabled
 `SKILL.md` and is treated as an advanced/power-user surface. To protect the

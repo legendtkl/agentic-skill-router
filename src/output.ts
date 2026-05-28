@@ -22,34 +22,42 @@ export function usage(code = 0): number {
 
 USAGE
   agentic-skill-router init [codex|claude-code|all] [project|global|all] [--cwd=<dir>] [--force] [--json]
-  agentic-skill-router skills list [--json]
-  agentic-skill-router skills suggest [--unused-for=<dur>] [--json]
-  agentic-skill-router skills route --query=<text> [--mode=auto|metadata|lexical|dci|body] [--json] [--top-k=N] [--no-record]
+  agentic-skill-router <skill-command> ...
+  agentic-skill-router skills <skill-command> ...      (legacy-compatible)
+
+SKILL COMMANDS
+  list [--json]
+  suggest [--unused-for=<dur>] [--json]
+  route --query=<text> [--mode=auto|metadata|lexical|dci|body] [--json] [--top-k=N] [--no-record]
                                        (--mode=body is an alias for --mode=dci;
                                        both invoke the disabled-skill DCI router.
                                        --json reports routeModeAlias when an alias is used.)
-  agentic-skill-router skills corpus search (--any=<term>... | --all=<term>...) [--ranker=weighted|bm25] [--limit=N] [--json]
-  agentic-skill-router skills corpus inspect <id-or-name-or-ref...> [--json]
-  agentic-skill-router skills corpus select <id-or-name-or-ref> --query=<text> --confidence=high|medium --reason=<text> [--json]
-  agentic-skill-router skills dci search --query=<text> [--query=<text>...] [--metadata-only] [--json] [--top-k=N]
-  agentic-skill-router skills dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
+  corpus search (--any=<term>... | --all=<term>...) [--ranker=weighted|bm25] [--limit=N] [--json]
+  corpus inspect <id-or-name-or-ref...> [--json]
+  corpus select <id-or-name-or-ref> --query=<text> --confidence=high|medium --reason=<text> [--json]
+  dci search --query=<text> [--query=<text>...] [--metadata-only] [--json] [--top-k=N]
+  dci grep --pattern=<text> [--regex] [--json] [--top-k=N]
                                        (--regex is advanced/power-user mode;
                                        patterns are length-capped and screened
                                        for catastrophic-backtracking shapes.)
-  agentic-skill-router skills dci find <id-or-ref> --pattern=<text> [--regex] [--json]
-  agentic-skill-router skills dci open <id-or-ref> [--line=N] [--window=N] [--json]
-  agentic-skill-router skills dci inspect <id-or-ref> [--json]
-  agentic-skill-router skills dci read <id-or-ref> [--json] [--max-chars=N]
-  agentic-skill-router skills dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
-  agentic-skill-router skills dci budget [--json]
-  agentic-skill-router skills body <search|grep|find|open|inspect|read|select|budget> ...  (alias for dci)
-  agentic-skill-router skills disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>] [--allow-symlink-target-mutation]
-  agentic-skill-router skills enable <id...> [--allow-symlink-target-mutation]
-  agentic-skill-router skills status [--json]
-  agentic-skill-router skills config get [--json]
-  agentic-skill-router skills config set <key> <value>
-  agentic-skill-router skills config path
-  agentic-skill-router skills web [--port=N] [--bind=ADDR] [--dangerously-bind-public] [--project-root=DIR ...]
+  dci find <id-or-ref> --pattern=<text> [--regex] [--json]
+  dci open <id-or-ref> [--line=N] [--window=N] [--json]
+  dci inspect <id-or-ref> [--json]
+  dci read <id-or-ref> [--json] [--max-chars=N]
+  dci select <id-or-ref...> --query=<text> --confidence=high|medium --reason=<text> [--json]
+  dci budget [--json]
+  body <search|grep|find|open|inspect|read|select|budget> ...  (alias for dci)
+  disable (<id...> | --all-suggested [--unused-for=<dur>]) --yes [--reason=<text>] [--allow-symlink-target-mutation]
+  enable <id...> [--allow-symlink-target-mutation]
+  status [--json]
+  config get [--json]
+  config set <key> <value>
+  config path
+  web [--port=N] [--bind=ADDR] [--dangerously-bind-public] [--project-root=DIR ...]
+
+AGENT ENTRYPOINTS
+  Codex:       $agentic-skill-router list
+  Claude Code: /agentic-skill-router list
 
 DURATION  bare integer = days. Suffixed: 30d / 2w / 3m / 1y
 CONFIG    ~/.agentic-skill-router/config.json   { "unusedForDays": 30, "routeMode": "auto" }

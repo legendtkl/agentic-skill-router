@@ -145,6 +145,25 @@ test("skills list rejects unknown option with exit code 2 and suggestion", async
   }
 });
 
+test("top-level skill commands are accepted without the legacy skills prefix", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const listed = await runCli(["list", "--json"], fake.env);
+    const parsedList = JSON.parse(listed.stdout) as { skills: Array<{ id: string }> };
+    assert.ok(parsedList.skills.some((skill) => skill.id === fake.disabledSkillId));
+
+    const suggested = await runCli(["suggest", "--unused-for=365d", "--json"], fake.env);
+    const parsedSuggest = JSON.parse(suggested.stdout) as { suggestions: unknown[] };
+    assert.ok(Array.isArray(parsedSuggest.suggestions));
+
+    const routed = await runCli(["route", "lark", "mail", "--json", "--no-record"], fake.env);
+    const parsedRoute = JSON.parse(routed.stdout) as { selected?: { id?: string } | null };
+    assert.equal(parsedRoute.selected?.id, fake.disabledSkillId);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("skills suggest rejects unknown option with exit code 2", async () => {
   const fake = await makeFakeCodexUser();
   try {

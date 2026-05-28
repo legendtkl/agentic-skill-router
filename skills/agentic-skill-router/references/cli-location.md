@@ -10,14 +10,14 @@ there. `agentic-skill-router init` writes that file with the correct CLI path an
 Installed plugin:
 
 ```bash
-"<plugin-root>/bin/agentic-skill-router" skills list --json
+"<plugin-root>/bin/agentic-skill-router" list --json
 ```
 
 Compute `<plugin-root>` by taking `dirname` three times from this `SKILL.md`
 path:
 
 ```text
-<plugin-root>/skills/agentic-skill-router-skills/SKILL.md
+<plugin-root>/skills/agentic-skill-router/SKILL.md
 ```
 
 Installed plugin CLIs auto-detect their host from the plugin bundle.

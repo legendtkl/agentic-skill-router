@@ -7,11 +7,11 @@
  * - copies the Codex manifest plus skills and a host wrapper to
  *   ~/.codex/plugins/cache/local/agentic-skill-router/<version>/
  * - enables [plugins."agentic-skill-router@local"] in ~/.codex/config.toml
- * - copies prompts/agentic-skill-router-skills.md -> ~/.codex/prompts/
+ * - copies prompts/agentic-skill-router.md -> ~/.codex/prompts/
  *
  * Idempotent: re-running upgrades the install in place.
  */
-import { copyFile, cp, mkdir, readFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,8 +41,9 @@ const runtimeCacheRoot = process.env["AGENTIC_SKILL_ROUTER_RUNTIME_ROOT"] || joi
 const runtimePath = join(runtimeCacheRoot, version);
 const runtimeBin = join(runtimePath, "bin", "agentic-skill-router");
 const configPath = join(codexHome, "config.toml");
-const promptSrc = join(pluginSrc, "prompts/agentic-skill-router-skills.md");
-const promptPath = join(codexHome, "prompts/agentic-skill-router-skills.md");
+const promptSrc = join(pluginSrc, "prompts/agentic-skill-router.md");
+const promptPath = join(codexHome, "prompts/agentic-skill-router.md");
+const legacyPromptPath = join(codexHome, "prompts/agentic-skill-router-skills.md");
 const keepOld = process.argv.includes("--keep-old");
 
 async function main() {
@@ -69,9 +70,10 @@ async function main() {
   log("✓ installed.");
   log("");
   log("Next: restart Codex, then run:");
-  log("  /agentic-skill-router:skills");
+  log("  $agentic-skill-router list");
+  log("  /agentic-skill-router list");
   log("Manual CLI:");
-  log(`  ${installPath}/bin/agentic-skill-router skills suggest`);
+  log(`  ${installPath}/bin/agentic-skill-router suggest`);
 }
 
 async function enablePlugin() {
@@ -88,6 +90,7 @@ async function enablePlugin() {
 
 async function installSlashCommand() {
   await mkdir(dirname(promptPath), { recursive: true });
+  await removeLegacySlashCommand();
 
   let existing;
   try {
@@ -104,12 +107,36 @@ async function installSlashCommand() {
       `  A backup of the current file was written to ${backupPath}.\n` +
       `  To install the latest managed slash command, remove or rename the file and re-run install.\n`,
     );
-    log(`  skipped slash command /agentic-skill-router:skills (user-modified)`);
+    log(`  skipped slash command /agentic-skill-router (user-modified)`);
     return;
   }
 
   await cp(promptSrc, promptPath);
-  log(`  installed slash command /agentic-skill-router:skills`);
+  log(`  installed slash command /agentic-skill-router`);
+}
+
+async function removeLegacySlashCommand() {
+  let existing;
+  try {
+    existing = await readFile(legacyPromptPath, "utf8");
+  } catch (err) {
+    if (err && /** @type {NodeJS.ErrnoException} */(err).code === "ENOENT") return;
+    throw err;
+  }
+
+  if (!isManagedUnchanged(existing)) {
+    const backupPath = `${legacyPromptPath}.user-modified.bak`;
+    await copyFile(legacyPromptPath, backupPath);
+    await rm(legacyPromptPath, { force: true });
+    process.stderr.write(
+      `! ${legacyPromptPath} has local edits; removing the old slash command and preserving a backup at ${backupPath}.\n`,
+    );
+    log(`  migrated old slash command /agentic-skill-router:skills to backup`);
+    return;
+  }
+
+  await rm(legacyPromptPath, { force: true });
+  log(`  removed old slash command /agentic-skill-router:skills`);
 }
 
 main().catch((err) => {

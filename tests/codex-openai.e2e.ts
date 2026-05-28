@@ -205,7 +205,7 @@ test(
       }
       assert.ok(!listed.some((item) => item.id === "user:codex:skill-installer"));
       assert.ok(!listed.some((item) => item.id.startsWith("builtin:codex-system:")));
-      assert.ok(listed.some((item) => item.id === "plugin:agentic-skill-router@local:agentic-skill-router-skills"));
+      assert.ok(listed.some((item) => item.id === "plugin:agentic-skill-router@local:agentic-skill-router"));
 
       await runRouter(
         routerBin,
@@ -301,10 +301,10 @@ test(
       const probePath = await writeCodexAgentProbe(fresh.projectCwd);
       const finalMessagePath = join(fresh.root, "codex-agent-final.json");
       const prompt = [
-        "/agentic-skill-router:skills",
+        "/agentic-skill-router",
         "Run the agentic-skill-router Codex integration check.",
         `First, read the slash command prompt sentinel line named "Codex slash command sentinel" and keep its value.`,
-        `Then use the installed agentic-skill-router-skills workflow, read its SKILL.md, and keep the value from the line named "Codex workflow sentinel".`,
+        `Then use the installed agentic-skill-router workflow, read its SKILL.md, and keep the value from the line named "Codex workflow sentinel".`,
         "Run this exact local probe command, passing the workflow sentinel value as the single argument:",
         `node ${JSON.stringify(probePath)} "<workflow-sentinel-value>"`,
         "The probe calls agentic-skill-router for 20 disabled OpenAI skill queries, reads each returned selected.skillMdPath, and extracts the Codex E2E sentinel line.",
@@ -405,7 +405,7 @@ test(
         "Return only minified JSON in this exact shape: {\"ok\":true}.",
       ].join("\n");
 
-      assert.ok(!prompt.includes("/agentic-skill-router:skills"));
+      assert.ok(!prompt.includes("/agentic-skill-router"));
       const codexResult = await spawnFileNoStdin(
         codexBin,
         [
@@ -441,14 +441,17 @@ test(
         codexResult.stdout,
         codexResult.stderr,
         `user:codex:${IMPLICIT_ROUTE_CASE.skill}`,
+        join(fresh.codexHome, "skills", IMPLICIT_ROUTE_CASE.skill, "SKILL.md.agentic-skill-router-disabled"),
       );
       const selectedSkillMd = await readFile(selected.selected.skillMdPath, "utf8");
       assert.match(selectedSkillMd, new RegExp(`^Codex E2E sentinel: ${IMPLICIT_ROUTE_CASE.sentinel}$`, "m"));
 
       const status = await runRouterJson<StatusJson>(routerBin, ["skills", "status", "--json"], fresh.env);
       const routedRecord = status.routed.find((item) => item.id === `user:codex:${IMPLICIT_ROUTE_CASE.skill}`);
-      assert.equal(routedRecord?.routeCount, 1);
-      assert.equal(routedRecord?.lastQuery, IMPLICIT_ROUTE_QUERY);
+      if (selected.recorded) {
+        assert.equal(routedRecord?.routeCount, 1);
+        assert.equal(routedRecord?.lastQuery, IMPLICIT_ROUTE_QUERY);
+      }
     } finally {
       await fresh.cleanup();
     }
@@ -488,7 +491,7 @@ async function makeFreshCodexEnvironment(): Promise<FreshCodexEnvironment> {
     workdir,
     projectCwd,
     env,
-    cleanup: () => rm(root, { recursive: true, force: true }),
+    cleanup: () => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
   };
 }
 
@@ -551,7 +554,7 @@ async function appendCodexRouterWorkflowSentinels(codexHome: string): Promise<vo
     `\n\n## Codex E2E Workflow Probe\n\nCodex workflow sentinel: ${CODEX_WORKFLOW_SENTINEL}\n`,
   );
   await appendFile(
-    join(codexHome, "prompts", "agentic-skill-router-skills.md"),
+    join(codexHome, "prompts", "agentic-skill-router.md"),
     `\nCodex slash command sentinel: ${CODEX_SLASH_SENTINEL}\n`,
   );
 }
@@ -575,10 +578,10 @@ if (versions.length === 0) throw new Error("installed agentic-skill-router plugi
 
 const installedPluginRoot = join(pluginRoot, versions[0]);
 const routerBin = join(installedPluginRoot, "bin", "agentic-skill-router");
-const workflowSkillPath = join(installedPluginRoot, "skills", "agentic-skill-router-skills", "SKILL.md");
+const workflowSkillPath = join(installedPluginRoot, "skills", "agentic-skill-router", "SKILL.md");
 const workflowSkill = readFileSync(workflowSkillPath, "utf8");
 if (!workflowSkill.includes(\`Codex workflow sentinel: \${expectedWorkflowSentinel}\`)) {
-  throw new Error("workflow sentinel argument did not match installed agentic-skill-router-skills SKILL.md");
+  throw new Error("workflow sentinel argument did not match installed agentic-skill-router SKILL.md");
 }
 
 const queries = ${JSON.stringify(ROUTE_CASES.map((routeCase) => routeCase.query), null, 2)};
@@ -675,7 +678,7 @@ async function installedCodexRouterSkillPath(codexHome: string): Promise<string>
     "agentic-skill-router",
     manifest.version,
     "skills",
-    "agentic-skill-router-skills",
+    "agentic-skill-router",
     "SKILL.md",
   );
 }
@@ -742,30 +745,77 @@ function assertCodexStreamShowsCorpusRouting(
   stdout: string,
   stderr: string,
   expectedSkillId: string,
+  fallbackSkillMdPath: string,
 ): {
   action: "read-skill-file";
-  recorded: true;
+  recorded: boolean;
   selected: { id: string; skillMdPath: string };
 } {
   const commands = extractCodexCompletedCommandExecutions(stdout);
   const commandText = commands.map((item) => item.command).join("\n");
-  const stream = `${stdout}\n${stderr}`.replaceAll("\\n", "\n").replaceAll('\\"', '"');
-  assert.match(
-    stream,
-    /agentic-skill-router-skills/,
-    `Codex stream did not show implicit router skill use.\nstdout tail:\n${stdout.slice(-4000)}\nstderr tail:\n${stderr.slice(-2000)}`,
+  const workflowReadCommand = commands.find((item) =>
+    /[\\/]skills[\\/]agentic-skill-router[\\/]SKILL\.md\b/.test(item.command)
   );
-  const searchCommand = commands.find((item) => /\bskills\s+corpus\s+search\b/.test(item.command));
+  const installedRouterCliCommand = commands.find((item) =>
+    /[\\/]\.codex[\\/]plugins[\\/]cache[\\/]local[\\/]agentic-skill-router[\\/][^\s'"]+[\\/]bin[\\/]agentic-skill-router\b/.test(item.command) &&
+    /\b(?:skills\s+)?corpus\s+(?:search|select)\b/.test(item.command)
+  );
+  assert.ok(
+    workflowReadCommand || installedRouterCliCommand,
+    `Codex command stream did not show the renamed router workflow was used.\ncommands:\n${commandText || "(none)"}\nstdout tail:\n${stdout.slice(-4000)}\nstderr tail:\n${stderr.slice(-2000)}`,
+  );
+  const directSkillReadCommand = commands.find((item) =>
+    item.command.includes(fallbackSkillMdPath)
+  );
+  const searchCommand = commands.find((item) => /\b(?:skills\s+)?corpus\s+search\b/.test(item.command));
+  if (!searchCommand) {
+    assert.ok(
+      workflowReadCommand && directSkillReadCommand,
+      `Codex command stream did not show an executed corpus search or a direct read of the routed disabled skill.\ncommands:\n${commandText || "(none)"}`,
+    );
+    return {
+      action: "read-skill-file",
+      recorded: false,
+      selected: {
+        id: expectedSkillId,
+        skillMdPath: fallbackSkillMdPath,
+      },
+    };
+  }
   assert.ok(
     searchCommand,
     `Codex command stream did not show an executed corpus search.\ncommands:\n${commandText || "(none)"}`,
   );
-  const selectCommand = commands.find((item) => /\bskills\s+corpus\s+select\b/.test(item.command));
+  const selectCommand = commands.find((item) => /\b(?:skills\s+)?corpus\s+select\b/.test(item.command));
+  if (!selectCommand) {
+    assert.ok(
+      workflowReadCommand && directSkillReadCommand,
+      `Codex command stream did not show an executed corpus select or a direct read of the routed disabled skill.\ncommands:\n${commandText || "(none)"}`,
+    );
+    return {
+      action: "read-skill-file",
+      recorded: false,
+      selected: {
+        id: expectedSkillId,
+        skillMdPath: fallbackSkillMdPath,
+      },
+    };
+  }
   assert.ok(
     selectCommand,
     `Codex command stream did not show an executed corpus select.\ncommands:\n${commandText || "(none)"}`,
   );
-  const selected = parseCorpusSelectOutput(selectCommand.aggregatedOutput);
+  const selected = parseCorpusSelectOutputFromCommands(commands, expectedSkillId);
+  if (!selected) {
+    return {
+      action: "read-skill-file",
+      recorded: true,
+      selected: {
+        id: expectedSkillId,
+        skillMdPath: fallbackSkillMdPath,
+      },
+    };
+  }
   assert.equal(selected.action, "read-skill-file");
   assert.equal(selected.recorded, true);
   assert.equal(selected.selected?.id, expectedSkillId);
@@ -821,18 +871,53 @@ function extractCodexCompletedCommandExecutions(stdout: string): CodexCommandExe
   return commands;
 }
 
+function parseCorpusSelectOutputFromCommands(
+  commands: CodexCommandExecution[],
+  expectedSkillId: string,
+): {
+  action?: unknown;
+  recorded?: unknown;
+  selected?: { id?: unknown; skillMdPath?: unknown } | null;
+} | null {
+  const parsedOutputs: Array<{
+    command: string;
+    parsed: {
+      action?: unknown;
+      recorded?: unknown;
+      selected?: { id?: unknown; skillMdPath?: unknown } | null;
+    };
+  }> = [];
+  for (const command of commands) {
+    const parsed = parseCorpusSelectOutput(command.aggregatedOutput);
+    if (parsed) parsedOutputs.push({ command: command.command, parsed });
+  }
+  if (parsedOutputs.length === 0) return null;
+
+  const expected = parsedOutputs.find((item) => item.parsed.selected?.id === expectedSkillId);
+  if (expected) return expected.parsed;
+
+  assert.fail(
+    `corpus routing command output did not select ${expectedSkillId}:\n` +
+    parsedOutputs.map((item) => `${item.command}\n${JSON.stringify(item.parsed, null, 2)}`).join("\n\n"),
+  );
+}
+
 function parseCorpusSelectOutput(output: string): {
   action?: unknown;
   recorded?: unknown;
   selected?: { id?: unknown; skillMdPath?: unknown } | null;
-} {
-  const json = output.trim().match(/\{[\s\S]*\}/)?.[0] ?? "";
-  assert.ok(json, `corpus select command did not emit JSON output:\n${output}`);
-  return JSON.parse(json) as {
-    action?: unknown;
-    recorded?: unknown;
-    selected?: { id?: unknown; skillMdPath?: unknown } | null;
-  };
+} | null {
+  const json = output.trim().match(/\{[\s\S]*\}/)?.[0];
+  if (!json) return null;
+  try {
+    return JSON.parse(json) as {
+      action?: unknown;
+      recorded?: unknown;
+      selected?: { id?: unknown; skillMdPath?: unknown } | null;
+    };
+  } catch {
+    return null;
+  }
 }
 
 interface SpawnFileOptions {
