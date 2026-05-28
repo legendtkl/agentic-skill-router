@@ -1180,8 +1180,8 @@ test("web API rejects a project root whose .claude/skills container is a symlink
   // allowlist guard must realpath the skills-root container and reject
   // when it lands outside.
   const fixture = await makeWebFixture();
-  const allowedRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-skillsroot-allowed-"));
-  const outsideRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-skillsroot-outside-"));
+  const allowedRoot = await mkdtemp(join(tmpdir(), "agentic-skill-routerroot-allowed-"));
+  const outsideRoot = await mkdtemp(join(tmpdir(), "agentic-skill-routerroot-outside-"));
   try {
     // Make `allowedRoot` a project boundary so the ancestor walk stops here.
     await mkdir(join(allowedRoot, ".git"), { recursive: true });

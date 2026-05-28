@@ -76,8 +76,8 @@ test("builtin skill named 'review' is kept (canDisable=false short-circuits)", (
 
 test("agentic-skill-router's own plugin skill is kept", () => {
   const s = mkSkill({
-    name: "agentic-skill-router-skills",
-    id: "plugin:agentic-skill-router@local:agentic-skill-router-skills",
+    name: "agentic-skill-router",
+    id: "plugin:agentic-skill-router@local:agentic-skill-router",
     source: "plugin",
     pluginKey: "agentic-skill-router@local",
   });
@@ -85,10 +85,10 @@ test("agentic-skill-router's own plugin skill is kept", () => {
   assert.equal(out.length, 0);
 });
 
-test("user skill named 'agentic-skill-router-skills' is NOT auto-kept (only plugin instance is)", () => {
-  // Same-name false-positive guard: only the plugin-owned agentic-skill-router-skills
+test("user skill named 'agentic-skill-router' is NOT auto-kept (only plugin instance is)", () => {
+  // Same-name false-positive guard: only the plugin-owned agentic-skill-router
   // gets protected; a user-authored one with the same name remains suggestable.
-  const s = mkSkill({ name: "agentic-skill-router-skills" });
+  const s = mkSkill({ name: "agentic-skill-router" });
   const out = suggest([s], new Map(), { unusedForDays: 30, now: NOW });
   assert.equal(out.length, 1);
   assert.equal(out[0]!.reason, "never-used");

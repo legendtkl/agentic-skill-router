@@ -22,12 +22,14 @@ interface InitResult {
 }
 
 interface InitBatchResult {
-  action: "initialized-agentic-skill-router-skills";
+  action: "initialized-agentic-skill-router";
   results: InitResult[];
 }
 
 const CLAUDE_MD_BEGIN = "<!-- agentic-skill-router:claude-md:begin -->";
 const CLAUDE_MD_END = "<!-- agentic-skill-router:claude-md:end -->";
+const ROUTER_SKILL_NAME = "agentic-skill-router";
+const LEGACY_ROUTER_SKILL_NAME = "agentic-skill-router-skills";
 
 /**
  * Routing-trigger guidance injected into Claude Code's CLAUDE.md. The wording
@@ -39,14 +41,14 @@ const CLAUDE_MD_END = "<!-- agentic-skill-router:claude-md:end -->";
 const CLAUDE_MD_BODY = [
   "## Skill routing",
   "",
-  "`agentic-skill-router-skills` is a routing Skill that searches a catalog of",
+  "`agentic-skill-router` is a routing Skill that searches a catalog of",
   "locally-installed disabled skills.",
   "",
-  "When the `agentic-skill-router-skills` Skill is available and no other",
+  "When the `agentic-skill-router` Skill is available and no other",
   "enabled Skill clearly matches the user's query, call",
-  "`agentic-skill-router-skills` before answering. Do not invent a Skill name",
+  "`agentic-skill-router` before answering. Do not invent a Skill name",
   "or fabricate a routing result without a Skill/tool result. If",
-  "`agentic-skill-router-skills` is not installed in this environment, this",
+  "`agentic-skill-router` is not installed in this environment, this",
   "section does not apply.",
 ].join("\n");
 
@@ -162,7 +164,7 @@ export async function cmdInit(argv: string[]): Promise<number> {
   if (values.json) {
     const json: InitResult | InitBatchResult = results.length === 1
       ? results[0]!
-      : { action: "initialized-agentic-skill-router-skills", results };
+      : { action: "initialized-agentic-skill-router", results };
     process.stdout.write(JSON.stringify(json, null, 2) + "\n");
     return 0;
   }
@@ -224,10 +226,18 @@ async function preflightInitializeSkills(opts: {
   for (const agent of opts.agents) {
     for (const scope of opts.scopes) {
       const targetRoot = skillRootFor(agent, scope, opts.projectRoot);
-      const skillDir = join(targetRoot, "skills", "agentic-skill-router-skills");
+      const skillDir = join(targetRoot, "skills", ROUTER_SKILL_NAME);
+      const legacySkillDir = join(targetRoot, "skills", LEGACY_ROUTER_SKILL_NAME);
       if (await pathExists(skillDir)) {
         if (!opts.force) {
           throw new Error(`${skillDir} already exists; re-run with --force to replace it`);
+        }
+      }
+      if (await pathExists(legacySkillDir)) {
+        if (!opts.force) {
+          throw new Error(
+            `${legacySkillDir} is the old agentic-skill-router skill path; re-run with --force to replace it with ${skillDir}`,
+          );
         }
       }
       if (agent === "claude-code" && opts.writeClaudeMd) {
@@ -248,10 +258,17 @@ async function initializeSkill(opts: {
 }): Promise<InitResult> {
   const targetRoot = skillRootFor(opts.agent, opts.scope, opts.projectRoot);
   const skillRoot = join(targetRoot, "skills");
-  const skillDir = join(skillRoot, "agentic-skill-router-skills");
+  const skillDir = join(skillRoot, ROUTER_SKILL_NAME);
+  const legacySkillDir = join(skillRoot, LEGACY_ROUTER_SKILL_NAME);
   const skillDirExists = await pathExists(skillDir);
+  const legacySkillDirExists = await pathExists(legacySkillDir);
   if (skillDirExists && !opts.force) {
     throw new Error(`${skillDir} already exists; re-run with --force to replace it`);
+  }
+  if (legacySkillDirExists && !opts.force) {
+    throw new Error(
+      `${legacySkillDir} is the old agentic-skill-router skill path; re-run with --force to replace it with ${skillDir}`,
+    );
   }
 
   // Pre-flight validate CLAUDE.md BEFORE we touch the skill dir. If the file
@@ -265,6 +282,9 @@ async function initializeSkill(opts: {
 
   if (skillDirExists) {
     await rm(skillDir, { recursive: true, force: true });
+  }
+  if (legacySkillDirExists) {
+    await rm(legacySkillDir, { recursive: true, force: true });
   }
   await mkdir(skillRoot, { recursive: true });
   await cp(opts.sourceDir, skillDir, { recursive: true });
@@ -626,10 +646,10 @@ async function findRouterSkillSourceDir(): Promise<string> {
   roots.push(await findPackageRoot(dirname(fileURLToPath(import.meta.url))));
 
   for (const root of roots) {
-    const candidate = join(root, "skills", "agentic-skill-router-skills");
+    const candidate = join(root, "skills", ROUTER_SKILL_NAME);
     if (await fileExists(join(candidate, "SKILL.md"))) return candidate;
   }
-  throw new Error("could not locate skills/agentic-skill-router-skills next to the agentic-skill-router package");
+  throw new Error(`could not locate skills/${ROUTER_SKILL_NAME} next to the agentic-skill-router package`);
 }
 
 async function findPackageRoot(start: string): Promise<string> {
@@ -637,7 +657,7 @@ async function findPackageRoot(start: string): Promise<string> {
   while (true) {
     if (
       await fileExists(join(current, "package.json")) ||
-      await fileExists(join(current, "skills", "agentic-skill-router-skills", "SKILL.md"))
+      await fileExists(join(current, "skills", ROUTER_SKILL_NAME, "SKILL.md"))
     ) {
       return current;
     }

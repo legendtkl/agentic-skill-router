@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -54,7 +54,7 @@ test("install reinstall over managed copy refreshes the file in place", async ()
       maxBuffer: 4 * 1024 * 1024,
     });
 
-    const promptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
+    const promptPath = join(codexHome, "prompts", "agentic-skill-router.md");
     const first = await readFile(promptPath, "utf8");
     assert.ok(isManagedUnchanged(first));
 
@@ -81,7 +81,7 @@ test("install preserves a user-edited prompt and writes a backup", async () => {
       maxBuffer: 4 * 1024 * 1024,
     });
 
-    const promptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
+    const promptPath = join(codexHome, "prompts", "agentic-skill-router.md");
     const userVersion = "user owned prompt body\nwith local edits\n";
     await writeFile(promptPath, userVersion);
 
@@ -105,6 +105,53 @@ test("install preserves a user-edited prompt and writes a backup", async () => {
   }
 });
 
+test("install removes the old managed slash prompt when installing the renamed prompt", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-install-legacy-prompt-managed-"));
+  try {
+    const codexHome = join(root, ".codex");
+    const legacyPromptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
+    await mkdir(dirname(legacyPromptPath), { recursive: true });
+    await writeFile(legacyPromptPath, attachManagedMarker("legacy slash prompt\n"));
+
+    await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
+      cwd: REPO_ROOT,
+      env: codexInstallEnv(root, codexHome),
+      maxBuffer: 4 * 1024 * 1024,
+    });
+
+    assert.equal(await pathExists(legacyPromptPath), false);
+    assert.equal(await pathExists(`${legacyPromptPath}.user-modified.bak`), false);
+    assert.equal(await pathExists(join(codexHome, "prompts", "agentic-skill-router.md")), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("install backs up and removes a user-edited old slash prompt", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-install-legacy-prompt-user-"));
+  try {
+    const codexHome = join(root, ".codex");
+    const legacyPromptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
+    const userVersion = "custom legacy slash prompt\n";
+    await mkdir(dirname(legacyPromptPath), { recursive: true });
+    await writeFile(legacyPromptPath, userVersion);
+
+    const result = await execFileAsync(process.execPath, ["scripts/install-codex.mjs"], {
+      cwd: REPO_ROOT,
+      env: codexInstallEnv(root, codexHome),
+      maxBuffer: 4 * 1024 * 1024,
+    });
+
+    assert.equal(await pathExists(legacyPromptPath), false);
+    const backupPath = `${legacyPromptPath}.user-modified.bak`;
+    assert.equal(await readFile(backupPath, "utf8"), userVersion);
+    assert.match(result.stderr, /has local edits/);
+    assert.equal(await pathExists(join(codexHome, "prompts", "agentic-skill-router.md")), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("uninstall removes a managed prompt copy", async () => {
   const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-uninstall-prompt-managed-"));
   try {
@@ -115,7 +162,7 @@ test("uninstall removes a managed prompt copy", async () => {
       maxBuffer: 4 * 1024 * 1024,
     });
 
-    const promptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
+    const promptPath = join(codexHome, "prompts", "agentic-skill-router.md");
     assert.ok(await pathExists(promptPath));
 
     await execFileAsync(process.execPath, ["scripts/uninstall-codex.mjs"], {
@@ -124,6 +171,27 @@ test("uninstall removes a managed prompt copy", async () => {
       maxBuffer: 4 * 1024 * 1024,
     });
     assert.equal(await pathExists(promptPath), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("uninstall removes the old managed slash prompt", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-uninstall-legacy-prompt-managed-"));
+  try {
+    const codexHome = join(root, ".codex");
+    const legacyPromptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
+    await mkdir(dirname(legacyPromptPath), { recursive: true });
+    await writeFile(legacyPromptPath, attachManagedMarker("legacy slash prompt\n"));
+
+    await execFileAsync(process.execPath, ["scripts/uninstall-codex.mjs"], {
+      cwd: REPO_ROOT,
+      env: codexInstallEnv(root, codexHome),
+      maxBuffer: 4 * 1024 * 1024,
+    });
+
+    assert.equal(await pathExists(legacyPromptPath), false);
+    assert.equal(await pathExists(`${legacyPromptPath}.user-modified.bak`), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -139,7 +207,7 @@ test("uninstall preserves a user-edited prompt file", async () => {
       maxBuffer: 4 * 1024 * 1024,
     });
 
-    const promptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
+    const promptPath = join(codexHome, "prompts", "agentic-skill-router.md");
     const userVersion = "user owned prompt body\n";
     await writeFile(promptPath, userVersion);
 
@@ -155,6 +223,30 @@ test("uninstall preserves a user-edited prompt file", async () => {
 
     assert.ok(await pathExists(promptPath));
     assert.equal(await readFile(promptPath, "utf8"), userVersion);
+    assert.match(result.stderr, /has local edits/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("uninstall backs up and removes a user-edited old slash prompt", async () => {
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-uninstall-legacy-prompt-user-"));
+  try {
+    const codexHome = join(root, ".codex");
+    const legacyPromptPath = join(codexHome, "prompts", "agentic-skill-router-skills.md");
+    const userVersion = "custom legacy slash prompt\n";
+    await mkdir(dirname(legacyPromptPath), { recursive: true });
+    await writeFile(legacyPromptPath, userVersion);
+
+    const result = await execFileAsync(process.execPath, ["scripts/uninstall-codex.mjs"], {
+      cwd: REPO_ROOT,
+      env: codexInstallEnv(root, codexHome),
+      maxBuffer: 4 * 1024 * 1024,
+    });
+
+    assert.equal(await pathExists(legacyPromptPath), false);
+    const backupPath = `${legacyPromptPath}.user-modified.bak`;
+    assert.equal(await readFile(backupPath, "utf8"), userVersion);
     assert.match(result.stderr, /has local edits/);
   } finally {
     await rm(root, { recursive: true, force: true });
