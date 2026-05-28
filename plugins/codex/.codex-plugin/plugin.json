@@ -1,7 +1,7 @@
 {
   "name": "agentic-skill-router",
-  "version": "0.1.5",
-  "description": "Agentic Search-inspired non-vectorized routing and management for installed Agent Skills.",
+  "version": "0.1.7",
+  "description": "Route skill-shaped requests to disabled Agent Skills and manage installed Agent Skills.",
   "author": {
     "name": "agentic-skill-router contributors"
   },
@@ -14,8 +14,8 @@
   "skills": "../../skills/",
   "interface": {
     "displayName": "Agentic Skill Router",
-    "shortDescription": "Non-vectorized Agent Skills routing and management",
-    "longDescription": "Agentic Skill Router is an Agentic Search-inspired, non-vectorized routing and management layer for installed Agent Skills. It searches local skill metadata as an auditable corpus, routes long-tail requests back to disabled skills only when metadata supports the choice, audits installed skills, suggests unused or stale entries, and safely disables selected skills by renaming SKILL.md files so they can be restored later.",
+    "shortDescription": "Route disabled Agent Skills and manage installed skills",
+    "longDescription": "Agentic Skill Router searches locally installed disabled Agent Skills as an auditable corpus. Use it for skill-shaped requests involving named tools, APIs, services, CLIs, platforms, file formats, datasets, or domain workflows when no enabled local/user Agent Skill clearly matches. It also audits installed skills, suggests unused or stale entries, and safely disables selected skills by renaming SKILL.md files so they can be restored later.",
     "developerName": "agentic-skill-router contributors",
     "category": "Engineering",
     "capabilities": [

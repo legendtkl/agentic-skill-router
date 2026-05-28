@@ -22,8 +22,9 @@ test("shared router skill uses Agent Skills frontmatter as the source of truth",
   assert.equal(fm.name, "agentic-skill-router");
   const description = fm.description;
   assert.ok(typeof description === "string");
-  assert.match(description, /First consider enabled local Agent Skills/);
-  assert.match(description, /use this fallback router/);
+  assert.match(description, /First use any clearly matching enabled local\/user Agent Skill/);
+  assert.match(description, /generic built-in skill such as browser, Chrome, or web search/);
+  assert.match(description, /Examples include Vercel, Netlify, Cloudflare, Render/);
   assert.match(description, /audit, slim, disable, restore, or route/);
   assert.doesNotMatch(description, /MUST be used FIRST|before any other tool/);
   assert.doesNotMatch(description, /For Codex/);
@@ -52,6 +53,9 @@ test("plugin packages assemble from one unified skill source", async () => {
   const codexManifest = JSON.parse(await readFile(join(REPO_ROOT, "plugins", "codex", ".codex-plugin", "plugin.json"), "utf8"));
   assert.equal(claudeManifest.skills, "../../skills/");
   assert.equal(codexManifest.skills, "../../skills/");
+  assert.match(codexManifest.description, /Route skill-shaped requests to disabled Agent Skills/);
+  assert.match(codexManifest.interface.shortDescription, /Route disabled Agent Skills/);
+  assert.match(codexManifest.interface.longDescription, /named tools, APIs, services, CLIs, platforms, file formats, datasets, or domain workflows/);
   assert.ok(await pathExists(resolve(REPO_ROOT, "plugins", "claude-code", claudeManifest.skills, "agentic-skill-router", "SKILL.md")));
   assert.ok(await pathExists(resolve(REPO_ROOT, "plugins", "codex", codexManifest.skills, "agentic-skill-router", "SKILL.md")));
 

@@ -181,6 +181,33 @@ test("skills suggest rejects unknown option with exit code 2", async () => {
   }
 });
 
+test("legacy top-level skill commands remain accepted", async () => {
+  const fake = await makeFakeCodexUser();
+  try {
+    const suggest = await runCli(["suggest", "--unused-for=365d", "--json"], fake.env);
+    const parsedSuggest = JSON.parse(suggest.stdout) as { suggestions: unknown[]; usageDiagnostics: unknown };
+    assert.ok(Array.isArray(parsedSuggest.suggestions));
+    assert.ok(parsedSuggest.usageDiagnostics && typeof parsedSuggest.usageDiagnostics === "object");
+
+    const search = await runCli([
+      "corpus",
+      "search",
+      "--any=lark",
+      "--all=mail",
+      "--limit=5",
+      "--json",
+    ], fake.env);
+    const parsedSearch = JSON.parse(search.stdout) as {
+      mode: string;
+      matches: Array<{ shortId: string }>;
+    };
+    assert.equal(parsedSearch.mode, "disabled-skill-metadata");
+    assert.equal(parsedSearch.matches[0]?.shortId, "lark-mail");
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("skills route rejects --qurey but still accepts positional query", async () => {
   const fake = await makeFakeCodexUser();
   try {

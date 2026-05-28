@@ -1,11 +1,17 @@
 # CLI location
 
-Prefer `${AGENTIC_SKILL_ROUTER_CLI}` when it points to an executable file.
-
 Project/global init:
 
 If `references/local-cli.md` exists next to this file, use the helper defined
-there. `agentic-skill-router init` writes that file with the correct CLI path and host.
+there before any filesystem search. `agentic-skill-router init` writes that
+file with the correct CLI path and host. Do not search the current project,
+package manager caches, or unrelated worktrees for another
+`agentic-skill-router` binary unless that generated helper path is missing or
+not executable.
+
+Fallback:
+
+Prefer `${AGENTIC_SKILL_ROUTER_CLI}` when it points to an executable file.
 
 Installed plugin:
 
@@ -28,4 +34,6 @@ Repository checkout:
 test -x bin/agentic-skill-router && printf '%s\n' "$PWD/bin/agentic-skill-router"
 ```
 
-Repository checkout CLIs default to Claude Code.
+Use the repository checkout fallback only when this skill is being read inside
+the `agentic-skill-router` repository checkout itself. Repository checkout CLIs
+default to Claude Code.
