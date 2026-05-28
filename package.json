@@ -1,6 +1,6 @@
 {
   "name": "agentic-skill-router",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "description": "Agentic Search-inspired non-vectorized routing and management for Agent Skills",
   "license": "MIT",
   "engines": {
