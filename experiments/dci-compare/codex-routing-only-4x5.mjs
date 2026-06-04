@@ -20,6 +20,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createGunzip } from "node:zlib";
+import { optionalSkillRouterEvalCorePath } from "../skillrouter-dataset.mjs";
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -42,7 +43,7 @@ const MODEL = "gpt-5.5";
 const REASONING_EFFORT = "high";
 const QUERY_SET = process.env.CODEX_QUERY_SET || "subset";
 const SYNTHETIC_CORPUS_SIZE = Number(process.env.CODEX_SYNTHETIC_CORPUS_SIZE || "0");
-const SKILLROUTER_EVAL_CORE = process.env.CODEX_SKILLROUTER_EVAL_CORE || "";
+const SKILLROUTER_EVAL_CORE = optionalSkillRouterEvalCorePath("CODEX_SKILLROUTER_EVAL_CORE", "SKILLROUTER_EVAL_CORE");
 const SKILLROUTER_EVAL_TIER = process.env.CODEX_SKILLROUTER_EVAL_TIER || "hard";
 const CORPUS_CACHE_VERSION = 2;
 let pluginVersionPromise = null;
@@ -812,7 +813,7 @@ async function main() {
   if (runVariants.length === 0) throw new Error("no variants selected");
   if (runQueries.length === 0) throw new Error("no queries selected");
   if (originalCorpus && runVariants.some((v) => v.mode !== "router")) {
-    throw new Error("CODEX_SKILLROUTER_EVAL_CORE currently supports router variants only; native variants would still see the 150-skill installed corpus");
+    throw new Error("CODEX_SKILLROUTER_EVAL_CORE/SKILLROUTER_EVAL_CORE currently supports router variants only; native variants would still see the 150-skill installed corpus");
   }
   const partialRun = runVariants.length < variantPool.length || runQueries.length < queries.length;
   const defaultRunName = QUERY_SET === "paper-core-single"

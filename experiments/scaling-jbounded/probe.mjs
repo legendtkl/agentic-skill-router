@@ -4,7 +4,7 @@
 // One cell = one (variant, scale, query) tuple.
 //   - variant = which SKILL.md body to patch into the plugin
 //   - scale   = how many unique skills are installed under ~/.claude/skills
-//   - query   = one task_id from /tmp/sr-probe/data/eval_core/tasks.jsonl
+//   - query   = one task_id from the SkillRouter eval_core tasks.jsonl
 //
 // HOME naming is keyed by scale only — a single HOME at `.tmp-home-<label>/`
 // holds the corpus for that scale, and the variant body is hot-swapped into
@@ -20,6 +20,7 @@
 //                  [--scale=0]             (0 = full ~80K)
 //                  [--query-id=3d-scan-calc]
 //                  [--home=.tmp-home-<label>]
+//                  [--src=~/.cache/skill-router/datasets/SkillRouter-Eval-Core/eval_core]
 //                  [--skip-install]        (reuse HOME, swap variant, run)
 
 import { spawn } from "node:child_process";
@@ -31,15 +32,16 @@ import { createInterface } from "node:readline";
 import { homedir } from "node:os";
 import { dirname, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
+import { skillRouterEvalCorePath } from "../skillrouter-dataset.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, "..", "..");
 const EXP_DIR = __dirname;
 const VARIANTS_DIR = join(EXP_DIR, "variants");
-const SRC = "/tmp/sr-probe/data/eval_core";
 const TIMEOUT_MS = Number(process.env.CLAUDE_RUN_TIMEOUT_MS) || 600_000;
 
 const args = parseArgs(process.argv.slice(2));
+const SRC = args.src;
 
 function scaleLabel(n) {
   if (n === 0) return "full";
@@ -59,6 +61,7 @@ function parseArgs(argv) {
     scale: 0,
     queryId: "3d-scan-calc",
     home: "",
+    src: skillRouterEvalCorePath(),
     skipInstall: false,
   };
   for (const a of argv) {
@@ -66,6 +69,7 @@ function parseArgs(argv) {
     else if (a.startsWith("--scale=")) out.scale = Number(a.slice(8));
     else if (a.startsWith("--query-id=")) out.queryId = a.slice(11);
     else if (a.startsWith("--home=")) out.home = a.slice(7);
+    else if (a.startsWith("--src=")) out.src = skillRouterEvalCorePath(a.slice(6));
     else if (a === "--skip-install") out.skipInstall = true;
     else throw new Error(`unknown arg: ${a}`);
   }

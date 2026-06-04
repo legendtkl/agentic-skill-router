@@ -37,6 +37,20 @@ from noise. The mapping from `skill-NNN` back to the original SkillRouter
 entities is kept in `corpus-manifest.json` for offline analysis only; the
 benchmark harness and the agent never read it.
 
+By default, scripts that need the upstream SkillRouter `eval_core` dataset
+look for it at the shared stable cache path
+`~/.cache/skill-router/datasets/SkillRouter-Eval-Core/eval_core/`. Download
+once with:
+
+```bash
+hf download pipizhao/SkillRouter-Eval-Core \
+  --repo-type dataset \
+  --local-dir ~/.cache/skill-router/datasets/SkillRouter-Eval-Core/eval_core
+```
+
+Set `SKILLROUTER_EVAL_CORE=/path/to/eval_core` or pass `--src=/path/to/eval_core`
+to use another local copy.
+
 The 24 queries in `queries.json` are SkillsBench tasks reused verbatim:
 each `query.query` is `instruction_text` from the upstream dataset, and
 each `query.expected` is the upstream `gt` skill entity, opaqued to a

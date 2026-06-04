@@ -16,7 +16,7 @@
 //
 // Usage:
 //   node install-full.mjs --home=.tmp-home
-//                         [--src=/tmp/sr-probe/data/eval_core]
+//                         [--src=~/.cache/skill-router/datasets/SkillRouter-Eval-Core/eval_core]
 //                         [--concurrency=32]
 //                         [--limit=N]            (cap total skills written)
 
@@ -26,6 +26,7 @@ import { mkdir, writeFile, readdir } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { dirname, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
+import { skillRouterEvalCorePath } from "../skillrouter-dataset.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const args = parseArgs(process.argv.slice(2));
@@ -36,13 +37,13 @@ const LIMIT = args.limit;
 
 function parseArgs(argv) {
   const out = {
-    src: "/tmp/sr-probe/data/eval_core",
+    src: skillRouterEvalCorePath(),
     home: ".tmp-home",
     concurrency: 32,
     limit: 0,
   };
   for (const a of argv) {
-    if (a.startsWith("--src=")) out.src = a.slice(6);
+    if (a.startsWith("--src=")) out.src = skillRouterEvalCorePath(a.slice(6));
     else if (a.startsWith("--home=")) out.home = a.slice(7);
     else if (a.startsWith("--concurrency=")) out.concurrency = Number(a.slice(14));
     else if (a.startsWith("--limit=")) out.limit = Number(a.slice(8));
