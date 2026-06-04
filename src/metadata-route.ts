@@ -313,10 +313,16 @@ function fieldAppearsInQuery(item: MetadataField, query: QueryPlan): boolean {
 }
 
 function evidenceFor(item: MetadataField, matched: string, contribution: number): MatchEvidence {
+  // Normalize `matched` through `compact` before classifying so casing or
+  // punctuation in the original text (e.g. `API` vs `api`, `data-store` vs
+  // `datastore`) cannot let a generic stop term slip past `isGenericTerm`
+  // (#152). Without this, evidence emitted with the field's raw text was
+  // flagged inconsistently with evidence emitted from the per-term loop,
+  // which already passes pre-tokenized terms.
   return {
     field: item.field,
     matched,
-    isGeneric: isGenericTerm(matched),
+    isGeneric: isGenericTerm(compact(matched)),
     contribution: Number(contribution.toFixed(4)),
     source: "metadata",
     weight: item.weight,
