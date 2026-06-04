@@ -5,9 +5,11 @@ import type { Host, HostUsageOptions } from "./base.ts";
 import { projectSkillRoots } from "./project.ts";
 import type { Skill, UsageDiagnostics, UsageStat } from "../types.ts";
 import {
+  buildStrictProjectWalkOpts,
   compareVersions,
   readCodexPluginSettings,
   readSkillFrontmatterDetailed,
+  reportEscapedProjectEntries,
   walkSkillsDir,
 } from "../scan.ts";
 import { collectUsageStatsDetailed } from "../usage.ts";
@@ -20,6 +22,15 @@ export interface CodexHostOptions {
   cwd?: string;
   /** protected admin-level skills root, defaults to /etc/codex/skills */
   adminSkillsRoot?: string;
+  /**
+   * When set, project-scope skill scans run in strict-mode TOCTOU narrowing
+   * (#133): the project skills root is realpath-ed and any per-skill entry
+   * whose realpath escapes that canonical is dropped from results (instead
+   * of surfacing with `outOfRoot=true`). The value is the canonical project
+   * path captured at validation time by the web allowlist
+   * (`src/commands/web.ts`). Unset means default CLI behaviour.
+   */
+  enforceProjectScopeCanonical?: string;
 }
 
 interface CodexPluginInstall {
@@ -42,6 +53,7 @@ export class CodexHost implements Host {
   private readonly sessionsDir: string;
   private readonly cwd: string;
   private readonly adminSkillsRoot: string;
+  private readonly enforceProjectScopeCanonical: string | undefined;
 
   constructor(opts: CodexHostOptions = {}) {
     this.codexHome = opts.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
@@ -49,6 +61,7 @@ export class CodexHost implements Host {
     this.sessionsDir = opts.sessionsDir ?? join(this.codexHome, "sessions");
     this.cwd = opts.cwd ?? process.env["AGENTIC_SKILL_ROUTER_CWD"] ?? process.cwd();
     this.adminSkillsRoot = opts.adminSkillsRoot ?? process.env["CODEX_ADMIN_SKILLS_ROOT"] ?? "/etc/codex/skills";
+    this.enforceProjectScopeCanonical = opts.enforceProjectScopeCanonical;
   }
 
   async listSkills(): Promise<Skill[]> {
@@ -80,11 +93,16 @@ export class CodexHost implements Host {
     }));
 
     for (const projectRoot of await projectSkillRoots(this.cwd, ".agents/skills")) {
+      // #133: when the web allowlist set `enforceProjectScopeCanonical`,
+      // forward it so the project-scope `walkSkillsDir` drops escaping
+      // entries instead of surfacing them with `outOfRoot=true`. Default
+      // CLI flows leave it undefined and keep legacy behaviour.
       out.push(...await this.listRootSkills({
         root: projectRoot.root,
         idPrefix: `project:codex:${projectRoot.relativeDir}`,
         source: "project",
         canDisable: true,
+        ...(this.enforceProjectScopeCanonical ? { enforceCanonical: this.enforceProjectScopeCanonical } : {}),
       }));
     }
 
@@ -145,8 +163,16 @@ export class CodexHost implements Host {
     idPrefix: string;
     source: "user" | "project" | "builtin";
     canDisable: boolean;
+    /**
+     * When provided, opts the underlying `walkSkillsDir` into the
+     * strict-mode TOCTOU narrowing path (#133). Only the project-scope
+     * caller sets this — user/builtin/admin scans keep the legacy
+     * behaviour because they have no allowlist canonical to enforce.
+     */
+    enforceCanonical?: string;
   }): Promise<Skill[]> {
-    return walkSkillsDir(opts.root, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
+    const walkOpts = await buildStrictProjectWalkOpts(opts.root, opts.enforceCanonical);
+    const skills = await walkSkillsDir(opts.root, async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => {
       const { metadata: fm, warnings } = await readSkillFrontmatterDetailed(skillMdPath);
       return {
         id: `${opts.idPrefix}:${skillName}`,
@@ -163,7 +189,11 @@ export class CodexHost implements Host {
         outOfRoot,
         ...(warnings.length > 0 ? { frontmatterWarnings: warnings } : {}),
       };
-    });
+    }, walkOpts);
+    if (walkOpts.escaped && walkOpts.escaped.length > 0) {
+      reportEscapedProjectEntries(opts.root, walkOpts.escaped);
+    }
+    return skills;
   }
 
   private async installedPlugins(): Promise<CodexPluginInstall[]> {

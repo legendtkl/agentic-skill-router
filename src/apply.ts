@@ -161,6 +161,12 @@ export async function disableSkill(
       // symlink swap between resolve and rename cannot redirect this rename
       // to a different file. For in-root paths there is no symlink to swap,
       // so the original livePath -> disabledPath rename is sufficient.
+      //
+      // Residual race (#133, narrowed not closed): even after the canonical
+      // resolve above, the kernel-level rename takes a path string, so a
+      // swap between this realpath and the rename syscall can still
+      // redirect the operation. Closing that fully would need fd-pinned
+      // `renameat`, which Node does not expose without a native dep.
       if (canonicalLivePath) {
         const canonicalDisabledPath = canonicalLivePath.endsWith(DISABLED_SUFFIX)
           ? canonicalLivePath
