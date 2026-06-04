@@ -1,14 +1,14 @@
 import { execFile } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm, cp, symlink, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, cp, realpath, symlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { ClaudeCodeHost } from "../src/hosts/claude-code.ts";
 import { disableSkill, enableSkill } from "../src/apply.ts";
-import { readSkillFrontmatterBlock, readSkillFrontmatterDetailed } from "../src/scan.ts";
+import { readSkillFrontmatterBlock, readSkillFrontmatterDetailed, walkSkillsDir } from "../src/scan.ts";
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -444,5 +444,119 @@ test("CLI list --json surfaces frontmatterWarnings only when non-empty", async (
     assert.equal(clean!.frontmatterWarnings, undefined);
   } finally {
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("walkSkillsDir with escaped sink skips out-of-root symlink children and records them", async () => {
+  // TOCTOU narrowing (#133): when a caller (e.g. the web allowlist) supplies
+  // an `escaped` array, walkSkillsDir must DROP entries whose realpath
+  // escapes the validated `rootCanonical` and report the original in-root
+  // path through the sink. This is the "static" case for the race: the
+  // escape is already true at scan time. We cannot make the actual swap
+  // race deterministic from JS, but the post-realpath skip-and-report path
+  // is what closes most of the residual window.
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-walk-root-"));
+  const outside = await mkdtemp(join(tmpdir(), "agentic-skill-router-walk-outside-"));
+  try {
+    // In-root, real skill: must be found.
+    const inRoot = join(root, "inroot");
+    await mkdir(inRoot, { recursive: true });
+    await writeFile(join(inRoot, "SKILL.md"), "---\nname: inroot\ndescription: in-root real\n---\n");
+
+    // Out-of-root target with a valid SKILL.md, surfaced via a symlink under
+    // the scan root. With `escaped` provided we expect this entry to be
+    // skipped, not surfaced as `outOfRoot=true`.
+    const externalSkill = join(outside, "escaped-skill");
+    await mkdir(externalSkill, { recursive: true });
+    await writeFile(
+      join(externalSkill, "SKILL.md"),
+      "---\nname: escaped\ndescription: must be skipped\n---\n",
+    );
+    const escapedLink = join(root, "escaped");
+    await symlink(externalSkill, escapedLink);
+
+    const rootCanonical = await realpath(root);
+    const escaped: string[] = [];
+    const built: Array<{ name: string; outOfRoot: boolean }> = [];
+    const skills = await walkSkillsDir(
+      root,
+      async (skillName, _skillMdPath, _isDisabled, _conflict, outOfRoot) => {
+        built.push({ name: skillName, outOfRoot });
+        return {
+          id: `t:${skillName}`,
+          name: skillName,
+          description: "",
+          metadata: { name: skillName, description: "" },
+          source: "user",
+          pluginKey: null,
+          skillMdPath: _skillMdPath,
+          isDisabled: _isDisabled,
+          isPluginDisabled: false,
+          canDisable: !outOfRoot,
+          conflict: _conflict,
+          outOfRoot,
+        };
+      },
+      { rootCanonical, escaped },
+    );
+
+    // The in-root real skill must be present; the escaping symlink must NOT
+    // have been passed to `build` (so no SKILL.md open happened on the
+    // escaped target inside the loop).
+    const names = skills.map((s) => s.name).sort();
+    assert.deepEqual(names, ["inroot"], "escaped symlink should be dropped from results");
+    assert.deepEqual(built.map((b) => b.name).sort(), ["inroot"], "build callback must not see escaped entries");
+
+    // The escape must be reported with the in-root path the caller can use
+    // to surface a warning or audit log entry.
+    assert.equal(escaped.length, 1, "escaped sink should record exactly one entry");
+    assert.equal(escaped[0], escapedLink);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("walkSkillsDir without escaped sink keeps the legacy outOfRoot surface", async () => {
+  // Backward-compat guard: when the caller does NOT pass `escaped`, the
+  // legacy "surface symlink with outOfRoot=true" behavior must remain so
+  // CLI flows that show out-of-root skills with canDisable=false keep
+  // working. This pairs with the strict-mode test above to pin both modes.
+  const root = await mkdtemp(join(tmpdir(), "agentic-skill-router-walk-legacy-"));
+  const outside = await mkdtemp(join(tmpdir(), "agentic-skill-router-walk-legacy-outside-"));
+  try {
+    const externalSkill = join(outside, "external");
+    await mkdir(externalSkill, { recursive: true });
+    await writeFile(
+      join(externalSkill, "SKILL.md"),
+      "---\nname: external\ndescription: surfaced as outOfRoot\n---\n",
+    );
+    await symlink(externalSkill, join(root, "external"));
+
+    const skills = await walkSkillsDir(
+      root,
+      async (skillName, skillMdPath, isDisabled, conflict, outOfRoot) => ({
+        id: `t:${skillName}`,
+        name: skillName,
+        description: "",
+        metadata: { name: skillName, description: "" },
+        source: "user",
+        pluginKey: null,
+        skillMdPath,
+        isDisabled,
+        isPluginDisabled: false,
+        canDisable: !outOfRoot,
+        conflict,
+        outOfRoot,
+      }),
+    );
+
+    assert.equal(skills.length, 1);
+    assert.equal(skills[0]!.name, "external");
+    assert.equal(skills[0]!.outOfRoot, true, "legacy mode must still surface outOfRoot");
+    assert.equal(skills[0]!.canDisable, false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
   }
 });

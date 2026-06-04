@@ -554,18 +554,28 @@ async function createScopedHost(
   // path closes that window because the discovery walk runs on a path
   // string that has already been OS-resolved against the allowlist.
   //
-  // P1.F (residual risk, NOT fully closed here): all of the above checks
-  // run on canonical paths captured at validation time, but the
-  // subsequent host scan re-opens those paths as strings inside
+  // P1.F (residual risk, NARROWED but not fully closed — see #133): all of
+  // the above checks run on canonical paths captured at validation time,
+  // but the subsequent host scan re-opens those paths as strings inside
   // `walkSkillsDir` (`src/scan.ts`). An attacker with write access UNDER
-  // an allowlisted root can swap a path component (e.g. replace
+  // an allowlisted root could swap a path component (e.g. replace
   // `<allowed>/.claude/skills` with a symlink to `/outside`) AFTER we
-  // validate and BEFORE the scan opens it. Fully closing this race
-  // requires pinning directory handles (`open()` -> fd, then operate via
-  // fd) across `walkSkillsDir`, `projectSkillRoots`, and the rename in
-  // `apply.ts`. The current threat model assumes the allowlisted
-  // directory tree is not attacker-writable; a follow-up will pin fds.
-  return createHost(hostName, { cwd: canonical });
+  // validate and BEFORE the scan opens it. `walkSkillsDir` now revalidates
+  // each child's realpath against the originally-resolved root canonical
+  // before opening its SKILL.md (#133 partial fix), which narrows the
+  // window from "any time during the scan" to "between that revalidation
+  // and the next open()" per entry. Fully closing this race requires
+  // pinning directory handles (`open()` -> fd, then operate via fd) across
+  // `walkSkillsDir`, `projectSkillRoots`, and the rename in `apply.ts`.
+  // Node does not expose `openat`/`renameat` without a native dependency,
+  // which would violate this repo's runtime-dep-free charter, so the
+  // narrowing above is the current best-effort defense and the threat
+  // model still assumes the allowlisted directory tree is not
+  // attacker-writable. `enforceProjectScopeCanonical` opts the host into
+  // the strict-mode `walkSkillsDir` path for project-scope scans (it drops
+  // escaping entries instead of surfacing them with `outOfRoot=true`),
+  // so the in-loop revalidation is actually wired up for the web flow.
+  return createHost(hostName, { cwd: canonical, enforceProjectScopeCanonical: canonical });
 }
 
 async function pathExists(path: string): Promise<boolean> {

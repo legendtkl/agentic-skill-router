@@ -9,9 +9,9 @@ const root = resolve(__dirname, "..");
 const check = process.argv.includes("--check");
 
 await writeGeneratedFile(
-  resolve(root, "plugins/codex/prompts/agentic-skill-router-skills.md"),
+  resolve(root, "plugins/codex/prompts/agentic-skill-router.md"),
   attachManagedMarker(renderSlashPrompt({
-    description: "Use the agentic-skill-router-skills skill with optional arguments.",
+    description: "Use the agentic-skill-router skill with optional arguments.",
     argumentHint: "[route <query>|list|suggest|status|enable <id...>|disable <id...> --yes]",
   })),
 );
@@ -45,8 +45,8 @@ function renderSlashPrompt(prompt) {
     `argument-hint: ${yamlQuote(argumentHint)}`,
     "---",
     "",
-    "Invoke/use the installed `agentic-skill-router-skills` skill. Treat the text after",
-    "`/agentic-skill-router:skills` as arguments for that skill.",
+    "Invoke/use the installed `agentic-skill-router` skill. Treat the text after",
+    "`/agentic-skill-router` as arguments for that skill.",
     "",
   ].join("\n");
 }

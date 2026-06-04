@@ -1,0 +1,1590 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="agentic-skill-router: a no-embedding agent-facing routing skill for slimming, restoring, and retrieving Agent Skills on demand.">
+  <link rel="icon" type="image/png" href="assets/agentic-skill-router-logo.png?v=2">
+  <link rel="shortcut icon" type="image/png" href="assets/agentic-skill-router-logo.png?v=2">
+  <link rel="apple-touch-icon" href="assets/agentic-skill-router-logo.png?v=2">
+  <title>agentic-skill-router</title>
+  <script>
+    try {
+      const storedTheme = localStorage.getItem("asr-theme");
+      if (storedTheme === "dark" || storedTheme === "light") {
+        document.documentElement.dataset.theme = storedTheme;
+      }
+    } catch {
+      // Ignore storage errors; the page still follows the system preference.
+    }
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f7f2;
+      --panel: rgba(255, 255, 255, 0.82);
+      --panel-strong: #ffffff;
+      --ink: #161616;
+      --ink-soft: #363a3f;
+      --muted: #686c73;
+      --line: rgba(22, 22, 22, 0.12);
+      --accent: #1f7a5a;
+      --accent-soft: #dcece5;
+      --blue: #3b5f91;
+      --blue-soft: #e4ebf6;
+      --amber: #926b2c;
+      --amber-soft: #f4ead9;
+      --field: rgba(255, 255, 255, 0.72);
+      --table-bg: rgba(255, 255, 255, 0.78);
+      --table-head-bg: rgba(31, 122, 90, 0.08);
+      --table-row: rgba(255, 255, 255, 0.56);
+      --table-row-alt: rgba(31, 122, 90, 0.045);
+      --table-text: #1f2327;
+      --table-muted: #555b61;
+      --shadow: 0 18px 50px rgba(20, 30, 25, 0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 20% 12%, rgba(31, 122, 90, 0.10), transparent 28rem),
+        linear-gradient(180deg, #fbfbf8 0%, var(--bg) 52%, #f0f1eb 100%);
+      color: var(--ink);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .shell {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 26px 0 52px;
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 12px 0 28px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      font-weight: 750;
+      color: var(--accent);
+    }
+
+    .brand img {
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-strong);
+      object-fit: cover;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-width: 0;
+      max-width: 100%;
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .nav-links a:hover { color: var(--ink); }
+
+    .nav-end {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-width: 0;
+    }
+
+    .nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .lang-switch {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      height: 36px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+    }
+
+    .lang-switch button {
+      min-width: 42px;
+      border: 0;
+      border-radius: 6px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 720;
+      line-height: 1;
+    }
+
+    .lang-switch button.active {
+      color: var(--ink);
+      background: var(--panel-strong);
+      box-shadow: 0 1px 8px rgba(20, 30, 25, 0.08);
+    }
+
+    .icon-button {
+      width: 36px;
+      height: 36px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--panel-strong);
+      cursor: pointer;
+      box-shadow: 0 1px 8px rgba(20, 30, 25, 0.08);
+    }
+
+    .icon-button svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+    }
+
+    .theme-toggle .sun-icon { display: none; }
+    :root[data-effective-theme="dark"] .theme-toggle .moon-icon { display: none; }
+    :root[data-effective-theme="dark"] .theme-toggle .sun-icon { display: block; }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.72fr);
+      align-items: center;
+      gap: 36px;
+      min-height: 470px;
+      padding: 22px 0 38px;
+    }
+
+    h1 {
+      margin: 0 0 16px;
+      color: var(--accent);
+      font-size: 72px;
+      line-height: 0.95;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .lead {
+      max-width: 680px;
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 20px;
+      line-height: 1.6;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--panel-strong);
+      box-shadow: 0 1px 8px rgba(20, 30, 25, 0.08);
+      font-weight: 680;
+    }
+
+    .button.primary {
+      color: #ffffff;
+      border-color: rgba(31, 122, 90, 0.55);
+      background: var(--accent);
+    }
+
+    .terminal {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(22, 22, 22, 0.92);
+      box-shadow: var(--shadow);
+      color: #f4f3ee;
+      overflow: hidden;
+    }
+
+    .terminal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 42px;
+      padding: 0 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      color: rgba(255, 255, 255, 0.66);
+      font-size: 12px;
+    }
+
+    .terminal-body {
+      margin: 0;
+      padding: 18px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.75;
+      white-space: pre;
+    }
+
+    .prompt { color: #86d8aa; }
+    .output { color: rgba(244, 243, 238, 0.70); }
+
+    .code-panel {
+      max-width: 100%;
+      margin: 0 0 12px;
+      padding: 12px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--panel-strong);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 0 0 28px;
+    }
+
+    .metric {
+      min-width: 0;
+      min-height: 118px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--accent);
+      font-size: 26px;
+      line-height: 1.05;
+      overflow-wrap: anywhere;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    section {
+      margin-top: 24px;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .section-copy {
+      max-width: 660px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .feature {
+      min-width: 0;
+      min-height: 168px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.34);
+    }
+
+    .feature b {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--ink);
+      font-size: 15px;
+    }
+
+    .feature p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .step {
+      position: relative;
+      min-width: 0;
+      min-height: 146px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.26)),
+        var(--field);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+      overflow: hidden;
+    }
+
+    .step::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), transparent 72%);
+      opacity: 0.72;
+    }
+
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 36px;
+      height: 28px;
+      margin-bottom: 14px;
+      padding: 0 10px;
+      border: 1px solid rgba(31, 122, 90, 0.18);
+      border-radius: 999px;
+      color: var(--accent);
+      background: rgba(31, 122, 90, 0.08);
+      font-weight: 760;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+    }
+
+    .step b {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .step span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .callout {
+      min-width: 0;
+      padding: 18px;
+      border: 1px solid rgba(59, 95, 145, 0.22);
+      border-radius: 8px;
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+
+    .callout.amber {
+      border-color: rgba(146, 107, 44, 0.24);
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 8px;
+      color: inherit;
+      font-size: 16px;
+    }
+
+    .callout p {
+      margin: 0;
+      color: rgba(31, 39, 49, 0.78);
+      line-height: 1.6;
+    }
+
+    .report-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .experiment-panel {
+      min-width: 0;
+    }
+
+    .experiment-stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .experiment-stat {
+      min-width: 0;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--table-bg);
+    }
+
+    .experiment-stat strong {
+      display: block;
+      color: var(--accent);
+      font-size: 19px;
+      line-height: 1.05;
+    }
+
+    .experiment-stat span {
+      display: block;
+      margin-top: 6px;
+      color: var(--table-muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .table-wrap {
+      min-width: 0;
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--table-bg);
+    }
+
+    table {
+      width: 100%;
+      min-width: 780px;
+      border-collapse: collapse;
+      background: transparent;
+      color: var(--table-text);
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--table-muted);
+      background: var(--table-head-bg);
+      font-size: 11px;
+      font-weight: 780;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    tbody tr { background: var(--table-row); }
+    tbody tr:nth-child(even) { background: var(--table-row-alt); }
+    tr:last-child td { border-bottom: 0; }
+
+    td:nth-child(2),
+    td:nth-child(3),
+    td:nth-child(4),
+    td:nth-child(5),
+    td:nth-child(6) {
+      white-space: nowrap;
+    }
+
+    td code,
+    .terminal code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.94em;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0 8px;
+      border-radius: 999px;
+      color: var(--accent);
+      background: var(--accent-soft);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .tag.blue {
+      color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .links {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .resource {
+      min-width: 0;
+      min-height: 96px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.34);
+    }
+
+    .resource b {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .resource span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 26px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #10110f;
+      --panel: rgba(26, 28, 25, 0.86);
+      --panel-strong: #1d201c;
+      --ink: #f4f3ee;
+      --ink-soft: #d7d9d2;
+      --muted: #a2a79f;
+      --line: rgba(255, 255, 255, 0.14);
+      --accent: #86d8aa;
+      --accent-soft: rgba(134, 216, 170, 0.16);
+      --blue: #a9c7f5;
+      --blue-soft: rgba(95, 138, 199, 0.18);
+      --amber: #e5c17a;
+      --amber-soft: rgba(190, 145, 68, 0.18);
+      --field: rgba(255, 255, 255, 0.08);
+      --table-bg: rgba(18, 23, 20, 0.94);
+      --table-head-bg: rgba(134, 216, 170, 0.12);
+      --table-row: rgba(255, 255, 255, 0.045);
+      --table-row-alt: rgba(134, 216, 170, 0.07);
+      --table-text: #f1f4ed;
+      --table-muted: #c0c8bf;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+    }
+
+    :root[data-theme="dark"] body {
+      background:
+        radial-gradient(circle at 18% 10%, rgba(134, 216, 170, 0.10), transparent 27rem),
+        linear-gradient(180deg, #151713 0%, var(--bg) 55%, #0c0d0b 100%);
+    }
+
+    :root[data-theme="dark"] .feature,
+    :root[data-theme="dark"] .step,
+    :root[data-theme="dark"] table,
+    :root[data-theme="dark"] .resource {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    :root[data-theme="dark"] .step {
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
+        var(--field);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    :root[data-theme="dark"] .callout p { color: rgba(244, 243, 238, 0.78); }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: #10110f;
+        --panel: rgba(26, 28, 25, 0.86);
+        --panel-strong: #1d201c;
+        --ink: #f4f3ee;
+        --ink-soft: #d7d9d2;
+        --muted: #a2a79f;
+        --line: rgba(255, 255, 255, 0.14);
+        --accent: #86d8aa;
+        --accent-soft: rgba(134, 216, 170, 0.16);
+        --blue: #a9c7f5;
+        --blue-soft: rgba(95, 138, 199, 0.18);
+        --amber: #e5c17a;
+        --amber-soft: rgba(190, 145, 68, 0.18);
+        --field: rgba(255, 255, 255, 0.08);
+        --table-bg: rgba(18, 23, 20, 0.94);
+        --table-head-bg: rgba(134, 216, 170, 0.12);
+        --table-row: rgba(255, 255, 255, 0.045);
+        --table-row-alt: rgba(134, 216, 170, 0.07);
+        --table-text: #f1f4ed;
+        --table-muted: #c0c8bf;
+        --shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+      }
+
+      :root:not([data-theme="light"]) body {
+        background:
+          radial-gradient(circle at 18% 10%, rgba(134, 216, 170, 0.10), transparent 27rem),
+          linear-gradient(180deg, #151713 0%, var(--bg) 55%, #0c0d0b 100%);
+      }
+
+      :root:not([data-theme="light"]) .feature,
+      :root:not([data-theme="light"]) .step,
+      :root:not([data-theme="light"]) table,
+      :root:not([data-theme="light"]) .resource {
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      :root:not([data-theme="light"]) .step {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.035)),
+          var(--field);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+
+      :root:not([data-theme="light"]) .callout p { color: rgba(244, 243, 238, 0.78); }
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .results-grid {
+        grid-template-columns: 1fr;
+      }
+
+      h1 {
+        font-size: 58px;
+      }
+
+      .metric-strip,
+      .feature-grid,
+      .experiment-stats,
+      .flow,
+      .links {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 700px) {
+      .shell {
+        width: min(100vw - 20px, 1120px);
+        padding-top: 18px;
+      }
+
+      .nav {
+        display: block;
+        padding-bottom: 18px;
+      }
+
+      .nav-end {
+        display: block;
+        margin-top: 14px;
+      }
+
+      .nav-links {
+        width: 100%;
+        gap: 12px;
+        overflow-x: auto;
+        padding-bottom: 4px;
+      }
+
+      .nav-controls {
+        margin-top: 12px;
+      }
+
+      .hero {
+        gap: 22px;
+        min-height: 0;
+        padding-top: 14px;
+      }
+
+      h1 {
+        font-size: 32px;
+      }
+
+      .lead {
+        font-size: 17px;
+      }
+
+      .terminal-body {
+        font-size: 12px;
+      }
+
+      .metric-strip,
+      .feature-grid,
+      .experiment-stats,
+      .flow,
+      .links {
+        grid-template-columns: 1fr;
+      }
+
+      section {
+        padding: 20px;
+      }
+
+      .section-head {
+        display: block;
+      }
+
+      .section-copy {
+        margin-top: 10px;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+      }
+
+      .footer {
+        display: block;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <nav class="nav" aria-label="Main navigation">
+      <a class="brand" href="#">
+        <img src="assets/agentic-skill-router-logo.png" alt="">
+        <span>agentic-skill-router</span>
+      </a>
+      <div class="nav-end">
+        <div class="nav-links">
+          <a href="#quick-start" data-i18n="nav.quick">Quick Start</a>
+          <a href="#features" data-i18n="nav.features">Features</a>
+          <a href="#workflow" data-i18n="nav.workflow">Workflow</a>
+          <a href="#experiments" data-i18n="nav.experiments">Experiments</a>
+          <a href="#resources" data-i18n="nav.resources">Resources</a>
+        </div>
+        <div class="nav-controls" aria-label="Page controls">
+          <div class="lang-switch" aria-label="Language">
+            <button type="button" data-lang="zh" aria-pressed="false">中</button>
+            <button class="active" type="button" data-lang="en" aria-pressed="true">EN</button>
+          </div>
+          <button class="icon-button theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
+            <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.7 6.7 0 0 0 21 12.8Z"></path>
+            </svg>
+            <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path>
+              <path d="M12 20v2"></path>
+              <path d="m4.93 4.93 1.41 1.41"></path>
+              <path d="m17.66 17.66 1.41 1.41"></path>
+              <path d="M2 12h2"></path>
+              <path d="M20 12h2"></path>
+              <path d="m6.34 17.66-1.41 1.41"></path>
+              <path d="m19.07 4.93-1.41 1.41"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <div>
+        <h1>agentic-skill-router</h1>
+        <p class="lead">
+          A no-embedding, agent-facing routing skill that moves rarely used Agent Skills
+          out of always-on context, then retrieves the right skill instructions on demand.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/legendtkl/agentic-skill-router">GitHub</a>
+          <a class="button" href="#quick-start">Quick Start</a>
+          <a class="button" href="reports/report-all-experiments.html">Experiment report</a>
+        </div>
+      </div>
+
+      <aside class="terminal" aria-label="Install as a skill commands">
+        <div class="terminal-head">
+          <span>install as a skill</span>
+          <span>Node.js 20+</span>
+        </div>
+        <pre class="terminal-body"><span class="prompt">$</span> npm install -g agentic-skill-router
+<span class="prompt">$</span> agentic-skill-router init
+<span class="output">select agent: codex or claude-code
+select scope: project or global</span>
+
+<span class="prompt">$</span> agentic-skill-router skills suggest --json
+<span class="prompt">$</span> agentic-skill-router skills web</pre>
+      </aside>
+    </header>
+
+    <div class="metric-strip" aria-label="Project highlights">
+      <div class="metric">
+        <strong>Agent support</strong>
+        <span>Runs as a project or global routing skill for Codex and Claude Code agents.</span>
+      </div>
+      <div class="metric">
+        <strong>1,152 units</strong>
+        <span>Batch evidence combines 150 anonymized skills, 24 expert queries, 16 variants, and 48 aggregate rows.</span>
+      </div>
+      <div class="metric">
+        <strong>Bash + Tool</strong>
+        <span>Strategy experiments compare bash-based agentic retrieval, tool-wrapped retrieval, and catalog baselines.</span>
+      </div>
+    </div>
+
+    <section id="quick-start">
+      <div class="section-head">
+        <h2>Quick Start</h2>
+        <p class="section-copy">
+          Install the CLI, then initialize agentic-skill-router as an agent-facing routing skill.
+          The README and CLI help remain the source of truth for the full option set.
+        </p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature">
+          <b>Install as a skill</b>
+          <pre class="code-panel">npm install -g agentic-skill-router
+agentic-skill-router init</pre>
+          <p>Install the CLI, then write the routing skill entry that agents can discover and invoke.</p>
+        </article>
+        <article class="feature">
+          <b>Codex project skill</b>
+          <pre class="code-panel">agentic-skill-router init codex project
+$agentic-skill-router list</pre>
+          <p>After restarting Codex, invoke the installed routing skill with Codex's $skill syntax.</p>
+        </article>
+        <article class="feature">
+          <b>Claude Code project skill</b>
+          <pre class="code-panel">agentic-skill-router init claude-code project
+/agentic-skill-router suggest</pre>
+          <p>After restarting Claude Code, invoke the installed routing skill through its slash command.</p>
+        </article>
+        <article class="feature">
+          <b>Local skill manager</b>
+          <pre class="code-panel">agentic-skill-router skills web
+# http://127.0.0.1:8787</pre>
+          <p>Browse, filter, disable, and restore local skills; the server binds to loopback by default.</p>
+        </article>
+        <article class="feature">
+          <b>Route disabled skills</b>
+          <pre class="code-panel">agentic-skill-router skills route \
+  --query "draft a Lark mail reply" \
+  --json</pre>
+          <p>Select a matching skill from the disabled corpus and emit structured output for agent workflows.</p>
+        </article>
+        <article class="feature">
+          <b>Restore SKILL.md</b>
+          <pre class="code-panel">agentic-skill-router skills status
+agentic-skill-router skills enable user:codex:lark-mail</pre>
+          <p>Restore SKILL.md from state records while keeping built-in and system skills protected.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="section-head">
+        <h2>Core Features</h2>
+        <p class="section-copy">
+          The project is a routing skill for reducing always-on skill metadata while keeping
+          disable, restore, and on-demand retrieval controlled.
+        </p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature">
+          <b>Agent-facing routing skill</b>
+          <p>Installs a skill entry that agents can call when a task needs instructions from a disabled skill.</p>
+        </article>
+        <article class="feature">
+          <b>Usage-based skill slimming</b>
+          <p>Reads local transcripts, extracts skill usage signals, and suggests stale or unused entries by last-used time.</p>
+        </article>
+        <article class="feature">
+          <b>Safe disable and restore</b>
+          <p>Disables skills by renaming <code>SKILL.md</code>, keeps state records, and protects built-in system skills.</p>
+        </article>
+        <article class="feature">
+          <b>No-embedding skill retrieval</b>
+          <p>Searches local skill files directly with agentic retrieval instead of introducing embeddings or a vector database.</p>
+        </article>
+        <article class="feature">
+          <b>Local skill manager</b>
+          <p>A localhost Web UI can browse, filter, disable, and restore skills; public binding requires an explicit danger flag.</p>
+        </article>
+        <article class="feature">
+          <b>CLI + skill distribution</b>
+          <p>Ships an npm CLI, Codex slash prompt, Claude Code plugin assets, and one unified routing skill workflow.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="workflow">
+      <div class="section-head">
+        <h2>How It Works</h2>
+        <p class="section-copy">
+          agentic-skill-router adds an auditable skill-routing layer between local skill directories
+          and the agent's normal trigger path.
+        </p>
+      </div>
+
+      <div class="flow">
+        <div class="step">
+          <span class="step-num">01</span>
+          <b>Install skill</b>
+          <span><code>init</code> writes a project or global routing skill entry that the agent can invoke.</span>
+        </div>
+        <div class="step">
+          <span class="step-num">02</span>
+          <b>Scan skills</b>
+          <span>Collect metadata, source, conflict, and disabled-state information into one actionable inventory.</span>
+        </div>
+        <div class="step">
+          <span class="step-num">03</span>
+          <b>Slim context</b>
+          <span><code>suggest</code> combines transcript usage with policy rules, then leaves disable decisions explicit.</span>
+        </div>
+        <div class="step">
+          <span class="step-num">04</span>
+          <b>Route on demand</b>
+          <span>When a disabled skill is needed, the routing skill selects a target and reads its instructions.</span>
+        </div>
+        <div class="step">
+          <span class="step-num">05</span>
+          <b>Restore</b>
+          <span><code>enable</code> restores <code>SKILL.md</code> through state records and supports repair paths for missing state.</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="experiments">
+      <div class="section-head">
+        <h2>Batch Experiment Results</h2>
+        <p class="section-copy">
+          Latest aggregate data comes from <code>experiments/dci-compare/runs/rerun-150-full-2026-05-26</code>:
+          48 aggregate rows and 1,152 experiment units across Claude, Codex, 16 routing variants,
+          and 24 expert queries.
+        </p>
+      </div>
+
+      <div class="results-grid">
+        <div class="strategy-list">
+          <div class="callout strategy-card">
+            <strong>Bash-based agentic retriever</strong>
+            <p>
+              The agent searches disabled skills directly with general shell commands such as
+              <code>find</code>, <code>rg</code>, and <code>sed</code>.
+              Pros: no embeddings, full-body evidence, and explainable traces. Tradeoff:
+              output and turns need bounds.
+            </p>
+          </div>
+          <div class="callout amber strategy-card" style="margin-top: 12px;">
+            <strong>Tool-wrapped agentic retrieval</strong>
+            <p>
+              Search, open, and read actions are wrapped behind controlled tool interfaces while
+              the agent still plans the retrieval path. Pros: steadier behavior and clearer
+              boundaries. Tradeoff: tool design shapes recall and debugging.
+            </p>
+          </div>
+          <div class="callout strategy-card" style="margin-top: 12px;">
+            <strong>Metadata / catalog retrieval</strong>
+            <p>
+              The workflow reads skill descriptions or a prebuilt catalog first, then expands
+              candidates only when needed. Pros: cheaper, faster, and easier to bound. Risk:
+              weak metadata can be pulled toward near-miss distractors.
+            </p>
+          </div>
+          <div class="report-actions">
+            <a class="button primary" href="reports/report-all-experiments.html">Open full HTML report</a>
+            <a class="button" href="reports/agentic-skill-router-report.pdf" download>Download report PDF (Chinese)</a>
+            <a class="button" href="reports/agentic-skill-router-report.en.pdf" download>Download report PDF (English)</a>
+            <a class="button" href="https://github.com/legendtkl/agentic-skill-router/tree/main/experiments/dci-compare">View experiment source</a>
+          </div>
+        </div>
+
+        <div class="experiment-panel">
+          <div class="experiment-stats" aria-label="Batch experiment coverage">
+            <div class="experiment-stat">
+              <strong>48</strong>
+              <span>aggregate rows</span>
+            </div>
+            <div class="experiment-stat">
+              <strong>1,152</strong>
+              <span>experiment units</span>
+            </div>
+            <div class="experiment-stat">
+              <strong>16</strong>
+              <span>routing variants</span>
+            </div>
+            <div class="experiment-stat">
+              <strong>24</strong>
+              <span>expert queries</span>
+            </div>
+            <div class="experiment-stat">
+              <strong>0 / 0</strong>
+              <span>timeouts / API errors</span>
+            </div>
+            <div class="experiment-stat">
+              <strong>4</strong>
+              <span>Codex configs hit 24/24</span>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table aria-label="Batch experiment summary">
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th>Variant</th>
+                  <th>Mode</th>
+                  <th>Hits</th>
+                  <th>Cost</th>
+                  <th>Trigger</th>
+                  <th>Avg work</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>I-meta</code></td>
+                  <td>with md</td>
+                  <td>24/24</td>
+                  <td>$3.02</td>
+                  <td>100%</td>
+                  <td>3.0 turns / 2.0 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>E-digest</code></td>
+                  <td>with md</td>
+                  <td>24/24</td>
+                  <td>$3.05</td>
+                  <td>100%</td>
+                  <td>3.0 turns / 2.0 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>K-lite-replicate</code></td>
+                  <td>with md</td>
+                  <td>24/24</td>
+                  <td>$3.27</td>
+                  <td>100%</td>
+                  <td>3.5 turns / 2.4 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>C-lite</code></td>
+                  <td>with md</td>
+                  <td>24/24</td>
+                  <td>$4.36</td>
+                  <td>100%</td>
+                  <td>4.9 turns / 5.7 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>G-native</code></td>
+                  <td>with md</td>
+                  <td>23/24</td>
+                  <td>$1.84</td>
+                  <td>0%</td>
+                  <td>1.0 turns / 0.0 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>K-lite</code></td>
+                  <td>with md</td>
+                  <td>23/24</td>
+                  <td>$2.77</td>
+                  <td>100%</td>
+                  <td>3.3 turns / 2.2 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>K-bounded</code></td>
+                  <td>with md</td>
+                  <td>23/24</td>
+                  <td>$2.83</td>
+                  <td>100%</td>
+                  <td>3.8 turns / 2.8 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag">Codex</span></td>
+                  <td><code>H-bounded</code></td>
+                  <td>with md</td>
+                  <td>23/24</td>
+                  <td>$4.94</td>
+                  <td>100%</td>
+                  <td>5.8 turns / 5.7 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag blue">Claude</span></td>
+                  <td><code>B-cc</code></td>
+                  <td>no md</td>
+                  <td>23/24</td>
+                  <td>$5.61</td>
+                  <td>95.8%</td>
+                  <td>7.1 turns / 5.2 tools</td>
+                </tr>
+                <tr>
+                  <td><span class="tag blue">Claude</span></td>
+                  <td><code>K-lite</code></td>
+                  <td>with md</td>
+                  <td>22/24</td>
+                  <td>$4.06</td>
+                  <td>95.8%</td>
+                  <td>4.0 turns / 2.1 tools</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="resources">
+      <div class="section-head">
+        <h2>Resources</h2>
+        <p class="section-copy">Code, docs, and experiment artifacts stay in the repository for reproduction and implementation review.</p>
+      </div>
+
+      <div class="links">
+        <a class="resource" href="reports/report-all-experiments.html">
+          <b>Full experiment HTML report</b>
+          <span>Rendered all-experiments report, browsable directly on this site.</span>
+        </a>
+        <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/blob/main/README.md">
+          <b>README</b>
+          <span>Install steps, CLI commands, skill paths, and runtime details.</span>
+        </a>
+        <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/blob/main/README.zh-CN.md">
+          <b>Chinese README</b>
+          <span>Project overview and usage notes for Chinese readers.</span>
+        </a>
+        <a class="resource" href="https://github.com/legendtkl/agentic-skill-router/tree/main/skills/agentic-skill-router">
+          <b>Routing Skill</b>
+          <span>Agent-facing workflow and reference documents.</span>
+        </a>
+        <a class="resource" href="reports/agentic-skill-router-report.en.pdf" download>
+          <b>Report PDFs</b>
+          <span>Downloadable report, available as Chinese and English PDF editions.</span>
+        </a>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>MIT License · agentic-skill-router</span>
+      <span>Page data cites the latest batch experiment aggregates from May 26, 2026.</span>
+    </footer>
+  </main>
+  <script>
+    const translations = {
+      zh: {
+        lang: "zh-CN",
+        description: "agentic-skill-router 项目介绍：no-embedding 的 agent-facing routing skill，用于 Agent Skills 瘦身、恢复和按需检索。",
+        themeDark: "切换到暗色模式",
+        themeLight: "切换到亮色模式",
+        i18n: {
+          "nav.quick": "Quick Start",
+          "nav.features": "功能",
+          "nav.workflow": "机制",
+          "nav.experiments": "实验",
+          "nav.resources": "资源",
+        },
+        html: {
+          ".terminal-body": `<span class="prompt">$</span> npm install -g agentic-skill-router
+<span class="prompt">$</span> agentic-skill-router init
+<span class="output">选择 agent：codex 或 claude-code
+选择 scope：project 或 global</span>
+
+<span class="prompt">$</span> agentic-skill-router skills suggest --json
+<span class="prompt">$</span> agentic-skill-router skills web`,
+        },
+        text: {
+          ".lead": "一个 no-embedding 的 agent-facing routing skill：把不常用的 Agent Skills 移出常驻上下文，在任务真正需要时再检索并读取正确的 skill 指令。",
+          ".terminal-head span:first-child": "安装为 skill",
+          ".hero .actions a[href='#quick-start']": "Quick Start",
+          ".hero .actions a[href='reports/report-all-experiments.html']": "实验报告",
+          ".metric:nth-child(1) strong": "Agent 支持",
+          ".metric:nth-child(1) span": "作为项目级或全局路由 skill 接入 Codex 与 Claude Code agent。",
+          ".metric:nth-child(2) strong": "1,152 实验单元",
+          ".metric:nth-child(2) span": "合并展示 150 个匿名 skill、24 个专家查询、16 个路由变体与 48 个聚合行。",
+          ".metric:nth-child(3) strong": "Bash + Tool",
+          ".metric:nth-child(3) span": "策略实验对比 bash-based agentic retrieval、tool-wrapped retrieval 与目录基线。",
+          "#quick-start h2": "Quick Start",
+          "#quick-start .section-copy": "先安装 CLI，再把 agentic-skill-router 初始化为 agent-facing routing skill。完整参数仍以 README 和 CLI help 为准。",
+          "#quick-start .feature:nth-child(1) b": "安装为 skill",
+          "#quick-start .feature:nth-child(1) p": "安装 CLI 后写入 agent 可发现、可调用的 routing skill 入口。",
+          "#quick-start .feature:nth-child(2) b": "Codex 项目级 skill",
+          "#quick-start .feature:nth-child(2) p": "重启 Codex 后，用 Codex 的 $skill 语法调用已安装的 routing skill。",
+          "#quick-start .feature:nth-child(3) b": "Claude Code 项目级 skill",
+          "#quick-start .feature:nth-child(3) p": "重启 Claude Code 后，通过 slash command 调用已安装的 routing skill。",
+          "#quick-start .feature:nth-child(4) b": "本地 skill 管理页",
+          "#quick-start .feature:nth-child(4) p": "用于浏览、筛选、禁用和恢复本机技能；默认只绑定 loopback。",
+          "#quick-start .feature:nth-child(5) b": "路由禁用技能",
+          "#quick-start .feature:nth-child(5) p": "从禁用技能语料中选择匹配项，输出可被 agent workflow 消费的结构化结果。",
+          "#quick-start .feature:nth-child(6) b": "恢复 SKILL.md",
+          "#quick-start .feature:nth-child(6) p": "通过状态记录恢复 SKILL.md；内置和系统技能保持受保护。",
+          "#features h2": "核心功能",
+          "#features .section-copy": "这是一个 routing skill：降低常驻 skill metadata 成本，同时让禁用、恢复和按需检索都保持可控。",
+          "#features .feature:nth-child(1) b": "面向 agent 的路由 skill",
+          "#features .feature:nth-child(1) p": "当任务需要禁用 skill 的指令时，agent 可以调用这个 skill 入口进行检索。",
+          "#features .feature:nth-child(2) b": "基于使用记录瘦身",
+          "#features .feature:nth-child(2) p": "读取本地 transcript，统计技能调用痕迹，按最近使用时间给出 stale 或 unused 建议。",
+          "#features .feature:nth-child(3) b": "安全禁用与恢复",
+          "#features .feature:nth-child(3) p": "通过重命名 SKILL.md 禁用技能，保留状态文件，保护内置和系统技能不被误改。",
+          "#features .feature:nth-child(4) b": "No-embedding skill 检索",
+          "#features .feature:nth-child(4) p": "直接用 agentic retrieval 搜索本地 skill 文件，不引入 embedding 或向量库。",
+          "#features .feature:nth-child(5) b": "本地 skill 管理页",
+          "#features .feature:nth-child(5) p": "内置 localhost Web UI，可浏览、筛选、禁用和恢复技能；公网绑定需要显式危险开关。",
+          "#features .feature:nth-child(6) b": "CLI + skill 分发",
+          "#features .feature:nth-child(6) p": "提供 npm CLI、Codex slash prompt、Claude Code 插件资产和统一的技能工作流定义。",
+          "#workflow h2": "运行机制",
+          "#workflow .section-copy": "agentic-skill-router 在本地 skill 目录和 agent 的正常触发路径之间，增加一层可审计的 skill 路由。",
+          "#workflow .step:nth-child(1) b": "安装 skill",
+          "#workflow .step:nth-child(1) span:last-child": "init 写入项目级或全局 routing skill 入口，供 agent 调用。",
+          "#workflow .step:nth-child(2) b": "扫描 skills",
+          "#workflow .step:nth-child(2) span:last-child": "汇总技能元数据、来源、冲突和禁用状态，形成当前可操作清单。",
+          "#workflow .step:nth-child(3) b": "瘦身上下文",
+          "#workflow .step:nth-child(3) span:last-child": "suggest 结合使用记录生成候选项，再由用户确认禁用。",
+          "#workflow .step:nth-child(4) b": "按需路由",
+          "#workflow .step:nth-child(4) span:last-child": "请求需要禁用 skill 时，routing skill 选择目标并读取其指令。",
+          "#workflow .step:nth-child(5) b": "恢复",
+          "#workflow .step:nth-child(5) span:last-child": "enable 使用状态记录还原 SKILL.md，也能处理缺失状态的修复路径。",
+          "#experiments h2": "批量实验结果",
+          "#experiments .section-copy": "最新聚合数据来自 experiments/dci-compare/runs/rerun-150-full-2026-05-26：48 个聚合行，1,152 个实验单元，覆盖 Claude、Codex、16 个路由变体与 24 个专家查询。",
+          "#experiments .strategy-card:nth-child(1) strong": "Bash-based agentic retriever",
+          "#experiments .strategy-card:nth-child(1) p": "让 agent 用 find、rg、sed 等通用命令直接搜索禁用 skill 语料。优点是 no embedding、可读完整正文、可解释；代价是需要约束输出和轮次，否则容易增加上下文与工具调用。",
+          "#experiments .strategy-card:nth-child(2) strong": "Tool-wrapped agentic retrieval",
+          "#experiments .strategy-card:nth-child(2) p": "把搜索、打开、读取等步骤包装成受控工具接口，让 agent 在固定动作空间内检索。优点是行为更稳定、边界更清晰；代价是工具设计会影响召回率和调试复杂度。",
+          "#experiments .strategy-card:nth-child(3) strong": "Metadata / catalog retrieval",
+          "#experiments .strategy-card:nth-child(3) p": "先读取 skill description 或预生成 catalog，再按需展开候选 skill。优点是便宜、快、上下文更可控；风险是 metadata 不足时容易被近义 distractor 带偏。",
+          ".report-actions a[href='reports/report-all-experiments.html']": "打开完整 HTML 报告",
+          ".report-actions a[href='reports/agentic-skill-router-report.pdf']": "下载报告 PDF（中文）",
+          ".report-actions a[href='reports/agentic-skill-router-report.en.pdf']": "下载报告 PDF（英文）",
+          ".report-actions a[href*='experiments/dci-compare']": "查看实验源码",
+          ".experiment-stat:nth-child(1) span": "聚合行",
+          ".experiment-stat:nth-child(2) span": "实验单元",
+          ".experiment-stat:nth-child(3) span": "路由变体",
+          ".experiment-stat:nth-child(4) span": "专家查询",
+          ".experiment-stat:nth-child(5) span": "timeout / API error",
+          ".experiment-stat:nth-child(6) span": "Codex 配置达到 24/24",
+          "#experiments th:nth-child(1)": "Agent",
+          "#experiments th:nth-child(2)": "变体",
+          "#experiments th:nth-child(3)": "模式",
+          "#experiments th:nth-child(4)": "命中",
+          "#experiments th:nth-child(5)": "成本",
+          "#experiments th:nth-child(6)": "触发率",
+          "#experiments th:nth-child(7)": "平均工作量",
+          "#experiments tbody tr:nth-child(1) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(2) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(3) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(4) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(5) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(6) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(7) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(8) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(9) td:nth-child(3)": "无 md",
+          "#experiments tbody tr:nth-child(10) td:nth-child(3)": "带 md",
+          "#experiments tbody tr:nth-child(1) td:nth-child(7)": "3.0 轮 / 2.0 工具",
+          "#experiments tbody tr:nth-child(2) td:nth-child(7)": "3.0 轮 / 2.0 工具",
+          "#experiments tbody tr:nth-child(3) td:nth-child(7)": "3.5 轮 / 2.4 工具",
+          "#experiments tbody tr:nth-child(4) td:nth-child(7)": "4.9 轮 / 5.7 工具",
+          "#experiments tbody tr:nth-child(5) td:nth-child(7)": "1.0 轮 / 0.0 工具",
+          "#experiments tbody tr:nth-child(6) td:nth-child(7)": "3.3 轮 / 2.2 工具",
+          "#experiments tbody tr:nth-child(7) td:nth-child(7)": "3.8 轮 / 2.8 工具",
+          "#experiments tbody tr:nth-child(8) td:nth-child(7)": "5.8 轮 / 5.7 工具",
+          "#experiments tbody tr:nth-child(9) td:nth-child(7)": "7.1 轮 / 5.2 工具",
+          "#experiments tbody tr:nth-child(10) td:nth-child(7)": "4.0 轮 / 2.1 工具",
+          "#resources h2": "资源入口",
+          "#resources .section-copy": "代码、文档和实验产物都保留在仓库中，便于复现实验或检查具体实现。",
+          "#resources .resource:nth-child(1) b": "完整实验 HTML 报告",
+          "#resources .resource:nth-child(1) span": "已渲染的 all-experiments 报告，可直接在站内浏览。",
+          "#resources .resource:nth-child(2) span": "安装、CLI 命令、skill 路径和运行细节。",
+          "#resources .resource:nth-child(3) b": "中文 README",
+          "#resources .resource:nth-child(3) span": "面向中文读者的项目说明和使用方式。",
+          "#resources .resource:nth-child(4) b": "路由 Skill",
+          "#resources .resource:nth-child(4) span": "agent-facing 工作流和引用文档。",
+          "#resources .resource:nth-child(5) b": "报告 PDF",
+          "#resources .resource:nth-child(5) span": "可下载的报告，提供中文和英文 PDF 版本。",
+          ".footer span:nth-child(2)": "页面数据引用 2026-05-26 最新批量实验聚合结果。",
+        },
+      },
+      en: {
+        lang: "en",
+        description: "agentic-skill-router: a no-embedding agent-facing routing skill for slimming, restoring, and retrieving Agent Skills on demand.",
+        themeDark: "Switch to dark mode",
+        themeLight: "Switch to light mode",
+        i18n: {
+          "nav.quick": "Quick Start",
+          "nav.features": "Features",
+          "nav.workflow": "Workflow",
+          "nav.experiments": "Experiments",
+          "nav.resources": "Resources",
+        },
+        html: {
+          ".terminal-body": `<span class="prompt">$</span> npm install -g agentic-skill-router
+<span class="prompt">$</span> agentic-skill-router init
+<span class="output">select agent: codex or claude-code
+select scope: project or global</span>
+
+<span class="prompt">$</span> agentic-skill-router skills suggest --json
+<span class="prompt">$</span> agentic-skill-router skills web`,
+        },
+        text: {
+          ".lead": "A no-embedding, agent-facing routing skill that moves rarely used Agent Skills out of always-on context, then retrieves the right skill instructions on demand.",
+          ".terminal-head span:first-child": "install as a skill",
+          ".hero .actions a[href='#quick-start']": "Quick Start",
+          ".hero .actions a[href='reports/report-all-experiments.html']": "Experiment report",
+          ".metric:nth-child(1) strong": "Agent support",
+          ".metric:nth-child(1) span": "Runs as a project or global routing skill for Codex and Claude Code agents.",
+          ".metric:nth-child(2) strong": "1,152 units",
+          ".metric:nth-child(2) span": "Batch evidence combines 150 anonymized skills, 24 expert queries, 16 variants, and 48 aggregate rows.",
+          ".metric:nth-child(3) strong": "Bash + Tool",
+          ".metric:nth-child(3) span": "Strategy experiments compare bash-based agentic retrieval, tool-wrapped retrieval, and catalog baselines.",
+          "#quick-start h2": "Quick Start",
+          "#quick-start .section-copy": "Install the CLI, then initialize agentic-skill-router as an agent-facing routing skill. The README and CLI help remain the source of truth for the full option set.",
+          "#quick-start .feature:nth-child(1) b": "Install as a skill",
+          "#quick-start .feature:nth-child(1) p": "Install the CLI, then write the routing skill entry that agents can discover and invoke.",
+          "#quick-start .feature:nth-child(2) b": "Codex project skill",
+          "#quick-start .feature:nth-child(2) p": "After restarting Codex, invoke the installed routing skill with Codex's $skill syntax.",
+          "#quick-start .feature:nth-child(3) b": "Claude Code project skill",
+          "#quick-start .feature:nth-child(3) p": "After restarting Claude Code, invoke the installed routing skill through its slash command.",
+          "#quick-start .feature:nth-child(4) b": "Local skill manager",
+          "#quick-start .feature:nth-child(4) p": "Browse, filter, disable, and restore local skills; the server binds to loopback by default.",
+          "#quick-start .feature:nth-child(5) b": "Route disabled skills",
+          "#quick-start .feature:nth-child(5) p": "Select a matching skill from the disabled corpus and emit structured output for agent workflows.",
+          "#quick-start .feature:nth-child(6) b": "Restore SKILL.md",
+          "#quick-start .feature:nth-child(6) p": "Restore SKILL.md from state records while keeping built-in and system skills protected.",
+          "#features h2": "Core Features",
+          "#features .section-copy": "The project is a routing skill for reducing always-on skill metadata while keeping disable, restore, and on-demand retrieval controlled.",
+          "#features .feature:nth-child(1) b": "Agent-facing routing skill",
+          "#features .feature:nth-child(1) p": "Installs a skill entry that agents can call when a task needs instructions from a disabled skill.",
+          "#features .feature:nth-child(2) b": "Usage-based skill slimming",
+          "#features .feature:nth-child(2) p": "Reads local transcripts, extracts skill usage signals, and suggests stale or unused entries by last-used time.",
+          "#features .feature:nth-child(3) b": "Safe disable and restore",
+          "#features .feature:nth-child(3) p": "Disables skills by renaming SKILL.md, keeps state records, and protects built-in system skills.",
+          "#features .feature:nth-child(4) b": "No-embedding skill retrieval",
+          "#features .feature:nth-child(4) p": "Searches local skill files directly with agentic retrieval instead of introducing embeddings or a vector database.",
+          "#features .feature:nth-child(5) b": "Local skill manager",
+          "#features .feature:nth-child(5) p": "A localhost Web UI can browse, filter, disable, and restore skills; public binding requires an explicit danger flag.",
+          "#features .feature:nth-child(6) b": "CLI + skill distribution",
+          "#features .feature:nth-child(6) p": "Ships an npm CLI, Codex slash prompt, Claude Code plugin assets, and one unified routing skill workflow.",
+          "#workflow h2": "How It Works",
+          "#workflow .section-copy": "agentic-skill-router adds an auditable skill-routing layer between local skill directories and the agent's normal trigger path.",
+          "#workflow .step:nth-child(1) b": "Install skill",
+          "#workflow .step:nth-child(1) span:last-child": "init writes a project or global routing skill entry that the agent can invoke.",
+          "#workflow .step:nth-child(2) b": "Scan skills",
+          "#workflow .step:nth-child(2) span:last-child": "Collect metadata, source, conflict, and disabled-state information into one actionable inventory.",
+          "#workflow .step:nth-child(3) b": "Slim context",
+          "#workflow .step:nth-child(3) span:last-child": "suggest combines transcript usage with policy rules, then leaves disable decisions explicit.",
+          "#workflow .step:nth-child(4) b": "Route on demand",
+          "#workflow .step:nth-child(4) span:last-child": "When a disabled skill is needed, the routing skill selects a target and reads its instructions.",
+          "#workflow .step:nth-child(5) b": "Restore",
+          "#workflow .step:nth-child(5) span:last-child": "enable restores SKILL.md through state records and supports repair paths for missing state.",
+          "#experiments h2": "Batch Experiment Results",
+          "#experiments .section-copy": "Latest aggregate data comes from experiments/dci-compare/runs/rerun-150-full-2026-05-26: 48 aggregate rows and 1,152 experiment units across Claude, Codex, 16 routing variants, and 24 expert queries.",
+          "#experiments .strategy-card:nth-child(1) strong": "Bash-based agentic retriever",
+          "#experiments .strategy-card:nth-child(1) p": "The agent searches disabled skills directly with general shell commands such as find, rg, and sed. Pros: no embeddings, full-body evidence, and explainable traces. Tradeoff: output and turns need bounds.",
+          "#experiments .strategy-card:nth-child(2) strong": "Tool-wrapped agentic retrieval",
+          "#experiments .strategy-card:nth-child(2) p": "Search, open, and read actions are wrapped behind controlled tool interfaces while the agent still plans the retrieval path. Pros: steadier behavior and clearer boundaries. Tradeoff: tool design shapes recall and debugging.",
+          "#experiments .strategy-card:nth-child(3) strong": "Metadata / catalog retrieval",
+          "#experiments .strategy-card:nth-child(3) p": "The workflow reads skill descriptions or a prebuilt catalog first, then expands candidates only when needed. Pros: cheaper, faster, and easier to bound. Risk: weak metadata can be pulled toward near-miss distractors.",
+          ".report-actions a[href='reports/report-all-experiments.html']": "Open full HTML report",
+          ".report-actions a[href='reports/agentic-skill-router-report.pdf']": "Download report PDF (Chinese)",
+          ".report-actions a[href='reports/agentic-skill-router-report.en.pdf']": "Download report PDF (English)",
+          ".report-actions a[href*='experiments/dci-compare']": "View experiment source",
+          ".experiment-stat:nth-child(1) span": "aggregate rows",
+          ".experiment-stat:nth-child(2) span": "experiment units",
+          ".experiment-stat:nth-child(3) span": "routing variants",
+          ".experiment-stat:nth-child(4) span": "expert queries",
+          ".experiment-stat:nth-child(5) span": "timeouts / API errors",
+          ".experiment-stat:nth-child(6) span": "Codex configs hit 24/24",
+          "#experiments th:nth-child(1)": "Agent",
+          "#experiments th:nth-child(2)": "Variant",
+          "#experiments th:nth-child(3)": "Mode",
+          "#experiments th:nth-child(4)": "Hits",
+          "#experiments th:nth-child(5)": "Cost",
+          "#experiments th:nth-child(6)": "Trigger",
+          "#experiments th:nth-child(7)": "Avg work",
+          "#experiments tbody tr:nth-child(1) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(2) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(3) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(4) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(5) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(6) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(7) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(8) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(9) td:nth-child(3)": "no md",
+          "#experiments tbody tr:nth-child(10) td:nth-child(3)": "with md",
+          "#experiments tbody tr:nth-child(1) td:nth-child(7)": "3.0 turns / 2.0 tools",
+          "#experiments tbody tr:nth-child(2) td:nth-child(7)": "3.0 turns / 2.0 tools",
+          "#experiments tbody tr:nth-child(3) td:nth-child(7)": "3.5 turns / 2.4 tools",
+          "#experiments tbody tr:nth-child(4) td:nth-child(7)": "4.9 turns / 5.7 tools",
+          "#experiments tbody tr:nth-child(5) td:nth-child(7)": "1.0 turns / 0.0 tools",
+          "#experiments tbody tr:nth-child(6) td:nth-child(7)": "3.3 turns / 2.2 tools",
+          "#experiments tbody tr:nth-child(7) td:nth-child(7)": "3.8 turns / 2.8 tools",
+          "#experiments tbody tr:nth-child(8) td:nth-child(7)": "5.8 turns / 5.7 tools",
+          "#experiments tbody tr:nth-child(9) td:nth-child(7)": "7.1 turns / 5.2 tools",
+          "#experiments tbody tr:nth-child(10) td:nth-child(7)": "4.0 turns / 2.1 tools",
+          "#resources h2": "Resources",
+          "#resources .section-copy": "Code, docs, and experiment artifacts stay in the repository for reproduction and implementation review.",
+          "#resources .resource:nth-child(1) b": "Full experiment HTML report",
+          "#resources .resource:nth-child(1) span": "Rendered all-experiments report, browsable directly on this site.",
+          "#resources .resource:nth-child(2) span": "Install steps, CLI commands, skill paths, and runtime details.",
+          "#resources .resource:nth-child(3) b": "Chinese README",
+          "#resources .resource:nth-child(3) span": "Project overview and usage notes for Chinese readers.",
+          "#resources .resource:nth-child(4) b": "Routing Skill",
+          "#resources .resource:nth-child(4) span": "Agent-facing workflow and reference documents.",
+          "#resources .resource:nth-child(5) b": "Report PDFs",
+          "#resources .resource:nth-child(5) span": "Downloadable report, available as Chinese and English PDF editions.",
+          ".footer span:nth-child(2)": "Page data cites the latest batch experiment aggregates from May 26, 2026.",
+        },
+      },
+    };
+
+    const root = document.documentElement;
+    const themeToggle = document.querySelector(".theme-toggle");
+    const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+    const languageStorageKey = "asr-lang-v2";
+
+    function getLanguage() {
+      try {
+        return localStorage.getItem(languageStorageKey) === "zh" ? "zh" : "en";
+      } catch {
+        return "en";
+      }
+    }
+
+    function effectiveTheme() {
+      if (root.dataset.theme === "dark" || root.dataset.theme === "light") return root.dataset.theme;
+      return systemDark.matches ? "dark" : "light";
+    }
+
+    function syncThemeButton() {
+      const theme = effectiveTheme();
+      root.dataset.effectiveTheme = theme;
+      const lang = getLanguage();
+      const label = theme === "dark" ? translations[lang].themeLight : translations[lang].themeDark;
+      themeToggle.setAttribute("aria-label", label);
+      themeToggle.setAttribute("title", label);
+    }
+
+    function applyLanguage(lang) {
+      const dictionary = translations[lang] ?? translations.en;
+      root.lang = dictionary.lang;
+      document.querySelector('meta[name="description"]').setAttribute("content", dictionary.description);
+      for (const [key, value] of Object.entries(dictionary.i18n)) {
+        document.querySelectorAll(`[data-i18n="${key}"]`).forEach((node) => {
+          node.textContent = value;
+        });
+      }
+      for (const [selector, value] of Object.entries(dictionary.text)) {
+        document.querySelectorAll(selector).forEach((node) => {
+          node.textContent = value;
+        });
+      }
+      for (const [selector, value] of Object.entries(dictionary.html)) {
+        document.querySelectorAll(selector).forEach((node) => {
+          node.innerHTML = value;
+        });
+      }
+      document.querySelectorAll("[data-lang]").forEach((button) => {
+        const active = button.dataset.lang === lang;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+      syncThemeButton();
+    }
+
+    document.querySelectorAll("[data-lang]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const lang = button.dataset.lang === "en" ? "en" : "zh";
+        try {
+          localStorage.setItem(languageStorageKey, lang);
+        } catch {
+          // Ignore storage errors; the current page can still switch language.
+        }
+        applyLanguage(lang);
+      });
+    });
+
+    themeToggle.addEventListener("click", () => {
+      const nextTheme = effectiveTheme() === "dark" ? "light" : "dark";
+      root.dataset.theme = nextTheme;
+      try {
+        localStorage.setItem("asr-theme", nextTheme);
+      } catch {
+        // Ignore storage errors; the current page can still switch theme.
+      }
+      syncThemeButton();
+    });
+
+    systemDark.addEventListener("change", () => {
+      if (!root.dataset.theme) syncThemeButton();
+    });
+
+    applyLanguage(getLanguage());
+    syncThemeButton();
+  </script>
+</body>
+</html>

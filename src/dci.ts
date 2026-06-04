@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { open as openFile } from "node:fs/promises";
-import { compact, isGenericTerm, termsFor } from "./text-match.ts";
+import { compact, GENERIC_TERM_WEIGHT, isGenericTerm, termsFor } from "./text-match.ts";
 import type { Confidence, Skill } from "./types.ts";
 import { isRoutableDisabledSkill, type SkillRouteMatch, type SkillRouteResult } from "./route.ts";
 import type { MatchEvidence } from "./match-evidence.ts";
@@ -275,9 +275,8 @@ export async function dciSearchDisabledSkills(
   const maxSnippets = normalizePositiveInt(opts.maxSnippets, DEFAULT_MAX_SNIPPETS, MAX_SNIPPETS);
 
   for (const item of loaded.skills) {
-    const haystack = opts.metadataOnly
-      ? skillMetadataText(item.skill)
-      : `${item.skill.id}\n${item.skill.name}\n${item.skill.description}\n${item.content}`;
+    const haystackFields = buildHaystackFields(item, Boolean(opts.metadataOnly));
+    const haystack = haystackFields.combinedText;
     const haystackTerms = termsFor(haystack);
     const haystackPhrase = compact(haystack);
     let best: ScoredLoadedSkill | null = null;
@@ -286,11 +285,41 @@ export async function dciSearchDisabledSkills(
       const queryTerms = termsFor(currentQuery);
       const queryPhrase = compact(currentQuery);
       let hitCount = 0;
+      let weightedHit = 0;
+      let weightedQueryWeight = 0;
+      let distinctiveHit = 0;
+      // Token-boundary hit map: ONLY tokenized hits, no substring fallback.
+      // Threaded into `scoreSearchMatch` so the short-alias cap-bypass (#150)
+      // can require a real token-level match on `id` / `name`, not a
+      // substring like `"ai"` happening to appear inside `daily-planner`
+      // (compact → `"dailyplanner"` contains `"ai"`). The general scoring,
+      // evidence emission (built independently in `evidenceForDciSearch`),
+      // and `hitCount` keep their substring-inclusive behavior for
+      // richness; only the cap-bypass predicate uses this tighter map.
+      const tokenFieldHits: FieldHitMap = { id: new Set(), name: new Set(), description: new Set(), body: new Set() };
       for (const term of queryTerms) {
-        if (haystackTerms.has(term) || haystackPhrase.includes(term)) hitCount++;
+        const generic = isGenericTerm(term, "dci");
+        const weight = generic ? GENERIC_TERM_WEIGHT : 1;
+        weightedQueryWeight += weight;
+        if (haystackTerms.has(term) || haystackPhrase.includes(term)) {
+          hitCount++;
+          weightedHit += weight;
+          if (!generic) distinctiveHit++;
+          for (const sub of haystackFields.fields) {
+            if (sub.terms.has(term)) tokenFieldHits[sub.field].add(term);
+          }
+        }
       }
       const phraseMatched = queryPhrase.length >= 4 && haystackPhrase.includes(queryPhrase);
-      const score = scoreSearchMatch(hitCount, queryTerms.size, phraseMatched);
+      const score = scoreSearchMatch(
+        weightedHit,
+        weightedQueryWeight,
+        phraseMatched,
+        distinctiveHit,
+        queryTerms,
+        hitCount,
+        tokenFieldHits,
+      );
       if (score <= 0) continue;
       const snippets = snippetsForTerms(item.lines, queryTerms, queryPhrase, maxSnippets);
       const candidate: ScoredLoadedSkill = {
@@ -305,8 +334,7 @@ export async function dciSearchDisabledSkills(
           metadataOnly: Boolean(opts.metadataOnly),
           queryTerms,
           queryPhrase,
-          haystackTerms,
-          haystackPhrase,
+          haystackFields,
           phraseMatched,
           currentQuery,
           snippets,
@@ -1064,12 +1092,72 @@ function reasonForSearch(item: ScoredLoadedSkill): string {
   return parts.join("; ") || "matched skill corpus";
 }
 
+interface DciHaystackField {
+  field: "id" | "name" | "description" | "body";
+  source: "metadata" | "body";
+  terms: Set<string>;
+  phrase: string;
+}
+
+interface DciHaystackFields {
+  fields: DciHaystackField[];
+  combinedText: string;
+  /** Fallback (field, source) for the phrase-bonus evidence row. */
+  phraseField: "description" | "body";
+  phraseSource: "metadata" | "body";
+}
+
+/**
+ * Build per-field tokenized haystacks for a loaded skill so DCI evidence
+ * emission can attribute each term hit back to the field it actually came
+ * from. The combined-text view (`combinedText`) is preserved so the scoring
+ * pass keeps its existing semantics: a term that appears anywhere in the
+ * combined haystack still counts as a hit, even if it spans tokens that
+ * only co-occur in the concatenated string.
+ *
+ * In `metadataOnly` mode the haystack only contains id/name/description, so
+ * we still expose those three as their own fields (rather than collapsing
+ * everything to `description`).
+ */
+function buildHaystackFields(item: LoadedSkill, metadataOnly: boolean): DciHaystackFields {
+  const idText = item.skill.id;
+  const nameText = item.skill.name;
+  const descriptionText = item.skill.description;
+  const fields: DciHaystackField[] = [
+    { field: "id", source: "metadata", terms: termsFor(idText), phrase: compact(idText) },
+    { field: "name", source: "metadata", terms: termsFor(nameText), phrase: compact(nameText) },
+    {
+      field: "description",
+      source: "metadata",
+      terms: termsFor(descriptionText),
+      phrase: compact(descriptionText),
+    },
+  ];
+  let combinedText: string;
+  if (metadataOnly) {
+    combinedText = skillMetadataText(item.skill);
+  } else {
+    fields.push({
+      field: "body",
+      source: "body",
+      terms: termsFor(item.content),
+      phrase: compact(item.content),
+    });
+    combinedText = `${idText}\n${nameText}\n${descriptionText}\n${item.content}`;
+  }
+  return {
+    fields,
+    combinedText,
+    phraseField: metadataOnly ? "description" : "body",
+    phraseSource: metadataOnly ? "metadata" : "body",
+  };
+}
+
 interface DciEvidenceInputs {
   metadataOnly: boolean;
   queryTerms: Set<string>;
   queryPhrase: string;
-  haystackTerms: Set<string>;
-  haystackPhrase: string;
+  haystackFields: DciHaystackFields;
   phraseMatched: boolean;
   currentQuery: string;
   snippets: DciSnippet[];
@@ -1079,9 +1167,15 @@ interface DciEvidenceInputs {
 /**
  * Build the shared {@link MatchEvidence} list for a DCI search candidate.
  *
- * `source` is driven by the search mode: `metadata-only` runs scan a
- * synthesized frontmatter-only haystack so all hits are metadata; the
- * default DCI search reads the SKILL.md body so hits are body evidence.
+ * Each query-term hit is attributed to the first sub-field (id, name,
+ * description, body) whose tokenized haystack actually contains the term —
+ * previously every body-mode hit was labelled `field: "body"` / `source:
+ * "body"`, which mis-attributed id and name hits as body content (#151).
+ *
+ * `isGeneric` is computed against the tokenizer's canonical lowercase form
+ * (`compact(matched)`) so casing or punctuation in metadata text cannot
+ * cause a generic stop term to slip past the classifier (#152). The
+ * phrase-bonus row uses the same normalization for its `currentQuery` text.
  *
  * `contribution` is intentionally rough — DCI scoring is hit-count + phrase
  * bonus, not per-term weights, so we split the candidate's local score
@@ -1090,31 +1184,28 @@ interface DciEvidenceInputs {
  * relative signal within a single DCI match list.
  */
 function evidenceForDciSearch(inputs: DciEvidenceInputs): MatchEvidence[] {
-  const source: "metadata" | "body" = inputs.metadataOnly ? "metadata" : "body";
-  const field = inputs.metadataOnly ? "description" : "body";
-  const matchedTerms: string[] = [];
+  const matchedTerms: { term: string; field: DciHaystackField["field"]; source: "metadata" | "body" }[] = [];
   for (const term of inputs.queryTerms) {
-    if (inputs.haystackTerms.has(term) || inputs.haystackPhrase.includes(term)) {
-      matchedTerms.push(term);
-    }
+    const located = locateTermField(term, inputs.haystackFields.fields);
+    if (located) matchedTerms.push({ term, field: located.field, source: located.source });
   }
   const phraseBonus = inputs.phraseMatched ? 0.35 : 0;
   const termBudget = Math.max(0, inputs.score - phraseBonus);
   const perTerm = matchedTerms.length > 0 ? termBudget / matchedTerms.length : 0;
-  const evidence: MatchEvidence[] = matchedTerms.map((term) => ({
-    field,
-    matched: term,
-    isGeneric: isGenericTerm(term, "dci"),
+  const evidence: MatchEvidence[] = matchedTerms.map((entry) => ({
+    field: entry.field,
+    matched: entry.term,
+    isGeneric: isGenericTerm(compact(entry.term), "dci"),
     contribution: Number(perTerm.toFixed(4)),
-    source,
+    source: entry.source,
   }));
   if (inputs.phraseMatched) {
     evidence.push({
-      field,
+      field: inputs.haystackFields.phraseField,
       matched: inputs.currentQuery,
-      isGeneric: false,
+      isGeneric: isGenericTerm(compact(inputs.currentQuery), "dci"),
       contribution: Number(phraseBonus.toFixed(4)),
-      source,
+      source: inputs.haystackFields.phraseSource,
     });
   }
   return evidence.sort(
@@ -1122,10 +1213,89 @@ function evidenceForDciSearch(inputs: DciEvidenceInputs): MatchEvidence[] {
   );
 }
 
-function scoreSearchMatch(hitCount: number, queryTermCount: number, phraseMatched: boolean): number {
-  if (queryTermCount === 0) return phraseMatched ? 1 : 0;
-  const termScore = hitCount / queryTermCount;
-  return Math.min(1, termScore + (phraseMatched ? 0.35 : 0));
+function locateTermField(
+  term: string,
+  fields: DciHaystackField[],
+): { field: DciHaystackField["field"]; source: "metadata" | "body" } | null {
+  for (const item of fields) {
+    if (item.terms.has(term) || item.phrase.includes(term)) {
+      return { field: item.field, source: item.source };
+    }
+  }
+  return null;
+}
+
+/**
+ * Candidate-level score for a DCI search hit.
+ *
+ * `weightedHit` and `weightedQueryWeight` are computed by classifying each
+ * query term with `isGenericTerm(term, "dci")` and weighting generic terms
+ * at {@link GENERIC_TERM_WEIGHT} instead of `1`. This matches the generic
+ * down-weight metadata-route applies to per-term contributions so a query
+ * dominated by stop words ("the and a") cannot promote a weak candidate
+ * just because the haystack happens to contain those same generic tokens.
+ *
+ * When no distinctive term hits, the result is normally clamped strictly
+ * below the medium-confidence threshold (0.5). The clamp is bypassed only
+ * for the narrow short-alias case (#150): a single-term query whose only
+ * term is a short Latin token (`isGenericTerm` treats every <=2-char Latin
+ * token as generic in `dci` mode) AND that term lands on a structured
+ * identifier field (`id` or `name`) as a TOKEN-boundary hit — substring
+ * hits do not count (e.g. `"ai"` inside `daily-planner` → `"dailyplanner"`
+ * must not promote the candidate). The caller passes a tokenized-only
+ * `fieldHits` map for this reason; a short generic that hits only the
+ * body — or a multi-term generic query like `"api config"` — still hits
+ * the cap so the generic-only floor from issue #110 is preserved.
+ */
+function scoreSearchMatch(
+  weightedHit: number,
+  weightedQueryWeight: number,
+  phraseMatched: boolean,
+  distinctiveHit: number,
+  queryTerms: Set<string>,
+  hitCount: number,
+  fieldHits: FieldHitMap,
+): number {
+  if (weightedQueryWeight <= 0) return phraseMatched ? 1 : 0;
+  const termScore = weightedHit / weightedQueryWeight;
+  const raw = Math.min(1, termScore + (phraseMatched ? 0.35 : 0));
+  if (distinctiveHit === 0) {
+    if (!isShortAliasIdentifierHit(queryTerms, hitCount, fieldHits)) {
+      return Math.min(raw, 0.49);
+    }
+  }
+  return raw;
+}
+
+interface FieldHitMap {
+  id: Set<string>;
+  name: Set<string>;
+  description: Set<string>;
+  body: Set<string>;
+}
+
+/**
+ * True iff the query is a single short Latin token that hit on the skill's
+ * `id` or `name` at a TOKEN boundary. This is the only case the
+ * distinctive-cap is allowed to bypass (#150) — see {@link scoreSearchMatch}.
+ *
+ * Callers must pass a tokenized-only field hit map (built from
+ * `DciHaystackField.terms`, not `.phrase`), so a substring hit like `"ai"`
+ * inside the compacted `dailyplanner` cannot satisfy this predicate.
+ */
+function isShortAliasIdentifierHit(
+  queryTerms: Set<string>,
+  hitCount: number,
+  fieldHits: FieldHitMap,
+): boolean {
+  if (queryTerms.size !== 1 || hitCount !== 1) return false;
+  const [only] = queryTerms;
+  if (!only) return false;
+  // Latin-only, <=3 characters. `isShortLatinTerm`-style check kept inline so
+  // the dependency graph stays narrow and the condition reads alongside the
+  // bypass rule it gates.
+  if (only.length > 3 || !/^[a-z0-9]+$/.test(only)) return false;
+  return fieldHits.id.has(only) || fieldHits.name.has(only);
 }
 
 // Score per matched line, then return the top N by score (desc) with stable

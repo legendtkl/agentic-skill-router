@@ -161,6 +161,12 @@ export async function disableSkill(
       // symlink swap between resolve and rename cannot redirect this rename
       // to a different file. For in-root paths there is no symlink to swap,
       // so the original livePath -> disabledPath rename is sufficient.
+      //
+      // Residual race (#133, narrowed not closed): even after the canonical
+      // resolve above, the kernel-level rename takes a path string, so a
+      // swap between this realpath and the rename syscall can still
+      // redirect the operation. Closing that fully would need fd-pinned
+      // `renameat`, which Node does not expose without a native dep.
       if (canonicalLivePath) {
         const canonicalDisabledPath = canonicalLivePath.endsWith(DISABLED_SUFFIX)
           ? canonicalLivePath
@@ -194,6 +200,45 @@ export async function enableSkill(
   return withStateLock(deps.statePath, async () => {
     const { livePath, disabledPath } = pathsForSkill(skill);
     const instanceKey = skillInstanceKey(skill.id, livePath);
+
+    // #139: when the inventory entry is out-of-root AND the caller passed
+    // `--allow-symlink-target-mutation`, defense-in-depth requires the same
+    // canonical-provenance authentication PR #138 applies in the state-only
+    // branch. Without it, a planted in-root symlink that points anywhere on
+    // the filesystem would be picked up by the host scan as `outOfRoot:true`
+    // and a user running `skills enable <id> --allow-symlink-target-mutation`
+    // would rename whatever the link points at — even though THIS CLI never
+    // disabled the skill. The flag must only honour authenticated
+    // CLI-written symlink records (post-#97/#132 shape), exactly matching
+    // the state-only path.
+    //
+    // We deliberately skip the gate for in-root skills (the common case) so
+    // the bread-and-butter enable path is untouched, and for builtin
+    // out-of-root skills (already refused above with BuiltinSkillCannotDisableError).
+    if (skill.outOfRoot && deps.allowOutOfRoot && skill.source !== "builtin") {
+      const state = await loadState(deps.statePath, deps.host);
+      const matchingRecord = findDisableRecord(state, instanceKey);
+      const currentResolved = await tryRealpath(skill.skillMdPath);
+      const probePath = skill.skillMdPath;
+      const realTarget = currentResolved ?? probePath;
+      if (!matchingRecord || !matchingRecord.discoveredViaSymlink || !matchingRecord.canonicalSkillMdPath) {
+        throw new Error(unauthenticatedOutOfRootMessage(skill.id, probePath, realTarget));
+      }
+      if (currentResolved !== null) {
+        const currentCanonical = currentResolved.endsWith(DISABLED_SUFFIX)
+          ? currentResolved.slice(0, -DISABLED_SUFFIX.length)
+          : currentResolved;
+        if (currentCanonical !== matchingRecord.canonicalSkillMdPath) {
+          throw new SkillSymlinkTargetMismatchError(
+            skill.id,
+            probePath,
+            matchingRecord.canonicalSkillMdPath,
+            currentCanonical,
+          );
+        }
+      }
+    }
+
     return enableSkillPaths(instanceKey, livePath, disabledPath, deps, undefined, skill.id);
   });
 }

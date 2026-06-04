@@ -89,7 +89,7 @@ test("[claude] install creates plugin cache, manifest, bin wrapper, and register
     assert.ok(await pathExists(join(installPath, "bin", "agentic-skill-router")), "host bin wrapper copied");
     assert.equal(await pathExists(join(installPath, "lib", "agentic-skill-router.mjs")), false, "plugin cache does not duplicate runtime lib");
     assert.ok(
-      await pathExists(join(installPath, "skills", "agentic-skill-router-skills", "SKILL.md")),
+      await pathExists(join(installPath, "skills", "agentic-skill-router", "SKILL.md")),
       "router skill copied",
     );
     assert.ok(await pathExists(join(runtimePath, "bin", "agentic-skill-router")), "shared runtime bin copied");
@@ -128,7 +128,7 @@ test("[claude] install creates plugin cache, manifest, bin wrapper, and register
     );
     assert.equal(
       JSON.parse(initStdout).skillMdPath,
-      join(initProject, ".claude", "skills", "agentic-skill-router-skills", "SKILL.md"),
+      join(initProject, ".claude", "skills", "agentic-skill-router", "SKILL.md"),
       "wrapper asset root lets init copy the installed skill template",
     );
 
@@ -294,7 +294,7 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
     assert.ok(await pathExists(join(installPath, "bin", "agentic-skill-router")), "host bin wrapper copied");
     assert.equal(await pathExists(join(installPath, "lib", "agentic-skill-router.mjs")), false, "plugin cache does not duplicate runtime lib");
     assert.ok(
-      await pathExists(join(installPath, "skills", "agentic-skill-router-skills", "SKILL.md")),
+      await pathExists(join(installPath, "skills", "agentic-skill-router", "SKILL.md")),
       "router skill copied",
     );
     assert.ok(await pathExists(join(runtimePath, "bin", "agentic-skill-router")), "shared runtime bin copied");
@@ -332,7 +332,7 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
     );
     assert.equal(
       JSON.parse(initStdout).skillMdPath,
-      join(initProject, ".agents", "skills", "agentic-skill-router-skills", "SKILL.md"),
+      join(initProject, ".agents", "skills", "agentic-skill-router", "SKILL.md"),
       "wrapper asset root lets init copy the installed skill template",
     );
 
@@ -341,8 +341,8 @@ test("[codex] install creates plugin cache, slash prompt, and enables in config.
 
     // Slash prompt installed
     assert.ok(
-      await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")),
-      "/agentic-skill-router:skills prompt installed",
+      await pathExists(join(codexHome, "prompts", "agentic-skill-router.md")),
+      "/agentic-skill-router prompt installed",
     );
 
     // config.toml enables the plugin
@@ -426,7 +426,7 @@ test("[codex] uninstall removes cache and slash prompt, flips config.toml enable
       maxBuffer: MAX_BUFFER,
     });
     assert.ok(await pathExists(installPath));
-    assert.ok(await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")));
+    assert.ok(await pathExists(join(codexHome, "prompts", "agentic-skill-router.md")));
 
     // Seed state to verify uninstall preserves it.
     await mkdir(stateDir, { recursive: true });
@@ -447,9 +447,9 @@ test("[codex] uninstall removes cache and slash prompt, flips config.toml enable
 
     // Slash prompt removed.
     assert.equal(
-      await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")),
+      await pathExists(join(codexHome, "prompts", "agentic-skill-router.md")),
       false,
-      "/agentic-skill-router:skills prompt removed",
+      "/agentic-skill-router prompt removed",
     );
 
     // config.toml retains stanza but flipped to enabled = false.
@@ -501,7 +501,7 @@ test("[codex] uninstall is a no-op when no install exists (no config.toml create
     });
 
     // No cache, no prompt — uninstall must not crash with missing files.
-    assert.equal(await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")), false);
+    assert.equal(await pathExists(join(codexHome, "prompts", "agentic-skill-router.md")), false);
     // And uninstall must not spuriously create config.toml (e.g. by writing a
     // disabled plugin stanza on an empty setup).
     assert.equal(await pathExists(join(codexHome, "config.toml")), false, "config.toml must not be created on no-op uninstall");

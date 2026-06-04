@@ -32,13 +32,21 @@ skill_router() { "<abs-path-to-skill-router>" "$@"; }
 
 ## Route disabled skills
 
-Run the route command before solving from general knowledge. Pass the user's
-verbatim message as `--query`, including filenames, file types, and concrete
-nouns. Do NOT summarize, paraphrase, or shorten — the router scores against
-the exact text.
+Run the route command before solving from general knowledge. Pass only the
+original user task as `--query`: copy the request text before any
+`ROUTING-ONLY mode` harness instructions. Include filenames, file types, and
+concrete nouns. Do NOT summarize, paraphrase, or shorten the original task —
+the router scores against the exact text.
+
+Use a heredoc-backed temporary file so quotes, backticks, apostrophes, JSON
+blocks, and shell-sensitive text in the user request cannot break the command:
 
 ```bash
-skill_router skills route --query "<user message verbatim>" --json
+query_file="$(mktemp)"
+cat > "$query_file" <<'QUERY'
+<original user task before ROUTING-ONLY mode>
+QUERY
+skill_router skills route --query "$(cat "$query_file")" --json
 ```
 
 If the result has `action: "read-skill-file"` and a non-null `selected`, the

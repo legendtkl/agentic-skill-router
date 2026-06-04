@@ -1180,8 +1180,8 @@ test("web API rejects a project root whose .claude/skills container is a symlink
   // allowlist guard must realpath the skills-root container and reject
   // when it lands outside.
   const fixture = await makeWebFixture();
-  const allowedRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-skillsroot-allowed-"));
-  const outsideRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-skillsroot-outside-"));
+  const allowedRoot = await mkdtemp(join(tmpdir(), "agentic-skill-routerroot-allowed-"));
+  const outsideRoot = await mkdtemp(join(tmpdir(), "agentic-skill-routerroot-outside-"));
   try {
     // Make `allowedRoot` a project boundary so the ancestor walk stops here.
     await mkdir(join(allowedRoot, ".git"), { recursive: true });
@@ -1231,15 +1231,21 @@ test("web API rejects a project root whose .claude/skills container is a symlink
   }
 });
 
-test("web API rejects a project-scope mutation whose skill SKILL.md resolves outside the allowlist", async () => {
-  // P1.G: even when the scan roots all live inside the allowlist, an
-  // individual skill DIR inside the skills root can itself be a symlink
+test("web API drops a project-scope skill whose dir is a symlink outside the allowlist (#133)", async () => {
+  // P1.G + #133: even when the scan roots all live inside the allowlist,
+  // an individual skill DIR inside the skills root can itself be a symlink
   // pointing outside (`<allowed>/.claude/skills/evil -> /outside/evil`).
-  // Production marks such skills `outOfRoot: true`, which makes them
-  // mutable via the explicit symlink-target path. The disable mutation
-  // would otherwise rename `/outside/evil/SKILL.md`. The allowlist
-  // guard must realpath the target's `skillMdPath` and reject when it
-  // lands outside.
+  // Pre-#133 the host surfaced such skills as `outOfRoot: true` and the
+  // allowlist refused the mutation at `/api/skills/disable`. The new
+  // strict-mode TOCTOU narrowing (#133) is stronger: the project-scope
+  // host now drops the entry entirely, so the skill never appears in the
+  // listing and any disable POST targeting it 404s before the mutation
+  // code path even runs. The outside SKILL.md must remain untouched.
+  //
+  // We also keep an explicit disable POST against a fabricated
+  // instanceKey here to pin the contract: even with the listing surface
+  // closed, the server must not somehow round-trip a mutation through to
+  // the outside file.
   const fixture = await makeWebFixture();
   const allowedRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-skilldir-allowed-"));
   const outsideRoot = await mkdtemp(join(tmpdir(), "agentic-skill-router-skilldir-outside-"));
@@ -1254,6 +1260,13 @@ test("web API rejects a project-scope mutation whose skill SKILL.md resolves out
       "---\nname: evil\ndescription: Per-skill symlink must not be mutable via project scope\n---\n",
     );
     await symlink(join(outsideRoot, "evil"), join(allowedRoot, ".claude", "skills", "evil"));
+    // Also drop an in-root real skill so we can prove the listing still
+    // surfaces legit project skills — only the escaping one is filtered.
+    await mkdir(join(allowedRoot, ".claude", "skills", "ok"), { recursive: true });
+    await writeFile(
+      join(allowedRoot, ".claude", "skills", "ok", "SKILL.md"),
+      "---\nname: ok\ndescription: In-root skill, must survive the strict-mode filter\n---\n",
+    );
     await withEnv(
       {
         CLAUDE_HOME: fixture.claudeHome,
@@ -1271,32 +1284,43 @@ test("web API rejects a project-scope mutation whose skill SKILL.md resolves out
         try {
           const token = await readMutationToken(url);
 
-          // List response must include the skill (so the user can see
-          // and act on it manually) but must mark it outOfRoot.
           const listRes = await fetch(
             `${url}/api/skills?scope=project&projectPath=${encodeURIComponent(allowedRoot)}`,
           );
           assert.equal(listRes.status, 200);
           const listData = await listRes.json() as SkillsResponse;
-          const target = listData.skills.find((skill) => skill.id.endsWith(":evil"));
-          assert.ok(target, `expected evil skill in: ${listData.skills.map((s) => s.id).join(", ")}`);
-          assert.equal(target!.outOfRoot, true);
+          // The escaping per-skill symlink is dropped by strict-mode
+          // walkSkillsDir before it ever reaches the response — the
+          // pre-#133 behaviour of surfacing it with `outOfRoot: true`
+          // would have exposed an outside file as inventory.
+          const escaped = listData.skills.find((skill) => skill.id.endsWith(":evil"));
+          assert.equal(
+            escaped,
+            undefined,
+            `escaping per-skill symlink must be dropped from inventory: ${listData.skills.map((s) => s.id).join(", ")}`,
+          );
+          // Legit in-root skill must still appear.
+          assert.ok(
+            listData.skills.some((skill) => skill.id.endsWith(":ok")),
+            `expected ok skill: ${listData.skills.map((s) => s.id).join(", ")}`,
+          );
 
-          // Disable via the explicit symlink-target path must be
-          // rejected because the target SKILL.md resolves outside the
-          // allowlist.
+          // A handcrafted disable POST targeting a fabricated instanceKey
+          // for the dropped skill must NOT reach the rename path. Without
+          // an inventory entry the server can't resolve the instanceKey
+          // and returns 404 — the strict-mode drop is the upstream gate,
+          // and `assertProjectSkillTargetAllowed` would still refuse if
+          // we somehow got past it.
           const disableRes = await fetch(`${url}/api/skills/disable`, {
             method: "POST",
             headers: mutationHeaders(token),
             body: JSON.stringify({
               scope: "project",
               projectPath: allowedRoot,
-              instanceKey: target!.instanceKey,
+              instanceKey: "project:claude:.:evil",
             }),
           });
-          assert.equal(disableRes.status, 403);
-          const body = await disableRes.json() as { error: string };
-          assert.match(body.error, /outside the allowed project roots/);
+          assert.equal(disableRes.status, 404);
 
           // The outside SKILL.md must still be intact (no rename leak).
           await stat(join(outsideRoot, "evil", "SKILL.md"));

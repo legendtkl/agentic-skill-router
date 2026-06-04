@@ -1,6 +1,7 @@
 import {
   boundaryTermsFor,
   compact,
+  GENERIC_TERM_WEIGHT,
   isCjk,
   isGenericTerm,
   isShortLatinTerm,
@@ -234,7 +235,7 @@ function scoreIndexedSkill(candidate: IndexedSkill, query: QueryPlan, idf: Map<s
       const quality = matchQuality(term, item);
       if (quality <= 0) continue;
       const generic = isGenericTerm(term);
-      const genericFactor = generic ? 0.15 : 1;
+      const genericFactor = generic ? GENERIC_TERM_WEIGHT : 1;
       const contribution = item.weight * (idf.get(term) ?? 1) * quality * genericFactor;
       rawScore += contribution;
       if (generic) matchedGenericTerms.add(term);
@@ -312,10 +313,16 @@ function fieldAppearsInQuery(item: MetadataField, query: QueryPlan): boolean {
 }
 
 function evidenceFor(item: MetadataField, matched: string, contribution: number): MatchEvidence {
+  // Normalize `matched` through `compact` before classifying so casing or
+  // punctuation in the original text (e.g. `API` vs `api`, `data-store` vs
+  // `datastore`) cannot let a generic stop term slip past `isGenericTerm`
+  // (#152). Without this, evidence emitted with the field's raw text was
+  // flagged inconsistently with evidence emitted from the per-term loop,
+  // which already passes pre-tokenized terms.
   return {
     field: item.field,
     matched,
-    isGeneric: isGenericTerm(matched),
+    isGeneric: isGenericTerm(compact(matched)),
     contribution: Number(contribution.toFixed(4)),
     source: "metadata",
     weight: item.weight,

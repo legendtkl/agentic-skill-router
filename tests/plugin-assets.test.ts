@@ -14,22 +14,29 @@ const execFileAsync = promisify(execFile);
 const NPM_TEST_CACHE = join(tmpdir(), `agentic-skill-router-npm-cache-${process.pid}`);
 
 test("shared router skill uses Agent Skills frontmatter as the source of truth", async () => {
-  const shared = await readFile(join(REPO_ROOT, "skills", "agentic-skill-router-skills", "SKILL.md"), "utf8");
+  const shared = await readFile(join(REPO_ROOT, "skills", "agentic-skill-router", "SKILL.md"), "utf8");
   const fm = parseFrontmatter(shared);
   const frontmatter = shared.slice(0, shared.indexOf("---", 4));
   const topLevelKeys = [...frontmatter.matchAll(/^([A-Za-z0-9_-]+):/gm)].map((match) => match[1]);
 
-  assert.equal(fm.name, "agentic-skill-router-skills");
+  assert.equal(fm.name, "agentic-skill-router");
   const description = fm.description;
   assert.ok(typeof description === "string");
+  assert.match(description, /First use any clearly matching enabled local\/user Agent Skill/);
+  assert.match(description, /generic built-in skill such as browser, Chrome, or web search/);
+  assert.match(description, /Examples include Vercel, Netlify, Cloudflare, Render/);
   assert.match(description, /audit, slim, disable, restore, or route/);
+  assert.doesNotMatch(description, /MUST be used FIRST|before any other tool/);
   assert.doesNotMatch(description, /For Codex/);
+  assert.match(shared, /first use any enabled\s+local Agent Skill that clearly matches/);
+  assert.match(shared, /Use this fallback router after enabled local Agent Skills/);
+  assert.doesNotMatch(shared, /MUST be used FIRST|before any other tool/);
   assert.deepEqual(topLevelKeys, ["name", "description", "metadata"]);
   assert.match(frontmatter, /metadata:\n  agentic-skill-router\.version: "1"\n  agentic-skill-router\.variant: "L-agentic"\n  agentic-skill-router\.hosts: "claude-code,codex"/);
 });
 
 test("plugin packages assemble from one unified skill source", async () => {
-  const skillDir = join(REPO_ROOT, "skills", "agentic-skill-router-skills");
+  const skillDir = join(REPO_ROOT, "skills", "agentic-skill-router");
   assert.ok(await pathExists(join(skillDir, "SKILL.md")));
   assert.deepEqual((await readdir(join(skillDir, "references"))).sort(), [
     "cli-location.md",
@@ -46,19 +53,22 @@ test("plugin packages assemble from one unified skill source", async () => {
   const codexManifest = JSON.parse(await readFile(join(REPO_ROOT, "plugins", "codex", ".codex-plugin", "plugin.json"), "utf8"));
   assert.equal(claudeManifest.skills, "../../skills/");
   assert.equal(codexManifest.skills, "../../skills/");
-  assert.ok(await pathExists(resolve(REPO_ROOT, "plugins", "claude-code", claudeManifest.skills, "agentic-skill-router-skills", "SKILL.md")));
-  assert.ok(await pathExists(resolve(REPO_ROOT, "plugins", "codex", codexManifest.skills, "agentic-skill-router-skills", "SKILL.md")));
+  assert.match(codexManifest.description, /Route skill-shaped requests to disabled Agent Skills/);
+  assert.match(codexManifest.interface.shortDescription, /Route disabled Agent Skills/);
+  assert.match(codexManifest.interface.longDescription, /named tools, APIs, services, CLIs, platforms, file formats, datasets, or domain workflows/);
+  assert.ok(await pathExists(resolve(REPO_ROOT, "plugins", "claude-code", claudeManifest.skills, "agentic-skill-router", "SKILL.md")));
+  assert.ok(await pathExists(resolve(REPO_ROOT, "plugins", "codex", codexManifest.skills, "agentic-skill-router", "SKILL.md")));
 
   await execFileAsync(process.execPath, ["scripts/generate-assets.mjs", "--check"], { cwd: REPO_ROOT });
 });
 
 test("Codex slash command is a thin compatibility shim", async () => {
-  const prompt = await readFile(join(REPO_ROOT, "plugins", "codex", "prompts", "agentic-skill-router-skills.md"), "utf8");
+  const prompt = await readFile(join(REPO_ROOT, "plugins", "codex", "prompts", "agentic-skill-router.md"), "utf8");
   const fm = parseFrontmatter(prompt);
 
-  assert.equal(fm.description, "Use the agentic-skill-router-skills skill with optional arguments.");
+  assert.equal(fm.description, "Use the agentic-skill-router skill with optional arguments.");
   assert.equal(fm["argument-hint"], "[route <query>|list|suggest|status|enable <id...>|disable <id...> --yes]");
-  assert.match(prompt, /Invoke\/use the installed `agentic-skill-router-skills` skill/);
+  assert.match(prompt, /Invoke\/use the installed `agentic-skill-router` skill/);
   assert.ok(prompt.length < 500);
   assert.doesNotMatch(prompt, /Locate CLI/);
   assert.doesNotMatch(prompt, /skills dci search/);
@@ -203,11 +213,15 @@ test("npm package includes the bin runtime bundle", async () => {
   const files = new Set(packed[0]?.files.map((f) => f.path) ?? []);
   assert.ok(files.has("bin/agentic-skill-router"));
   assert.ok(files.has("lib/agentic-skill-router.mjs"));
-  assert.ok(files.has("skills/agentic-skill-router-skills/SKILL.md"));
+  assert.ok(files.has("skills/agentic-skill-router/SKILL.md"));
+  assert.ok(files.has("plugins/codex/prompts/agentic-skill-router.md"));
   assert.ok(files.has("plugins/claude-code/.claude-plugin/plugin.json"));
   assert.ok(files.has("plugins/codex/.codex-plugin/plugin.json"));
-  assert.ok(!files.has("plugins/codex/skills/agentic-skill-router-skills/SKILL.md"));
-  assert.ok(!files.has("plugins/claude-code/skills/agentic-skill-router-skills/SKILL.md"));
+  assert.ok(!files.has("bin/agentic-skill-router-skills"));
+  assert.ok(!files.has("plugins/codex/prompts/agentic-skill-router-skills.md"));
+  assert.ok(!files.has("skills/agentic-skill-router-skills/SKILL.md"));
+  assert.ok(!files.has("plugins/codex/skills/agentic-skill-router/SKILL.md"));
+  assert.ok(!files.has("plugins/claude-code/skills/agentic-skill-router/SKILL.md"));
 });
 
 test("install scripts assemble host entries and shared runtime from unified assets", async () => {
@@ -239,7 +253,7 @@ test("install scripts assemble host entries and shared runtime from unified asse
     await assertInstalledPlugin(codexInstallPath, ".codex-plugin/plugin.json");
     await assertInstalledRuntime(runtimePath);
     assert.match(await readFile(join(codexHome, "config.toml"), "utf8"), /\[plugins\."agentic-skill-router@local"\]\nenabled = true/);
-    assert.ok(await pathExists(join(codexHome, "prompts", "agentic-skill-router-skills.md")));
+    assert.ok(await pathExists(join(codexHome, "prompts", "agentic-skill-router.md")));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -267,7 +281,7 @@ test("install scripts always rebuild before copying plugin assets", async () => 
 async function assertInstalledPlugin(pluginRoot: string, manifestRelativePath: string): Promise<void> {
   assert.ok(await pathExists(join(pluginRoot, "bin", "agentic-skill-router")));
   assert.equal(await pathExists(join(pluginRoot, "lib", "agentic-skill-router.mjs")), false);
-  assert.ok(await pathExists(join(pluginRoot, "skills", "agentic-skill-router-skills", "SKILL.md")));
+  assert.ok(await pathExists(join(pluginRoot, "skills", "agentic-skill-router", "SKILL.md")));
 
   const manifest = JSON.parse(await readFile(join(pluginRoot, manifestRelativePath), "utf8"));
   assert.equal(manifest.skills, "./skills/");
