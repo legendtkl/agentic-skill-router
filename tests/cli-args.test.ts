@@ -2192,6 +2192,294 @@ test("skills enable still refuses out-of-root record when disabled marker actual
   }
 });
 
+test("skills enable refuses inventory-path out-of-root skill with flag when no matching state record (#139)", async () => {
+  // #139: defense-in-depth gap closed. PR #138 restricted
+  // --allow-symlink-target-mutation in the state-only branch to records
+  // proving CLI-written provenance. The inventory-path branch had no such
+  // check: a planted symlink in the skills dir surfaces as `outOfRoot: true`
+  // and a user running `skills enable <id> --allow-symlink-target-mutation`
+  // would have renamed the file at the symlink target — even though the
+  // skill was never CLI-disabled. Inventory path must now require the same
+  // provenance (`discoveredViaSymlink: true` + `canonicalSkillMdPath`
+  // matching realpath today) before honouring the flag.
+  const fake = await makeFakeCodexUser();
+  try {
+    // Plant an out-of-root SKILL.md.agentic-skill-router-disabled the
+    // unguarded rename would mutate, then symlink it into the codex skills
+    // tree so the host scan surfaces it as an inventory entry with
+    // outOfRoot=true. NO state record is written — this is the
+    // never-CLI-disabled scenario.
+    const externalSkillDir = join(fake.root, "external-skills", "planted-no-state");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalDisabled,
+      "---\nname: planted-no-state\ndescription: planted out-of-root, no CLI provenance\n---\n",
+    );
+    await symlink(externalSkillDir, join(fake.codexHome, "skills", "planted-no-state"));
+
+    // Sanity: the inventory surfaces this as outOfRoot=true so the flag
+    // would otherwise be honoured.
+    const listed = await runCli(["skills", "list", "--json"], fake.env);
+    const parsed = JSON.parse(listed.stdout) as { skills: Array<{ id: string; outOfRoot: boolean }> };
+    const planted = parsed.skills.find((s) => s.id === "user:codex:planted-no-state");
+    assert.ok(planted, "inventory must surface the planted symlink skill");
+    assert.equal(planted!.outOfRoot, true);
+
+    let refused: unknown;
+    try {
+      await runCli(
+        ["skills", "enable", "user:codex:planted-no-state", "--allow-symlink-target-mutation"],
+        fake.env,
+      );
+    } catch (err) {
+      refused = err;
+    }
+    assert.ok(refused, "inventory-path enable with flag must refuse without provenance");
+    assert.equal((refused as { code?: number }).code, 1);
+    const refusedStderr = (refused as { stderr?: string }).stderr ?? "";
+    assert.match(refusedStderr, /refusing to enable user:codex:planted-no-state/);
+    assert.match(refusedStderr, /cannot prove it originated from a symlink mutation written by this CLI/);
+    assert.match(refusedStderr, /canonical fields missing or mismatched/);
+    // Load-bearing: the planted out-of-root file was NOT renamed by the
+    // unguarded inventory path.
+    await stat(externalDisabled);
+    await assertFileAbsent(externalLive);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable refuses inventory-path out-of-root skill with flag when state record lacks canonical (#139)", async () => {
+  // #139 variant: an unauthenticated state record (no discoveredViaSymlink,
+  // no canonicalSkillMdPath) must also fail the inventory-path gate even
+  // with the flag. Mirrors the state-only "missing canonical fields" case
+  // from PR #138.
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "planted-no-canonical");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalDisabled,
+      "---\nname: planted-no-canonical\ndescription: planted out-of-root, tampered record\n---\n",
+    );
+    await symlink(externalSkillDir, join(fake.codexHome, "skills", "planted-no-canonical"));
+
+    // Hand-write a state record that matches the inventory entry's
+    // instanceKey but lacks the canonical fields. The inventory entry's
+    // canonical skillMdPath is the in-root marker path; instanceKey is
+    // computed from (id, that path).
+    const inRootDisabled = join(fake.codexHome, "skills", "planted-no-canonical", "SKILL.md.agentic-skill-router-disabled");
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const state = {
+      schema: 1,
+      host: "codex",
+      disabledSkills: [
+        {
+          id: "user:codex:planted-no-canonical",
+          skillMdPath: inRootDisabled,
+          skillName: "planted-no-canonical",
+          source: "user",
+          pluginKey: null,
+          disabledAt: new Date().toISOString(),
+          reason: "tampered",
+          // Deliberately NO discoveredViaSymlink + NO canonicalSkillMdPath.
+        },
+      ],
+    };
+    await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
+
+    let refused: unknown;
+    try {
+      await runCli(
+        ["skills", "enable", "user:codex:planted-no-canonical", "--allow-symlink-target-mutation"],
+        fake.env,
+      );
+    } catch (err) {
+      refused = err;
+    }
+    assert.ok(refused, "inventory-path enable with flag must refuse unauthenticated record");
+    assert.equal((refused as { code?: number }).code, 1);
+    const refusedStderr = (refused as { stderr?: string }).stderr ?? "";
+    assert.match(refusedStderr, /refusing to enable user:codex:planted-no-canonical/);
+    assert.match(refusedStderr, /cannot prove it originated from a symlink mutation written by this CLI/);
+    // Load-bearing: the planted out-of-root file was NOT renamed.
+    await stat(externalDisabled);
+    await assertFileAbsent(externalLive);
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable allows inventory-path out-of-root skill with flag when CLI-disabled + canonical matches (#139)", async () => {
+  // #139 happy path: a legitimate CLI-driven disable through a symlink
+  // populates discoveredViaSymlink + canonicalSkillMdPath. Re-enabling the
+  // same skill (still surfaced in inventory as outOfRoot) must succeed with
+  // the flag because the record proves CLI provenance and the canonical
+  // hasn't drifted.
+  const fake = await makeFakeCodexUser();
+  try {
+    const externalSkillDir = join(fake.root, "external-skills", "authenticated-inv");
+    await mkdir(externalSkillDir, { recursive: true });
+    const externalLive = join(externalSkillDir, "SKILL.md");
+    const externalDisabled = externalLive + ".agentic-skill-router-disabled";
+    await writeFile(
+      externalLive,
+      "---\nname: authenticated-inv\ndescription: legitimate CLI-disabled symlink\n---\n",
+    );
+    await symlink(externalSkillDir, join(fake.codexHome, "skills", "authenticated-inv"));
+
+    // Disable via CLI with the flag so the record carries discoveredViaSymlink
+    // + canonicalSkillMdPath. This goes through the disable code path that
+    // captures the canonical realpath pre-rename (#97).
+    await runCli(
+      ["skills", "disable", "user:codex:authenticated-inv", "--yes", "--allow-symlink-target-mutation"],
+      fake.env,
+    );
+    await stat(externalDisabled);
+    await assertFileAbsent(externalLive);
+
+    // The symlink is still intact, so the inventory still surfaces the skill
+    // (now as a disabled outOfRoot entry). Re-enable through the inventory
+    // path with the flag — must succeed because the record is authenticated
+    // and canonical matches realpath today.
+    const enabled = await runCli(
+      ["skills", "enable", "user:codex:authenticated-inv", "--allow-symlink-target-mutation"],
+      fake.env,
+    );
+    assert.equal(
+      enabled.stderr.includes("refusing to enable"),
+      false,
+      `authenticated inventory-path enable with flag must not refuse; got: ${enabled.stderr}`,
+    );
+    // Canonical file restored to live; disabled marker gone.
+    await stat(externalLive);
+    await assertFileAbsent(externalDisabled);
+
+    // State record cleared.
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const stateAfter = JSON.parse(await readFile(statePath, "utf8")) as {
+      disabledSkills: Array<{ id: string }>;
+    };
+    assert.ok(
+      !stateAfter.disabledSkills.some((r) => r.id === "user:codex:authenticated-inv"),
+      "successful enable should clear the disable record",
+    );
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable refuses inventory-path out-of-root skill with flag when canonical drifted (#139)", async () => {
+  // #139 drift scenario: state record has discoveredViaSymlink + canonical,
+  // but the symlink target was retargeted between disable and now, so the
+  // realpath today differs from the recorded canonical. Even with the flag
+  // we must refuse — the user only ever approved a mutation on the
+  // originally-disabled file. Mirrors the existing #97 SkillSymlinkTargetMismatchError
+  // guard from enableSkillPaths and the equivalent state-only check.
+  const fake = await makeFakeCodexUser();
+  try {
+    // CURRENT symlink target (what realpath returns today).
+    const currentTargetDir = join(fake.root, "external-skills", "drifted-current-inv");
+    await mkdir(currentTargetDir, { recursive: true });
+    const currentDisabled = join(currentTargetDir, "SKILL.md.agentic-skill-router-disabled");
+    await writeFile(
+      currentDisabled,
+      "---\nname: drifted-inv\ndescription: current target after retarget\n---\n",
+    );
+    await symlink(currentTargetDir, join(fake.codexHome, "skills", "drifted-inv"));
+
+    // The ORIGINAL canonical recorded at disable time (different path).
+    const originalCanonicalLive = join(
+      fake.root,
+      "external-skills",
+      "drifted-original-inv",
+      "SKILL.md",
+    );
+
+    const inRootDisabled = join(fake.codexHome, "skills", "drifted-inv", "SKILL.md.agentic-skill-router-disabled");
+    const statePath = join(fake.stateDir, "state-codex.json");
+    const state = {
+      schema: 1,
+      host: "codex",
+      disabledSkills: [
+        {
+          id: "user:codex:drifted-inv",
+          skillMdPath: inRootDisabled,
+          skillName: "drifted-inv",
+          source: "user",
+          pluginKey: null,
+          disabledAt: new Date().toISOString(),
+          reason: "manual",
+          discoveredViaSymlink: true,
+          canonicalSkillMdPath: originalCanonicalLive,
+        },
+      ],
+    };
+    await writeFile(statePath, JSON.stringify(state, null, 2) + "\n");
+
+    let refused: unknown;
+    try {
+      await runCli(
+        ["skills", "enable", "user:codex:drifted-inv", "--allow-symlink-target-mutation"],
+        fake.env,
+      );
+    } catch (err) {
+      refused = err;
+    }
+    assert.ok(refused, "drifted canonical inventory-path enable must refuse even with flag");
+    assert.equal((refused as { code?: number }).code, 1);
+    const refusedStderr = (refused as { stderr?: string }).stderr ?? "";
+    // Match the SkillSymlinkTargetMismatchError shape from src/types.ts.
+    assert.match(refusedStderr, /Refusing to modify skill "user:codex:drifted-inv"/);
+    assert.match(refusedStderr, /now resolves to/);
+    assert.match(refusedStderr, /disable record was captured for/);
+    assert.ok(
+      refusedStderr.includes(originalCanonicalLive),
+      `mismatch error must surface the recorded canonical; got: ${refusedStderr}`,
+    );
+    // The current canonical file MUST NOT have been renamed.
+    await stat(currentDisabled);
+    await assertFileAbsent(join(currentTargetDir, "SKILL.md"));
+  } finally {
+    await fake.cleanup();
+  }
+});
+
+test("skills enable in-root inventory skill proceeds normally (#139 regression guard)", async () => {
+  // #139 regression guard: the new inventory-path provenance gate must only
+  // fire for out-of-root inventory entries. In-root skills are the
+  // bread-and-butter enable case and must NOT regress — no flag required,
+  // no canonical fields required, no state-record lookup needed.
+  const fake = await makeFakeCodexUser();
+  try {
+    const liveSkillDir = join(fake.codexHome, "skills", "in-root-regression");
+    await mkdir(liveSkillDir, { recursive: true });
+    await writeFile(
+      join(liveSkillDir, "SKILL.md"),
+      "---\nname: in-root-regression\ndescription: ordinary in-root skill\n---\n",
+    );
+
+    // Disable then enable through the inventory path with no flag.
+    await runCli(["skills", "disable", "user:codex:in-root-regression", "--yes"], fake.env);
+    await stat(join(liveSkillDir, "SKILL.md.agentic-skill-router-disabled"));
+
+    const enabled = await runCli(["skills", "enable", "user:codex:in-root-regression"], fake.env);
+    assert.equal(
+      enabled.stderr.includes("refusing to enable"),
+      false,
+      `in-root enable must not refuse; got: ${enabled.stderr}`,
+    );
+    await stat(join(liveSkillDir, "SKILL.md"));
+    await assertFileAbsent(join(liveSkillDir, "SKILL.md.agentic-skill-router-disabled"));
+  } finally {
+    await fake.cleanup();
+  }
+});
+
 test("user error: stderr carries the message, stdout stays empty", async () => {
   const fake = await makeFakeCodexUser();
   try {
