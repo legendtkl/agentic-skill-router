@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Host, HostUsageOptions } from "./base.ts";
@@ -46,6 +46,11 @@ interface CodexPluginManifest {
   skills?: unknown;
 }
 
+interface InstalledPluginsCacheEntry {
+  cacheRootKey: string;
+  installs: CodexPluginInstall[];
+}
+
 export class CodexHost implements Host {
   readonly name = "codex" as const;
   private readonly codexHome: string;
@@ -54,6 +59,19 @@ export class CodexHost implements Host {
   private readonly cwd: string;
   private readonly adminSkillsRoot: string;
   private readonly enforceProjectScopeCanonical: string | undefined;
+  // Per-instance memo for installedPlugins(). The Codex host is constructed
+  // once per CLI invocation, so this is effectively a per-invocation cache.
+  // The web UI keeps the host alive across requests; the cacheRootKey below
+  // folds in the marketplace cache root's mtime+size AND each immediate
+  // marketplace child's mtime+size, so we re-detect both top-level changes
+  // (new marketplace dir) and new plugins installed under an existing
+  // marketplace dir (which only bumps the marketplace child's mtime, not
+  // the cache root's).
+  //
+  // Cost: one stat for the cache root plus one per marketplace per call.
+  // Typical setups have 1-3 marketplaces so this stays well under the cost
+  // of the full readdir tree we used to walk on every listSkills() call.
+  private installedPluginsCache: InstalledPluginsCacheEntry | null = null;
 
   constructor(opts: CodexHostOptions = {}) {
     this.codexHome = opts.codexHome ?? process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
@@ -198,6 +216,17 @@ export class CodexHost implements Host {
 
   private async installedPlugins(): Promise<CodexPluginInstall[]> {
     const cacheRoot = join(this.codexHome, "plugins", "cache");
+    const cacheRootKey = await computeMarketplaceCacheKey(cacheRoot);
+    if (this.installedPluginsCache && this.installedPluginsCache.cacheRootKey === cacheRootKey) {
+      return this.installedPluginsCache.installs;
+    }
+
+    const installs = await this.scanInstalledPlugins(cacheRoot);
+    this.installedPluginsCache = { cacheRootKey, installs };
+    return installs;
+  }
+
+  private async scanInstalledPlugins(cacheRoot: string): Promise<CodexPluginInstall[]> {
     let marketplaces;
     try {
       marketplaces = await readdir(cacheRoot, { withFileTypes: true });
@@ -261,6 +290,44 @@ function isNewerCodexPluginInstall(candidate: CodexPluginInstall, current: Codex
   const byVersion = compareVersions(candidate.version, current.version);
   if (byVersion !== 0) return byVersion > 0;
   return candidate.installPath > current.installPath;
+}
+
+async function computeMarketplaceCacheKey(cacheRoot: string): Promise<string> {
+  let rootStat;
+  try {
+    rootStat = await stat(cacheRoot);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return "absent";
+    throw err;
+  }
+  // Fold each immediate marketplace child's mtime+size into the key. A new
+  // plugin installed under an existing marketplace dir only changes that
+  // marketplace dir's mtime — not the cache root's — so stat'ing the root
+  // alone would miss the change. One extra stat per marketplace per call
+  // (typically 1-3) is still far cheaper than re-walking the whole tree.
+  let entries;
+  try {
+    entries = await readdir(cacheRoot, { withFileTypes: true });
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return "absent";
+    throw err;
+  }
+  const marketplaceParts: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    const childPath = join(cacheRoot, entry.name);
+    try {
+      const childStat = await stat(childPath);
+      marketplaceParts.push(`${entry.name}:${childStat.mtimeMs}:${childStat.size}`);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw err;
+    }
+  }
+  // Sort so the key is order-independent across filesystems with different
+  // readdir orderings.
+  marketplaceParts.sort();
+  return `present:${rootStat.mtimeMs}:${rootStat.size}|${marketplaceParts.join(",")}`;
 }
 
 async function readCodexPluginManifest(path: string): Promise<CodexPluginManifest | null> {
