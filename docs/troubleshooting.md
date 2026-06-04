@@ -4,8 +4,9 @@ This guide explains every section that `agentic-skill-router skills status` can 
 and how to recover from each one. The text quoted here matches the CLI output
 verbatim so you can `grep` your terminal scrollback or screenshots.
 
-> A Chinese version of this guide is planned; until then this English doc is
-> authoritative.
+> A Chinese version is available at
+> [`docs/troubleshooting.zh-CN.md`](troubleshooting.zh-CN.md); if there is a
+> mismatch, this English doc is authoritative.
 
 ## Safety first
 
@@ -21,6 +22,52 @@ verbatim so you can `grep` your terminal scrollback or screenshots.
 - **Built-in / system skills are protected.** They show up in `skills list`
   but cannot be disabled, so they will not appear in any of the anomaly lists
   below.
+
+## Out-of-root symlink skills
+
+When a skill in your skills root is itself a symlink whose target lives
+outside the host's skills tree (e.g.
+`~/.claude/skills/lark-mail` → `/shared/skills/lark-mail`), `agentic-skill-router`
+will not silently rename the linked target file. Disable / enable / status all
+refuse with a clear message and ask you to re-confirm.
+
+To proceed, re-run the command with `--allow-symlink-target-mutation`:
+
+```bash
+agentic-skill-router skills disable user:codex:lark-mail --yes --allow-symlink-target-mutation
+agentic-skill-router skills enable  user:codex:lark-mail --allow-symlink-target-mutation
+```
+
+- The mutation modifies the **linked target file** (e.g.
+  `/shared/skills/lark-mail/SKILL.md` ↔
+  `/shared/skills/lark-mail/SKILL.md.agentic-skill-router-disabled`),
+  not the in-root symlink.
+- `skills status` (which calls `reapplyMissing` internally) will never
+  silently mutate out-of-root targets. If a target was re-created externally
+  after you disabled it, status reports it under
+  `skipped (out-of-root symlink, manual repair required)` with the exact
+  `--allow-symlink-target-mutation` command to re-apply (or, for ambiguous ids,
+  a manual repair hint naming the specific `instanceKey`).
+- The state record stores the canonical realpath of the originally-mutated
+  file. If the symlink is later retargeted to a different location, enable /
+  reapply refuse with a mismatch error naming both paths instead of touching
+  the new target. Manual recovery: rename the canonical disabled marker back
+  to `SKILL.md` yourself, then run `agentic-skill-router skills enable <id>` to
+  clear the stale state record.
+
+### If a symlink target was renamed by accident
+
+If you ran `--allow-symlink-target-mutation` and disabled a file you didn't
+mean to, find the canonical path (printed in the warning) and rename it back
+manually:
+
+```bash
+mv /shared/skills/lark-mail/SKILL.md.agentic-skill-router-disabled \
+   /shared/skills/lark-mail/SKILL.md
+agentic-skill-router skills enable user:codex:lark-mail   # clears the state record
+```
+
+The CLI never deletes content, so the file is always recoverable.
 
 ## Where things live
 
@@ -382,3 +429,9 @@ In every other case, prefer `mv …/SKILL.md.agentic-skill-router-disabled
 …/SKILL.md` (which is reversible by running `agentic-skill-router skills disable`
 later) or `agentic-skill-router skills enable <id>` (which performs the rename plus
 the state cleanup atomically).
+
+## See also
+
+- [README — Web UI safety](../README.md#web-ui-safety) for the bind defaults,
+  `--dangerously-bind-public` flow, and `--project-root` allowlist semantics.
+- [简体中文版本](troubleshooting.zh-CN.md).
