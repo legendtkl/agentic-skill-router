@@ -1,10 +1,16 @@
 # agentic-skill-router - Agent Guide
 
+## User Preferences
+
+- For npm publishing, use npm web authentication/authorization rather than
+  asking for a one-time password directly.
+
 ## Project Overview
 
-Small TypeScript CLI/plugin project for managing installed Claude Code and Codex
-skills based on usage. It scans skill roots and session logs, suggests stale
-entries, and disables/restores skills by renaming `SKILL.md`.
+Small TypeScript CLI/plugin project for Agentic Search-inspired, non-vectorized
+routing and management of installed Claude Code and Codex skills. It treats
+skill metadata as a local searchable corpus, scans skill roots and session logs,
+suggests stale entries, and disables/restores skills by renaming `SKILL.md`.
 
 Subagent management is intentionally out of scope in this repository.
 
@@ -25,7 +31,7 @@ Subagent management is intentionally out of scope in this repository.
 | Task | Command |
 | --- | --- |
 | Install deps | `npm install` |
-| Run CLI from source | `npm run cli -- skills list` |
+| Run CLI from source | `npm run cli -- list` |
 | Type check | `npm run typecheck` |
 | Test | `npm test` |
 | E2E (offline, no network) | `npm run test:e2e:offline` |
@@ -90,7 +96,7 @@ does not require a local Codex or Claude CLI, but does fetch the pinned
 `openai/skills` GitHub ref.
 
 If a change touches Codex CLI startup, slash prompts, plugin loading, or the
-agent-facing `agentic-skill-router-skills` workflow, also run the real Codex CLI e2e
+agent-facing `agentic-skill-router` workflow, also run the real Codex CLI e2e
 when local `codex` and Codex auth are available:
 
 ```bash
@@ -98,7 +104,7 @@ npm run test:e2e:codex
 ```
 
 If a change touches Claude Code plugin loading or the agent-facing
-`agentic-skill-router-skills` workflow, also run the real Claude CLI e2e when a
+`agentic-skill-router` workflow, also run the real Claude CLI e2e when a
 local `claude` binary and Claude auth (`~/.claude/.credentials.json`) are
 available:
 
@@ -181,15 +187,15 @@ every PR without touching the network or requiring local agent binaries.
 - The pinned `openai/skills` ref currently contains 38 curated skills; each
   e2e should install that whole curated corpus rather than sampling a smaller
   set.
-- The separate Codex CLI e2e must invoke the installed `/agentic-skill-router:skills`
-  slash prompt, verify the slash prompt sentinel and `agentic-skill-router-skills`
+- The separate Codex CLI e2e must invoke the installed `/agentic-skill-router`
+  slash prompt, verify the slash prompt sentinel and `agentic-skill-router`
   workflow sentinel, then execute a probe that routes those disabled-skill
   queries, reads each returned `selected.skillMdPath`, and verifies per-skill
   sentinel markers from the matched skill file. This guards against tests that
   only check query text without proving Codex can invoke the installed router
   in a fresh environment.
 - The separate Claude CLI e2e must drive `claude -p` against the installed
-  Claude Code plugin, verify the `agentic-skill-router-skills` workflow sentinel, then
+  Claude Code plugin, verify the `agentic-skill-router` workflow sentinel, then
   execute the same per-skill probe to confirm the agent can route disabled
   skills and reach each `selected.skillMdPath` in a fresh environment.
 - Only install `skills/.curated/*` from `openai/skills`. Do not copy

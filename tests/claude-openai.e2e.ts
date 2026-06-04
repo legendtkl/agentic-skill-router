@@ -206,7 +206,7 @@ test(
         assert.ok(listed.some((item) => item.id === `user:${skill}`), `expected ${skill} to be installed`);
       }
       assert.ok(!listed.some((item) => item.id === "user:skill-installer"));
-      assert.ok(listed.some((item) => item.id === "plugin:agentic-skill-router@local:agentic-skill-router-skills"));
+      assert.ok(listed.some((item) => item.id === "plugin:agentic-skill-router@local:agentic-skill-router"));
 
       await runRouter(
         routerBin,
@@ -302,7 +302,7 @@ test(
       const probePath = await writeClaudeAgentProbe(fresh.projectCwd);
       const prompt = [
         "Run the agentic-skill-router Claude Code integration check.",
-        "Read the installed agentic-skill-router-skills SKILL.md, and keep the value from the line named",
+        "Read the installed agentic-skill-router SKILL.md, and keep the value from the line named",
         `"Claude workflow sentinel".`,
         "Run this exact local probe command, passing the workflow sentinel value as the single argument:",
         `node ${JSON.stringify(probePath)} "<workflow-sentinel-value>"`,
@@ -367,7 +367,7 @@ async function makeFreshClaudeEnvironment(): Promise<FreshClaudeEnvironment> {
     workdir,
     projectCwd,
     env,
-    cleanup: () => rm(root, { recursive: true, force: true }),
+    cleanup: () => rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
   };
 }
 
@@ -450,10 +450,10 @@ if (versions.length === 0) throw new Error("installed agentic-skill-router plugi
 
 const installedPluginRoot = join(pluginRoot, versions[0]);
 const routerBin = join(installedPluginRoot, "bin", "agentic-skill-router");
-const workflowSkillPath = join(installedPluginRoot, "skills", "agentic-skill-router-skills", "SKILL.md");
+const workflowSkillPath = join(installedPluginRoot, "skills", "agentic-skill-router", "SKILL.md");
 const workflowSkill = readFileSync(workflowSkillPath, "utf8");
 if (!workflowSkill.includes(\`Claude workflow sentinel: \${expectedWorkflowSentinel}\`)) {
-  throw new Error("workflow sentinel argument did not match installed agentic-skill-router-skills SKILL.md");
+  throw new Error("workflow sentinel argument did not match installed agentic-skill-router SKILL.md");
 }
 
 const queries = ${JSON.stringify(ROUTE_CASES.map((routeCase) => routeCase.query), null, 2)};
@@ -550,7 +550,7 @@ async function installedClaudeRouterSkillPath(claudeHome: string): Promise<strin
     "agentic-skill-router",
     manifest.version,
     "skills",
-    "agentic-skill-router-skills",
+    "agentic-skill-router",
     "SKILL.md",
   );
 }

@@ -1,0 +1,2064 @@
+{
+  "host": "claude",
+  "variant": "J-bounded-v2",
+  "finishedAt": "2026-05-25T17:17:41.630Z",
+  "elapsedMs": 1008972,
+  "queries": 75,
+  "answered": 75,
+  "timeouts": 0,
+  "errors": 0,
+  "hit1": 16,
+  "hit1_rate": 0.21333333333333335,
+  "hit1_single": 5,
+  "hit1_multi": 11,
+  "n_single": 24,
+  "n_multi": 51,
+  "timeoutMs": 600000,
+  "concurrency": 4,
+  "results": [
+    {
+      "query_id": "3d-scan-calc",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-11138"
+      ],
+      "top_k": [
+        "sr-00114",
+        "sr-00265",
+        "sr-01425",
+        "sr-02478",
+        "sr-01702",
+        "sr-00475",
+        "sr-00728",
+        "sr-00669",
+        "sr-00615",
+        "sr-01175"
+      ],
+      "top1": "sr-00114",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 86405
+    },
+    {
+      "query_id": "adaptive-cruise-control",
+      "tier": "multi",
+      "gt_count": 5,
+      "expected_anon": [
+        "sr-69172",
+        "sr-74164",
+        "sr-19220",
+        "sr-14008",
+        "sr-49938"
+      ],
+      "top_k": [
+        "sr-01207",
+        "sr-01711",
+        "sr-00669",
+        "sr-02676",
+        "sr-00144",
+        "sr-02008",
+        "sr-00604",
+        "sr-01006",
+        "sr-00591",
+        "sr-01720"
+      ],
+      "top1": "sr-01207",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 78308
+    },
+    {
+      "query_id": "azure-bgp-oscillation-route-leak",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-13751"
+      ],
+      "top_k": [
+        "sr-13751",
+        "sr-45843",
+        "sr-71569",
+        "sr-01791",
+        "sr-50368",
+        "sr-75668",
+        "sr-31859",
+        "sr-56499",
+        "sr-43955",
+        "sr-10874"
+      ],
+      "top1": "sr-13751",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 45118
+    },
+    {
+      "query_id": "citation-check",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-76598"
+      ],
+      "top_k": [
+        "sr-50937",
+        "sr-45564",
+        "sr-31928",
+        "sr-17851",
+        "sr-29632",
+        "sr-10239",
+        "sr-56195",
+        "sr-56743",
+        "sr-17293",
+        "sr-52239"
+      ],
+      "top1": "sr-50937",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 43339
+    },
+    {
+      "query_id": "civ6-adjacency-optimizer",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-69978",
+        "sr-56434",
+        "sr-44788",
+        "sr-06385"
+      ],
+      "top_k": [
+        "sr-69978",
+        "sr-16943",
+        "sr-65499",
+        "sr-61165",
+        "sr-59757",
+        "sr-48185",
+        "sr-08487",
+        "sr-41289",
+        "sr-32890",
+        "sr-05646"
+      ],
+      "top1": "sr-69978",
+      "hit1": true,
+      "recall_at_10": 0.25,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 49472
+    },
+    {
+      "query_id": "crystallographic-wyckoff-position-analysis",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-60251",
+        "sr-35756"
+      ],
+      "top_k": [
+        "sr-17148",
+        "sr-20536",
+        "sr-39760",
+        "sr-59347",
+        "sr-75271",
+        "sr-60251",
+        "sr-75486"
+      ],
+      "top1": "sr-17148",
+      "hit1": false,
+      "recall_at_10": 0.5,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 36069
+    },
+    {
+      "query_id": "dapt-intrusion-detection",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-41944",
+        "sr-72710"
+      ],
+      "top_k": [
+        "sr-16235",
+        "sr-56310",
+        "sr-78323",
+        "sr-37860",
+        "sr-41944",
+        "sr-06141",
+        "sr-45938",
+        "sr-55694",
+        "sr-09511",
+        "sr-01386"
+      ],
+      "top1": "sr-16235",
+      "hit1": false,
+      "recall_at_10": 0.5,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 36677
+    },
+    {
+      "query_id": "data-to-d3",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-60079"
+      ],
+      "top_k": [
+        "sr-00419",
+        "sr-01500",
+        "sr-01515",
+        "sr-00122",
+        "sr-01087",
+        "sr-02010",
+        "sr-01233",
+        "sr-01159",
+        "sr-00063",
+        "sr-01809"
+      ],
+      "top1": "sr-00419",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 45143
+    },
+    {
+      "query_id": "dialogue-parser",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-35315"
+      ],
+      "top_k": [
+        "sr-03481",
+        "sr-03909",
+        "sr-01009",
+        "sr-00446",
+        "sr-00136",
+        "sr-00990",
+        "sr-00419",
+        "sr-02745",
+        "sr-00223",
+        "sr-01938"
+      ],
+      "top1": "sr-03481",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 73431
+    },
+    {
+      "query_id": "dynamic-object-aware-egomotion",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-32169",
+        "sr-49453",
+        "sr-33479",
+        "sr-38853"
+      ],
+      "top_k": [
+        "sr-49453",
+        "sr-32169",
+        "sr-38853",
+        "sr-33479",
+        "sr-73613",
+        "sr-77102",
+        "sr-31200",
+        "sr-06308",
+        "sr-14611",
+        "sr-69156"
+      ],
+      "top1": "sr-49453",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 231648
+    },
+    {
+      "query_id": "earthquake-phase-association",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-16603",
+        "sr-32231",
+        "sr-51022",
+        "sr-66696"
+      ],
+      "top_k": [
+        "sr-16603",
+        "sr-51022",
+        "sr-66696",
+        "sr-35634",
+        "sr-32231",
+        "sr-43714",
+        "sr-21245",
+        "sr-31942",
+        "sr-11770",
+        "sr-63641"
+      ],
+      "top1": "sr-16603",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 46260
+    },
+    {
+      "query_id": "earthquake-plate-calculation",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-07774"
+      ],
+      "top_k": [
+        "sr-26212",
+        "sr-38362",
+        "sr-24145",
+        "sr-22924",
+        "sr-25994",
+        "sr-65710",
+        "sr-68230",
+        "sr-23352",
+        "sr-63641",
+        "sr-21245"
+      ],
+      "top1": "sr-26212",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 39621
+    },
+    {
+      "query_id": "econ-detrending-correlation",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-33015"
+      ],
+      "top_k": [
+        "sr-37231",
+        "sr-33015",
+        "sr-43313",
+        "sr-27700",
+        "sr-00242",
+        "sr-20189",
+        "sr-02990",
+        "sr-57030",
+        "sr-08448",
+        "sr-08622"
+      ],
+      "top1": "sr-37231",
+      "hit1": false,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 50063
+    },
+    {
+      "query_id": "energy-ac-optimal-power-flow",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-46173",
+        "sr-24510",
+        "sr-03771"
+      ],
+      "top_k": [
+        "sr-09729",
+        "sr-36198",
+        "sr-25931",
+        "sr-47554",
+        "sr-07174",
+        "sr-49827",
+        "sr-10587",
+        "sr-14279",
+        "sr-25027",
+        "sr-00669"
+      ],
+      "top1": "sr-09729",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 72957
+    },
+    {
+      "query_id": "energy-market-pricing",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-48638",
+        "sr-78196",
+        "sr-08139",
+        "sr-03771"
+      ],
+      "top_k": [
+        "sr-09729",
+        "sr-36198",
+        "sr-36631",
+        "sr-14279",
+        "sr-74575",
+        "sr-26316",
+        "sr-10587",
+        "sr-75359",
+        "sr-49827"
+      ],
+      "top1": "sr-09729",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 41281
+    },
+    {
+      "query_id": "enterprise-information-search",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-16544"
+      ],
+      "top_k": [
+        "sr-01068",
+        "sr-01551",
+        "sr-01077",
+        "sr-02417",
+        "sr-01913",
+        "sr-00337",
+        "sr-01832",
+        "sr-00094",
+        "sr-00751",
+        "sr-02328"
+      ],
+      "top1": "sr-01068",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 39275
+    },
+    {
+      "query_id": "exoplanet-detection-period",
+      "tier": "multi",
+      "gt_count": 5,
+      "expected_anon": [
+        "sr-05544",
+        "sr-38879",
+        "sr-11616",
+        "sr-50831",
+        "sr-15076"
+      ],
+      "top_k": [
+        "sr-60754",
+        "sr-44628",
+        "sr-61625",
+        "sr-00898",
+        "sr-00216",
+        "sr-38879",
+        "sr-11616",
+        "sr-50831",
+        "sr-05544",
+        "sr-57030"
+      ],
+      "top1": "sr-60754",
+      "hit1": false,
+      "recall_at_10": 0.8,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 49185
+    },
+    {
+      "query_id": "find-topk-similiar-chemicals",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-30305",
+        "sr-05385"
+      ],
+      "top_k": [
+        "sr-11508",
+        "sr-08897",
+        "sr-06955",
+        "sr-11235",
+        "sr-17343",
+        "sr-00044",
+        "sr-03941",
+        "sr-66711",
+        "sr-26145",
+        "sr-08579"
+      ],
+      "top1": "sr-11508",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 56639
+    },
+    {
+      "query_id": "fix-build-agentops",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-41305",
+        "sr-69879",
+        "sr-38714",
+        "sr-40862"
+      ],
+      "top_k": [
+        "sr-01908",
+        "sr-37777",
+        "sr-07137",
+        "sr-09231",
+        "sr-70012",
+        "sr-08858",
+        "sr-21613",
+        "sr-18329",
+        "sr-53892",
+        "sr-21220"
+      ],
+      "top1": "sr-01908",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 35645
+    },
+    {
+      "query_id": "fix-build-google-auto",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-63512",
+        "sr-64846",
+        "sr-13977"
+      ],
+      "top_k": [
+        "sr-02028",
+        "sr-01908",
+        "sr-01293",
+        "sr-01518",
+        "sr-01084",
+        "sr-00452",
+        "sr-00435",
+        "sr-01881",
+        "sr-00477",
+        "sr-02528"
+      ],
+      "top1": "sr-02028",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 47263
+    },
+    {
+      "query_id": "fix-druid-loophole-cve",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-07001",
+        "sr-52763"
+      ],
+      "top_k": [
+        "sr-00023",
+        "sr-00187",
+        "sr-00010",
+        "sr-00181",
+        "sr-00282",
+        "sr-00915",
+        "sr-00820",
+        "sr-01335",
+        "sr-02206",
+        "sr-02195"
+      ],
+      "top1": "sr-00023",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 64348
+    },
+    {
+      "query_id": "fix-erlang-ssh-cve",
+      "tier": "multi",
+      "gt_count": 6,
+      "expected_anon": [
+        "sr-10682",
+        "sr-05965",
+        "sr-68039",
+        "sr-69665",
+        "sr-59794",
+        "sr-17174"
+      ],
+      "top_k": [
+        "sr-00023",
+        "sr-04075",
+        "sr-00010",
+        "sr-01624",
+        "sr-10327",
+        "sr-11393",
+        "sr-04279",
+        "sr-17387",
+        "sr-00332",
+        "sr-01134"
+      ],
+      "top1": "sr-00023",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 64008
+    },
+    {
+      "query_id": "fix-visual-stability",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-37821",
+        "sr-10707",
+        "sr-02208"
+      ],
+      "top_k": [
+        "sr-01093",
+        "sr-01258",
+        "sr-01069",
+        "sr-02283",
+        "sr-00869",
+        "sr-02419",
+        "sr-01393",
+        "sr-02689",
+        "sr-00918",
+        "sr-01122"
+      ],
+      "top1": "sr-01093",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40575
+    },
+    {
+      "query_id": "flink-query",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-46127"
+      ],
+      "top_k": [
+        "sr-78274",
+        "sr-46127",
+        "sr-71440",
+        "sr-04226",
+        "sr-64687",
+        "sr-02876",
+        "sr-42221",
+        "sr-32600",
+        "sr-42340",
+        "sr-34411"
+      ],
+      "top1": "sr-78274",
+      "hit1": false,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 42651
+    },
+    {
+      "query_id": "flood-risk-analysis",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-58327",
+        "sr-39990",
+        "sr-59008"
+      ],
+      "top_k": [
+        "sr-59008",
+        "sr-58327",
+        "sr-39990",
+        "sr-27978",
+        "sr-42295",
+        "sr-22949",
+        "sr-12504",
+        "sr-53555",
+        "sr-21835",
+        "sr-68144"
+      ],
+      "top1": "sr-59008",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 31942
+    },
+    {
+      "query_id": "gh-repo-analytics",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-51320"
+      ],
+      "top_k": [
+        "sr-18709",
+        "sr-09129",
+        "sr-03774",
+        "sr-00175",
+        "sr-11214",
+        "sr-04988",
+        "sr-02076",
+        "sr-00270",
+        "sr-06516",
+        "sr-01774"
+      ],
+      "top1": "sr-18709",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 67082
+    },
+    {
+      "query_id": "glm-lake-mendota",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-66049",
+        "sr-63693",
+        "sr-26947"
+      ],
+      "top_k": [
+        "sr-66049",
+        "sr-63693",
+        "sr-26947",
+        "sr-33205",
+        "sr-25754",
+        "sr-12504"
+      ],
+      "top1": "sr-66049",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 48155
+    },
+    {
+      "query_id": "gravitational-wave-detection",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-60492",
+        "sr-31403"
+      ],
+      "top_k": [
+        "sr-31403",
+        "sr-52882",
+        "sr-47658",
+        "sr-54202",
+        "sr-33083",
+        "sr-02632",
+        "sr-40193",
+        "sr-46422",
+        "sr-44628",
+        "sr-02506"
+      ],
+      "top1": "sr-31403",
+      "hit1": true,
+      "recall_at_10": 0.5,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 56787
+    },
+    {
+      "query_id": "grid-dispatch-operator",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-48638",
+        "sr-78196",
+        "sr-03771"
+      ],
+      "top_k": [
+        "sr-09729",
+        "sr-25931",
+        "sr-36198",
+        "sr-47554",
+        "sr-66368",
+        "sr-39533",
+        "sr-07174",
+        "sr-76621",
+        "sr-51286",
+        "sr-49827"
+      ],
+      "top1": "sr-09729",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 96683
+    },
+    {
+      "query_id": "hvac-control",
+      "tier": "multi",
+      "gt_count": 5,
+      "expected_anon": [
+        "sr-61239",
+        "sr-04749",
+        "sr-35995",
+        "sr-15217",
+        "sr-66398"
+      ],
+      "top_k": [
+        "sr-01167",
+        "sr-02295",
+        "sr-00669",
+        "sr-01711",
+        "sr-00604",
+        "sr-01207",
+        "sr-00137",
+        "sr-00144",
+        "sr-02676",
+        "sr-00383"
+      ],
+      "top1": "sr-01167",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 68353
+    },
+    {
+      "query_id": "invoice-fraud-detection",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-65157"
+      ],
+      "top_k": [
+        "sr-00103",
+        "sr-00751",
+        "sr-00044",
+        "sr-00242",
+        "sr-00764",
+        "sr-02492",
+        "sr-01021",
+        "sr-00499",
+        "sr-00873",
+        "sr-01174"
+      ],
+      "top1": "sr-00103",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40171
+    },
+    {
+      "query_id": "jax-computing-basics",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-44661"
+      ],
+      "top_k": [
+        "sr-56000",
+        "sr-63428",
+        "sr-06230",
+        "sr-03750",
+        "sr-44661",
+        "sr-46793",
+        "sr-54555",
+        "sr-05266",
+        "sr-05637",
+        "sr-08966"
+      ],
+      "top1": "sr-56000",
+      "hit1": false,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 36626
+    },
+    {
+      "query_id": "jpg-ocr-stat",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-60304",
+        "sr-34747",
+        "sr-74628"
+      ],
+      "top_k": [
+        "sr-00103",
+        "sr-00751",
+        "sr-01262",
+        "sr-00242",
+        "sr-01021",
+        "sr-02079",
+        "sr-02492",
+        "sr-00501",
+        "sr-00448",
+        "sr-01781"
+      ],
+      "top1": "sr-00103",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 29931
+    },
+    {
+      "query_id": "lab-unit-harmonization",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-16389"
+      ],
+      "top_k": [
+        "sr-00764",
+        "sr-00242",
+        "sr-02176",
+        "sr-02666",
+        "sr-00262",
+        "sr-01511",
+        "sr-01426",
+        "sr-01175",
+        "sr-00873",
+        "sr-00656"
+      ],
+      "top1": "sr-00764",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 67838
+    },
+    {
+      "query_id": "lake-warming-attribution",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-28523",
+        "sr-53090",
+        "sr-67067",
+        "sr-28596"
+      ],
+      "top_k": [
+        "sr-18215",
+        "sr-19138",
+        "sr-21286",
+        "sr-11867",
+        "sr-16741",
+        "sr-24802",
+        "sr-20469",
+        "sr-26809",
+        "sr-15598",
+        "sr-00125"
+      ],
+      "top1": "sr-18215",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 64297
+    },
+    {
+      "query_id": "latex-formula-extraction",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-59618"
+      ],
+      "top_k": [
+        "sr-00851",
+        "sr-00499",
+        "sr-00044",
+        "sr-00751",
+        "sr-01174",
+        "sr-01040",
+        "sr-01312",
+        "sr-00448",
+        "sr-01976",
+        "sr-00615"
+      ],
+      "top1": "sr-00851",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 32439
+    },
+    {
+      "query_id": "lean4-proof",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-31400",
+        "sr-20165"
+      ],
+      "top_k": [
+        "sr-07164",
+        "sr-32589",
+        "sr-29058",
+        "sr-20165",
+        "sr-16984",
+        "sr-16290",
+        "sr-71254",
+        "sr-24776",
+        "sr-29145",
+        "sr-19037"
+      ],
+      "top1": "sr-07164",
+      "hit1": false,
+      "recall_at_10": 0.5,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 42551
+    },
+    {
+      "query_id": "manufacturing-codebook-normalization",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-35628"
+      ],
+      "top_k": [
+        "sr-35628",
+        "sr-45922",
+        "sr-07256",
+        "sr-30812",
+        "sr-34742",
+        "sr-65157",
+        "sr-12175",
+        "sr-51231",
+        "sr-75906",
+        "sr-61528"
+      ],
+      "top1": "sr-35628",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 63644
+    },
+    {
+      "query_id": "manufacturing-equipment-maintenance",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-72981",
+        "sr-54974"
+      ],
+      "top_k": [
+        "sr-00044",
+        "sr-00499",
+        "sr-00851",
+        "sr-01174",
+        "sr-00751",
+        "sr-02328",
+        "sr-00764",
+        "sr-00242",
+        "sr-01021",
+        "sr-02079"
+      ],
+      "top1": "sr-00044",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 63264
+    },
+    {
+      "query_id": "manufacturing-fjsp-optimization",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-43036"
+      ],
+      "top_k": [
+        "sr-43036",
+        "sr-74287",
+        "sr-38493",
+        "sr-27703",
+        "sr-50086",
+        "sr-16943",
+        "sr-66771",
+        "sr-07853",
+        "sr-67032",
+        "sr-06398"
+      ],
+      "top1": "sr-43036",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 55329
+    },
+    {
+      "query_id": "mario-coin-counting",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-71745",
+        "sr-58731",
+        "sr-44220"
+      ],
+      "top_k": [
+        "sr-53226",
+        "sr-43166",
+        "sr-02019",
+        "sr-07557",
+        "sr-14611",
+        "sr-53875",
+        "sr-06308",
+        "sr-22073",
+        "sr-00764",
+        "sr-36442"
+      ],
+      "top1": "sr-53226",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 56053
+    },
+    {
+      "query_id": "mars-clouds-clustering",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-70972",
+        "sr-41757",
+        "sr-67435"
+      ],
+      "top_k": [
+        "sr-50051",
+        "sr-35333",
+        "sr-67435",
+        "sr-07201",
+        "sr-62663",
+        "sr-14712",
+        "sr-11003",
+        "sr-37367",
+        "sr-23919",
+        "sr-27927"
+      ],
+      "top1": "sr-50051",
+      "hit1": false,
+      "recall_at_10": 0.3333333333333333,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 66477
+    },
+    {
+      "query_id": "mhc-layer-impl",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-56316",
+        "sr-38190",
+        "sr-20150"
+      ],
+      "top_k": [
+        "sr-56316",
+        "sr-20150",
+        "sr-65030",
+        "sr-56811",
+        "sr-70210",
+        "sr-18522",
+        "sr-36503",
+        "sr-68145",
+        "sr-45213",
+        "sr-27560"
+      ],
+      "top1": "sr-56316",
+      "hit1": true,
+      "recall_at_10": 0.6666666666666666,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 50411
+    },
+    {
+      "query_id": "multilingual-video-dubbing",
+      "tier": "multi",
+      "gt_count": 6,
+      "expected_anon": [
+        "sr-16538",
+        "sr-45595",
+        "sr-53163",
+        "sr-35877",
+        "sr-35642",
+        "sr-27461"
+      ],
+      "top_k": [
+        "sr-16538",
+        "sr-27461",
+        "sr-35877",
+        "sr-44817",
+        "sr-35642",
+        "sr-45595",
+        "sr-53163",
+        "sr-07283",
+        "sr-07591",
+        "sr-03852"
+      ],
+      "top1": "sr-16538",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 64113
+    },
+    {
+      "query_id": "organize-messy-files",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-01178",
+        "sr-52912"
+      ],
+      "top_k": [
+        "sr-00601",
+        "sr-01178",
+        "sr-00044",
+        "sr-01040",
+        "sr-00851",
+        "sr-00190",
+        "sr-02163",
+        "sr-00499",
+        "sr-00103",
+        "sr-00725"
+      ],
+      "top1": "sr-00601",
+      "hit1": false,
+      "recall_at_10": 0.5,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 56351
+    },
+    {
+      "query_id": "paper-anonymizer",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-50850"
+      ],
+      "top_k": [
+        "sr-00294",
+        "sr-00044",
+        "sr-00499",
+        "sr-01174",
+        "sr-00851",
+        "sr-01976",
+        "sr-00751",
+        "sr-00853",
+        "sr-01040",
+        "sr-00728"
+      ],
+      "top1": "sr-00294",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 49374
+    },
+    {
+      "query_id": "parallel-tfidf-search",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-22699",
+        "sr-61018",
+        "sr-34963"
+      ],
+      "top_k": [
+        "sr-69859",
+        "sr-44230",
+        "sr-24121",
+        "sr-60738",
+        "sr-15367",
+        "sr-29998",
+        "sr-77399",
+        "sr-43235",
+        "sr-48245",
+        "sr-52205"
+      ],
+      "top1": "sr-69859",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 37797
+    },
+    {
+      "query_id": "pddl-tpp-planning",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-47544"
+      ],
+      "top_k": [
+        "sr-47544",
+        "sr-16943",
+        "sr-07277",
+        "sr-03580",
+        "sr-02716",
+        "sr-14242",
+        "sr-68641",
+        "sr-12770"
+      ],
+      "top1": "sr-47544",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 67614
+    },
+    {
+      "query_id": "pedestrian-traffic-counting",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-25131",
+        "sr-55732",
+        "sr-32201",
+        "sr-74628"
+      ],
+      "top_k": [
+        "sr-00448",
+        "sr-00242",
+        "sr-02019",
+        "sr-02156",
+        "sr-01021",
+        "sr-02079",
+        "sr-02492",
+        "sr-00280"
+      ],
+      "top1": "sr-00448",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 63187
+    },
+    {
+      "query_id": "pg-essay-to-audiobook",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-35937",
+        "sr-75817",
+        "sr-34794",
+        "sr-52597"
+      ],
+      "top_k": [
+        "sr-00059",
+        "sr-02140",
+        "sr-01037",
+        "sr-02143",
+        "sr-01614",
+        "sr-01520",
+        "sr-02178",
+        "sr-00147",
+        "sr-01430",
+        "sr-00433"
+      ],
+      "top1": "sr-00059",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 41335
+    },
+    {
+      "query_id": "powerlifting-coef-calc",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-05081",
+        "sr-01259"
+      ],
+      "top_k": [
+        "sr-00242",
+        "sr-01021",
+        "sr-02079",
+        "sr-02492"
+      ],
+      "top1": "sr-00242",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 47587
+    },
+    {
+      "query_id": "python-scala-translation",
+      "tier": "multi",
+      "gt_count": 6,
+      "expected_anon": [
+        "sr-06349",
+        "sr-19027",
+        "sr-37536",
+        "sr-65453",
+        "sr-75643",
+        "sr-44641"
+      ],
+      "top_k": [
+        "sr-02528",
+        "sr-01468",
+        "sr-01763",
+        "sr-01049",
+        "sr-01119",
+        "sr-00067",
+        "sr-02666",
+        "sr-01661",
+        "sr-02176",
+        "sr-00582"
+      ],
+      "top1": "sr-02528",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 56318
+    },
+    {
+      "query_id": "quantum-numerical-simulation",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-19795"
+      ],
+      "top_k": [
+        "sr-68239",
+        "sr-10100",
+        "sr-18677",
+        "sr-59489",
+        "sr-07698",
+        "sr-19795",
+        "sr-08278",
+        "sr-66913",
+        "sr-72631",
+        "sr-17964"
+      ],
+      "top1": "sr-68239",
+      "hit1": false,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 33928
+    },
+    {
+      "query_id": "r2r-mpc-control",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-26988",
+        "sr-71411",
+        "sr-06497",
+        "sr-12756"
+      ],
+      "top_k": [
+        "sr-25668",
+        "sr-12756",
+        "sr-26988",
+        "sr-06497",
+        "sr-19220",
+        "sr-34430",
+        "sr-71411",
+        "sr-74164",
+        "sr-51286",
+        "sr-15217"
+      ],
+      "top1": "sr-25668",
+      "hit1": false,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 62916
+    },
+    {
+      "query_id": "react-performance-debugging",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-37821",
+        "sr-10707"
+      ],
+      "top_k": [
+        "sr-01258",
+        "sr-01069",
+        "sr-01093",
+        "sr-00157",
+        "sr-02419",
+        "sr-02287",
+        "sr-01485",
+        "sr-00718",
+        "sr-01326",
+        "sr-02283"
+      ],
+      "top1": "sr-01258",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 44900
+    },
+    {
+      "query_id": "scheduling-email-assistant",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-34655",
+        "sr-57769",
+        "sr-32160"
+      ],
+      "top_k": [
+        "sr-00678",
+        "sr-01554",
+        "sr-02154",
+        "sr-00747",
+        "sr-01794",
+        "sr-01336",
+        "sr-00783",
+        "sr-02637",
+        "sr-01428",
+        "sr-02266"
+      ],
+      "top1": "sr-00678",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 32809
+    },
+    {
+      "query_id": "sec-financial-report",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-15114",
+        "sr-70541"
+      ],
+      "top_k": [
+        "sr-15114",
+        "sr-44512",
+        "sr-32934",
+        "sr-30046",
+        "sr-04929",
+        "sr-40523",
+        "sr-43834",
+        "sr-38176",
+        "sr-43269",
+        "sr-69425"
+      ],
+      "top1": "sr-15114",
+      "hit1": true,
+      "recall_at_10": 0.5,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 33302
+    },
+    {
+      "query_id": "seismic-phase-picking",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-32231",
+        "sr-43714",
+        "sr-51022",
+        "sr-66696"
+      ],
+      "top_k": [
+        "sr-66696",
+        "sr-51022",
+        "sr-16603",
+        "sr-35634",
+        "sr-32231",
+        "sr-43714",
+        "sr-21245",
+        "sr-11770",
+        "sr-54357",
+        "sr-31942"
+      ],
+      "top1": "sr-66696",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 59823
+    },
+    {
+      "query_id": "setup-fuzzing-py",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-22731",
+        "sr-25073",
+        "sr-18038"
+      ],
+      "top_k": [
+        "sr-22095",
+        "sr-08573",
+        "sr-24380",
+        "sr-35918",
+        "sr-02845",
+        "sr-71112",
+        "sr-02344",
+        "sr-72254",
+        "sr-03162",
+        "sr-15714"
+      ],
+      "top1": "sr-22095",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 39201
+    },
+    {
+      "query_id": "simpo-code-reproduction",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-16096"
+      ],
+      "top_k": [
+        "sr-00947",
+        "sr-00851",
+        "sr-01704",
+        "sr-00280",
+        "sr-00044",
+        "sr-00656",
+        "sr-02158",
+        "sr-00400",
+        "sr-01691",
+        "sr-01798"
+      ],
+      "top1": "sr-00947",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 47170
+    },
+    {
+      "query_id": "software-dependency-audit",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-22268",
+        "sr-50683",
+        "sr-57086"
+      ],
+      "top_k": [
+        "sr-02326",
+        "sr-01577",
+        "sr-02195",
+        "sr-01581",
+        "sr-00181",
+        "sr-00915",
+        "sr-02678",
+        "sr-00010",
+        "sr-01731",
+        "sr-01539"
+      ],
+      "top1": "sr-02326",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 40342
+    },
+    {
+      "query_id": "speaker-diarization-subtitles",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-63570",
+        "sr-74888",
+        "sr-13859",
+        "sr-53750"
+      ],
+      "top_k": [
+        "sr-43405",
+        "sr-69026",
+        "sr-40091",
+        "sr-21716",
+        "sr-25772",
+        "sr-11124",
+        "sr-32739",
+        "sr-17055",
+        "sr-34446",
+        "sr-04793"
+      ],
+      "top1": "sr-43405",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 41775
+    },
+    {
+      "query_id": "spring-boot-jakarta-migration",
+      "tier": "multi",
+      "gt_count": 5,
+      "expected_anon": [
+        "sr-46357",
+        "sr-27266",
+        "sr-44122",
+        "sr-53460",
+        "sr-23872"
+      ],
+      "top_k": [
+        "sr-09999",
+        "sr-11296",
+        "sr-01119",
+        "sr-06033",
+        "sr-10970",
+        "sr-09475",
+        "sr-03890",
+        "sr-04274",
+        "sr-02378",
+        "sr-05508"
+      ],
+      "top1": "sr-09999",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 46680
+    },
+    {
+      "query_id": "suricata-custom-exfil",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-37860",
+        "sr-40631",
+        "sr-27022"
+      ],
+      "top_k": [
+        "sr-01869",
+        "sr-01386",
+        "sr-02226",
+        "sr-00209",
+        "sr-01389",
+        "sr-00474",
+        "sr-02525",
+        "sr-01090",
+        "sr-01685",
+        "sr-02471"
+      ],
+      "top1": "sr-01869",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 50855
+    },
+    {
+      "query_id": "syzkaller-ppdev-syzlang",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-31960",
+        "sr-78249",
+        "sr-24101"
+      ],
+      "top_k": [
+        "sr-24101",
+        "sr-78249",
+        "sr-58412",
+        "sr-18789",
+        "sr-02845",
+        "sr-24380",
+        "sr-02344",
+        "sr-05297",
+        "sr-06242",
+        "sr-20773"
+      ],
+      "top1": "sr-24101",
+      "hit1": true,
+      "recall_at_10": 0.6666666666666666,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 41504
+    },
+    {
+      "query_id": "taxonomy-tree-merge",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-53450"
+      ],
+      "top_k": [
+        "sr-00034",
+        "sr-00242",
+        "sr-02176",
+        "sr-00764",
+        "sr-00284",
+        "sr-01021",
+        "sr-02079",
+        "sr-02356",
+        "sr-01140",
+        "sr-00873"
+      ],
+      "top1": "sr-00034",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 60058
+    },
+    {
+      "query_id": "threejs-structure-parser",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-55512",
+        "sr-09044"
+      ],
+      "top_k": [
+        "sr-01425",
+        "sr-00611",
+        "sr-01830",
+        "sr-00265",
+        "sr-01556",
+        "sr-00250"
+      ],
+      "top1": "sr-01425",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 37704
+    },
+    {
+      "query_id": "threejs-to-obj",
+      "tier": "multi",
+      "gt_count": 2,
+      "expected_anon": [
+        "sr-55512",
+        "sr-09044"
+      ],
+      "top_k": [
+        "sr-16860",
+        "sr-35618",
+        "sr-41178",
+        "sr-46219",
+        "sr-35943",
+        "sr-10688",
+        "sr-40652",
+        "sr-15526",
+        "sr-21595",
+        "sr-11880"
+      ],
+      "top1": "sr-16860",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 55173
+    },
+    {
+      "query_id": "travel-planning",
+      "tier": "multi",
+      "gt_count": 6,
+      "expected_anon": [
+        "sr-63090",
+        "sr-08545",
+        "sr-44560",
+        "sr-48770",
+        "sr-54217",
+        "sr-16385"
+      ],
+      "top_k": [
+        "sr-25134",
+        "sr-36437",
+        "sr-77492",
+        "sr-75854",
+        "sr-33444",
+        "sr-15820",
+        "sr-62250",
+        "sr-22261",
+        "sr-48870",
+        "sr-27010"
+      ],
+      "top1": "sr-25134",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 47129
+    },
+    {
+      "query_id": "trend-anomaly-causal-inference",
+      "tier": "multi",
+      "gt_count": 4,
+      "expected_anon": [
+        "sr-37702",
+        "sr-19677",
+        "sr-24415",
+        "sr-06540"
+      ],
+      "top_k": [
+        "sr-34986",
+        "sr-16741",
+        "sr-24369",
+        "sr-16399",
+        "sr-27371",
+        "sr-11908",
+        "sr-15598",
+        "sr-08952",
+        "sr-31015",
+        "sr-07551"
+      ],
+      "top1": "sr-34986",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 55382
+    },
+    {
+      "query_id": "video-filler-word-remover",
+      "tier": "multi",
+      "gt_count": 3,
+      "expected_anon": [
+        "sr-35877",
+        "sr-07750",
+        "sr-23486"
+      ],
+      "top_k": [
+        "sr-02411",
+        "sr-02019",
+        "sr-02618",
+        "sr-00448",
+        "sr-01614",
+        "sr-01673",
+        "sr-01521",
+        "sr-01031",
+        "sr-02156"
+      ],
+      "top1": "sr-02411",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 41006
+    },
+    {
+      "query_id": "video-silence-remover",
+      "tier": "multi",
+      "gt_count": 7,
+      "expected_anon": [
+        "sr-48139",
+        "sr-30407",
+        "sr-56409",
+        "sr-20330",
+        "sr-35464",
+        "sr-35200",
+        "sr-02397"
+      ],
+      "top_k": [
+        "sr-39728",
+        "sr-38393",
+        "sr-24644",
+        "sr-38472",
+        "sr-67745",
+        "sr-47349",
+        "sr-22073",
+        "sr-04793",
+        "sr-03512",
+        "sr-75134"
+      ],
+      "top1": "sr-39728",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 39602
+    },
+    {
+      "query_id": "video-tutorial-indexer",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-44881"
+      ],
+      "top_k": [
+        "sr-00448",
+        "sr-02618",
+        "sr-02019",
+        "sr-02397",
+        "sr-01720",
+        "sr-02615",
+        "sr-01031",
+        "sr-00553",
+        "sr-01521",
+        "sr-00852"
+      ],
+      "top1": "sr-00448",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 53788
+    },
+    {
+      "query_id": "virtualhome-agent-planning",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-47544"
+      ],
+      "top_k": [
+        "sr-47544",
+        "sr-42154",
+        "sr-16943",
+        "sr-25272",
+        "sr-65499",
+        "sr-12770",
+        "sr-72427"
+      ],
+      "top1": "sr-47544",
+      "hit1": true,
+      "recall_at_10": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 46476
+    },
+    {
+      "query_id": "xlsx-recover-data",
+      "tier": "single",
+      "gt_count": 1,
+      "expected_anon": [
+        "sr-08836"
+      ],
+      "top_k": [
+        "sr-01021",
+        "sr-02079",
+        "sr-00242",
+        "sr-02492",
+        "sr-01488"
+      ],
+      "top1": "sr-01021",
+      "hit1": false,
+      "recall_at_10": 0,
+      "exitCode": 0,
+      "timedOut": false,
+      "durationMs": 24027
+    }
+  ]
+}

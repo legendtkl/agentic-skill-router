@@ -124,3 +124,31 @@ test("metadata route prefers specific metadata over umbrella skills", () => {
   assert.ok(result.matches[0]?.score ?? 0 > (result.matches[1]?.score ?? 0));
   assert.ok(result.selected?.evidence?.some((e) => e.field === "tool"));
 });
+
+test("metadata-route evidence isGeneric is computed on the normalized form (#152)", () => {
+  // The whole-field evidence row uses `item.text` verbatim, which may
+  // include casing/punctuation (e.g. an alias literally spelled `API`).
+  // Without normalization, `isGenericTerm("API")` returns false even
+  // though the canonical lowercase `api` is on the metadata stop list,
+  // so the same logical match is flagged inconsistently depending on
+  // how the source text happens to be cased.
+  const apiSkill = skill("api-helper", "API helper", {
+    metadata: {
+      name: "api-helper",
+      description: "API helper",
+      aliases: ["API"],
+    },
+  });
+
+  const result = routeDisabledSkillsMetadata([apiSkill], "api", { topK: 1 });
+  const evidence = result.matches[0]?.evidence ?? [];
+  for (const entry of evidence) {
+    if (entry.matched === "API" || entry.matched === "api") {
+      assert.equal(
+        entry.isGeneric,
+        true,
+        `expected isGeneric=true for ${JSON.stringify(entry)}`,
+      );
+    }
+  }
+});

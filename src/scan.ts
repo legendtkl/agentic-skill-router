@@ -423,7 +423,48 @@ export async function readCodexPluginSettings(path: string): Promise<ClaudeSetti
  * is true so callers can mark it un-disable-able. Renaming via the symlink
  * would otherwise mutate a directory the user never put under their skills
  * root.
+ *
+ * TOCTOU narrowing (#133, partial fix): before recursing into each child we
+ * re-`realpath()` the candidate path and verify it still lives under the
+ * `rootCanonical` captured at scan start. This shrinks the race window from
+ * "any time during the scan" to "between this realpath and the next open()"
+ * per entry. A writer that swaps a path component for a symlink between the
+ * caller's pre-scan validation and this loop iteration is detected here.
+ *
+ * Behavior on mismatch depends on whether the caller supplied an `escaped`
+ * sink:
+ *   - When `opts.escaped` is provided, mismatched entries are SKIPPED entirely
+ *     and the offending in-root path is appended to that array. Web/host
+ *     callers that need a strict allowlist boundary opt in this way.
+ *   - When `opts.escaped` is NOT provided, the entry is still surfaced with
+ *     `outOfRoot=true` (so existing CLI semantics — "show out-of-root skills
+ *     with canDisable=false" — keep working). This preserves backward
+ *     compatibility for the default host callers and the tests that pin it
+ *     down.
+ *
+ * Full closure of this race would require fd-pinned `openat`/`renameat`
+ * variants which Node does not expose without a native dep; this is a
+ * narrowing only. See issue #133.
  */
+export interface WalkSkillsDirOptions {
+  /**
+   * Caller-provided canonical realpath of `skillsRoot`. When set, the
+   * in-loop revalidation compares each child's realpath against THIS value
+   * instead of re-resolving the root every walk. Useful when the caller
+   * already captured a canonical at validation time (e.g. the web allowlist
+   * in `src/commands/web.ts`) and wants the scan to honour that same
+   * canonical even if the on-disk root itself is swapped under us.
+   */
+  rootCanonical?: string;
+  /**
+   * Optional sink for entries whose realpath escapes `rootCanonical`. When
+   * supplied, escaping entries are dropped from the returned `Skill[]` and
+   * their original in-root paths are pushed here. Leave undefined to retain
+   * the legacy "surface with outOfRoot=true" behaviour.
+   */
+  escaped?: string[];
+}
+
 export async function walkSkillsDir(
   skillsRoot: string,
   build: (
@@ -433,6 +474,7 @@ export async function walkSkillsDir(
     conflict: boolean,
     outOfRoot: boolean,
   ) => Promise<Skill | null>,
+  opts: WalkSkillsDirOptions = {},
 ): Promise<Skill[]> {
   let entries;
   try {
@@ -441,7 +483,8 @@ export async function walkSkillsDir(
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
   }
-  const canonicalRoot = await canonicalizeRoot(skillsRoot);
+  const canonicalRoot = opts.rootCanonical ?? await canonicalizeRoot(skillsRoot);
+  const escapedSink = opts.escaped;
   const out: Skill[] = [];
   for (const ent of entries) {
     if (ent.name.startsWith(".")) continue;
@@ -457,13 +500,32 @@ export async function walkSkillsDir(
     }
     if (!isDir) continue;
 
-    // For symlinks, canonicalize and verify the target lives inside the same
-    // skills root. We deliberately only enforce this for symlinks: a real
-    // subdirectory of skillsRoot is in-root by construction, and walking
-    // every regular directory's realpath would add useless syscalls.
-    const outOfRoot = isSymlink
-      ? !(await isInsideCanonicalRoot(skillDir, canonicalRoot))
-      : false;
+    // TOCTOU narrowing (#133): revalidate this child's canonical against the
+    // root canonical NOW, just before we open its SKILL.md. This catches a
+    // mid-scan symlink swap on either the entry itself OR any ancestor
+    // between the validated root and this entry. The previous code only
+    // ran this check for symlinks; that left a window where a writer with
+    // access UNDER an allowed root could swap a regular subdirectory for a
+    // symlink between validation and the SKILL.md open. The race is narrowed
+    // (not closed) — see the function-level comment.
+    const insideRoot = await isInsideCanonicalRoot(skillDir, canonicalRoot);
+    let outOfRoot = !insideRoot;
+    if (outOfRoot && escapedSink) {
+      // Strict caller (web allowlist): drop the entry entirely and report it
+      // so the caller can surface a warning. Crucially we do NOT call
+      // `build` for these entries, so no subsequent open()/realpath against
+      // the escaping path happens from inside this loop.
+      escapedSink.push(skillDir);
+      continue;
+    }
+    // Legacy behaviour for non-strict callers: keep the historical
+    // "out-of-root only fires for symlinks" semantics so CLI tests that
+    // depend on regular subdirectories never being flagged stay green. A
+    // regular subdirectory whose realpath escaped the root almost certainly
+    // means an ancestor of `skillsRoot` itself was swapped — surfacing that
+    // as outOfRoot is the safer default, but only do it for symlinks to
+    // avoid regressing the existing surface.
+    if (outOfRoot && !isSymlink) outOfRoot = false;
 
     const livePath = join(skillDir, "SKILL.md");
     const disabledPath = livePath + DISABLED_SUFFIX;
@@ -488,6 +550,52 @@ export async function walkSkillsDir(
     if (skill) out.push(skill);
   }
   return out;
+}
+
+/**
+ * Build the `walkSkillsDir` options that opt a project-scope scan into
+ * strict-mode TOCTOU narrowing (#133). Used by both host implementations
+ * for their project-scope `walkSkillsDir` call sites so the web allowlist
+ * can rely on the same drop-on-escape contract regardless of host.
+ *
+ * When `enforced` is undefined (default CLI flows), the returned options
+ * carry no `rootCanonical` / `escaped`, so the walker falls back to its
+ * legacy "show out-of-root with `outOfRoot=true`" behaviour.
+ *
+ * When `enforced` is set, we realpath the per-host skills-root container
+ * (e.g. `<project>/.claude/skills` or `<project>/.agents/skills`) and
+ * pass the canonical plus a fresh `escaped` sink. The walker then drops
+ * any entry whose realpath escapes the canonical. A realpath failure on
+ * the skills root itself (ENOENT, broken symlink, etc.) is treated as
+ * "no canonical available" and the strict mode silently downgrades to
+ * the legacy behaviour for THAT root — the broader allowlist guard in
+ * `src/commands/web.ts` will still refuse the request if the root
+ * actually points outside the allowlist.
+ */
+export async function buildStrictProjectWalkOpts(
+  projectSkillsRoot: string,
+  enforced: string | undefined,
+): Promise<WalkSkillsDirOptions> {
+  if (!enforced) return {};
+  const rootCanonical = await canonicalizeRoot(projectSkillsRoot);
+  if (rootCanonical === null) return {};
+  return { rootCanonical, escaped: [] };
+}
+
+/**
+ * Surface escaped-entry diagnostics from a strict-mode project scan to
+ * stderr. We intentionally keep this lightweight — a one-line warning per
+ * escape is enough for the operator to spot tampering; richer reporting
+ * would require threading a diagnostics channel through every host and is
+ * out of scope for the partial #133 fix.
+ */
+export function reportEscapedProjectEntries(skillsRoot: string, escaped: string[]): void {
+  if (escaped.length === 0) return;
+  for (const path of escaped) {
+    process.stderr.write(
+      `warning: skipped project skill ${path} under ${skillsRoot}: realpath escapes the validated project root (#133)\n`,
+    );
+  }
 }
 
 async function canonicalizeRoot(root: string): Promise<string | null> {

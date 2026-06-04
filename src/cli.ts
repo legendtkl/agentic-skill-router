@@ -13,6 +13,7 @@ import { cmdSuggest } from "./commands/suggest.ts";
 import { cmdWeb } from "./commands/web.ts";
 import { findDeprecatedHostFlag, resolveHostName } from "./host-resolve.ts";
 import { usage } from "./output.ts";
+import type { HostName } from "./types.ts";
 
 export async function run(argv: string[]): Promise<number> {
   try {
@@ -27,26 +28,10 @@ export async function run(argv: string[]): Promise<number> {
     const hostName = resolveHostName();
     if (!hostName) return usage(2);
     if (command === "skills") {
-      switch (subcommand) {
-        case "list": return await cmdList(rest, hostName);
-        case "suggest": return await cmdSuggest(rest, hostName);
-        case "route": return await cmdRoute(rest, hostName);
-        case "corpus": return await cmdCorpus(rest, hostName);
-        case "dci": return await cmdDci(rest, hostName);
-        case "body": return await cmdDci(rest, hostName);
-        case "disable": return await cmdDisable(rest, hostName);
-        case "enable": return await cmdEnable(rest, hostName);
-        case "status": return await cmdStatus(rest, hostName);
-        case "config": return await cmdConfig(rest);
-        case "web": return await cmdWeb(rest, hostName);
-        case undefined:
-        case "-h":
-        case "--help":
-          return usage();
-        default:
-          console.error(`unknown subcommand: ${subcommand}`);
-          return usage(2);
-      }
+      return await dispatchSkillsCommand(subcommand, rest, hostName);
+    }
+    if (isSkillsCommand(command)) {
+      return await dispatchSkillsCommand(command, subcommand === undefined ? rest : [subcommand, ...rest], hostName);
     }
     console.error(`unknown command: ${command}`);
     return usage(2);
@@ -55,6 +40,51 @@ export async function run(argv: string[]): Promise<number> {
       return reportParseArgsError(err);
     }
     throw err;
+  }
+}
+
+const SKILLS_COMMANDS = new Set([
+  "list",
+  "suggest",
+  "route",
+  "corpus",
+  "dci",
+  "body",
+  "disable",
+  "enable",
+  "status",
+  "config",
+  "web",
+]);
+
+function isSkillsCommand(command: string): boolean {
+  return SKILLS_COMMANDS.has(command);
+}
+
+async function dispatchSkillsCommand(
+  subcommand: string | undefined,
+  rest: string[],
+  hostName: HostName,
+): Promise<number> {
+  switch (subcommand) {
+    case "list": return await cmdList(rest, hostName);
+    case "suggest": return await cmdSuggest(rest, hostName);
+    case "route": return await cmdRoute(rest, hostName);
+    case "corpus": return await cmdCorpus(rest, hostName);
+    case "dci": return await cmdDci(rest, hostName);
+    case "body": return await cmdDci(rest, hostName);
+    case "disable": return await cmdDisable(rest, hostName);
+    case "enable": return await cmdEnable(rest, hostName);
+    case "status": return await cmdStatus(rest, hostName);
+    case "config": return await cmdConfig(rest);
+    case "web": return await cmdWeb(rest, hostName);
+    case undefined:
+    case "-h":
+    case "--help":
+      return usage();
+    default:
+      console.error(`unknown subcommand: ${subcommand}`);
+      return usage(2);
   }
 }
 

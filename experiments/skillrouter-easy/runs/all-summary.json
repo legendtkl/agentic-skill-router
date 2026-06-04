@@ -1,0 +1,89 @@
+{
+  "finishedAt": "2026-05-25T17:58:16.699Z",
+  "cells": [
+    {
+      "host": "claude",
+      "variant": "J-bounded-v2",
+      "hit1": 16,
+      "hit1_rate": 0.21333333333333335,
+      "hit1_single": 5,
+      "hit1_multi": 11,
+      "n_single": 24,
+      "n_multi": 51,
+      "answered": 75,
+      "timeouts": 0,
+      "errors": 0,
+      "elapsedMs": 1008972
+    },
+    {
+      "host": "claude",
+      "variant": "K-bounded",
+      "hit1": 19,
+      "hit1_rate": 0.25333333333333335,
+      "hit1_single": 4,
+      "hit1_multi": 15,
+      "n_single": 24,
+      "n_multi": 51,
+      "answered": 75,
+      "timeouts": 0,
+      "errors": 0,
+      "elapsedMs": 1037288
+    },
+    {
+      "host": "claude",
+      "variant": "M-bm25",
+      "hit1": 26,
+      "hit1_rate": 0.3466666666666667,
+      "hit1_single": 7,
+      "hit1_multi": 19,
+      "n_single": 24,
+      "n_multi": 51,
+      "answered": 75,
+      "timeouts": 0,
+      "errors": 0,
+      "elapsedMs": 1329293
+    },
+    {
+      "host": "codex",
+      "variant": "J-bounded-v2",
+      "hit1": 30,
+      "hit1_rate": 0.4,
+      "hit1_single": 9,
+      "hit1_multi": 21,
+      "n_single": 24,
+      "n_multi": 51,
+      "answered": 75,
+      "timeouts": 0,
+      "errors": 0,
+      "elapsedMs": 2532007
+    },
+    {
+      "host": "codex",
+      "variant": "K-bounded",
+      "hit1": 24,
+      "hit1_rate": 0.32,
+      "hit1_single": 5,
+      "hit1_multi": 19,
+      "n_single": 24,
+      "n_multi": 51,
+      "answered": 74,
+      "timeouts": 1,
+      "errors": 0,
+      "elapsedMs": 2965678
+    },
+    {
+      "host": "codex",
+      "variant": "M-bm25",
+      "hit1": 28,
+      "hit1_rate": 0.37333333333333335,
+      "hit1_single": 7,
+      "hit1_multi": 21,
+      "n_single": 24,
+      "n_multi": 51,
+      "answered": 75,
+      "timeouts": 0,
+      "errors": 0,
+      "elapsedMs": 3444039
+    }
+  ]
+}

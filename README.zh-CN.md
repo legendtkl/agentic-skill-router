@@ -2,7 +2,15 @@
 
 [English](README.md) | 简体中文
 
-`agentic-skill-router` 是面向受支持宿主的 Agent Skills 管理 CLI 与安装资产。它会枚举已安装 skills、读取本地会话记录中的使用情况、建议过期或长期未使用的 skills，并通过重命名 `SKILL.md` 的方式安全禁用或恢复指定 skill。
+`agentic-skill-router` 是受 Agentic Search 启发、面向 Agent Skills
+管理的无向量化路由方案。它把已安装 skill 的 metadata 当成本地可搜索语料，
+让 agent 做有边界的证据检索，并且只在 metadata 支持时记录一次路由选择。
+它也会枚举已安装 skills、读取本地会话记录中的使用情况、建议过期或长期未使用的
+skills，并通过重命名 `SKILL.md` 的方式安全禁用或恢复指定 skill。
+
+本项目不是通用 RAG 栈，不依赖 embedding、向量数据库或后台索引服务。目标是为
+skill 管理提供一个轻量、可审计的路由层：保持启用 skill 集合精简，为已禁用
+skills 保留仅基于 metadata 的找回路径，并让最终选择仍由 agent 控制。
 
 Subagent 管理不属于本仓库范围。
 
@@ -15,13 +23,15 @@ npm install -g agentic-skill-router
 agentic-skill-router init
 ```
 
-`agentic-skill-router init` 会交互式选择目标 agent（`codex` 或 `claude-code`）和安装范围（`project` 或 `global`）。非交互示例：
+`agentic-skill-router init` 会交互式选择目标 agent（`codex` 或 `claude-code`）和安装范围（`project` 或 `global`）。交互提示支持 `1,2` 或 `all` 这样的多选输入。非交互示例：
 
 ```bash
 agentic-skill-router init codex project
 agentic-skill-router init codex global
 agentic-skill-router init claude-code project
 agentic-skill-router init claude-code global
+agentic-skill-router init codex,claude-code project
+agentic-skill-router init all project,global
 ```
 
 针对 `claude-code`，`init` 还会在 `CLAUDE.md` 里写入一小段路由触发指引（project 范围：`<projectRoot>/CLAUDE.md`；global 范围：`$CLAUDE_HOME/CLAUDE.md`，默认 `~/.claude/CLAUDE.md`）。实际写入的块如下：
@@ -30,14 +40,14 @@ agentic-skill-router init claude-code global
 <!-- agentic-skill-router:claude-md:begin -->
 ## Skill routing
 
-`agentic-skill-router-skills` is a routing Skill that searches a catalog of
+`agentic-skill-router` is a routing Skill that searches a catalog of
 locally-installed disabled skills.
 
-When the `agentic-skill-router-skills` Skill is available and no other
+When the `agentic-skill-router` Skill is available and no other
 enabled Skill clearly matches the user's query, call
-`agentic-skill-router-skills` before answering. Do not invent a Skill name
+`agentic-skill-router` before answering. Do not invent a Skill name
 or fabricate a routing result without a Skill/tool result. If
-`agentic-skill-router-skills` is not installed in this environment, this
+`agentic-skill-router` is not installed in this environment, this
 section does not apply.
 ```
 
@@ -47,7 +57,7 @@ HTML 注释 fence 保证幂等：重复执行 `init` 会在原位置替换第一
 
 文案对应 `experiments/dci-compare/` 中 `claudemd-policy-probe` 的验证结果——在 150-skill 配对实验中把 router 触发率从 78% 提升到 97.6%、路由准确率从 69% 提升到 86.9%。如不需要写入，可加 `--no-claude-md`。Codex `init` 不会修改 CLAUDE.md。
 
-init 完成后，如果目标 agent 已在运行，请重启它，然后让已安装的 `agentic-skill-router-skills` skill 审计、精简或路由已安装 skills。
+init 完成后，如果目标 agent 已在运行，请重启它，然后让已安装的 `agentic-skill-router` skill 审计、精简或路由已安装 skills。
 
 也可以用 `npx` 做一次性项目初始化试用；但推荐全局安装，这样生成的 skill 能引用稳定的 CLI 路径：
 
@@ -60,13 +70,14 @@ npx --package agentic-skill-router agentic-skill-router init codex project
 ```bash
 npm install
 npm run install:plugin        # Claude Code plugin
-npm run install:codex-plugin  # Codex plugin 和 /agentic-skill-router:skills prompt
+npm run install:codex-plugin  # Codex plugin 和 /agentic-skill-router prompt
 ```
 
 安装 Codex 插件后，重启 Codex，然后运行：
 
 ```text
-/agentic-skill-router:skills
+$agentic-skill-router list
+/agentic-skill-router list
 ```
 
 ## CLI
@@ -76,27 +87,27 @@ npm run install:codex-plugin  # Codex plugin 和 /agentic-skill-router:skills pr
 已安装的 Claude Code 插件：
 
 ```bash
-bin/agentic-skill-router skills list
-bin/agentic-skill-router skills suggest --json
-bin/agentic-skill-router skills corpus search --all mail --any lark --limit 30 --json
-bin/agentic-skill-router skills corpus inspect corpus-abc123def0 --json
-bin/agentic-skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
-bin/agentic-skill-router skills disable user:lark-mail --yes
-bin/agentic-skill-router skills enable user:lark-mail
-bin/agentic-skill-router skills status
+bin/agentic-skill-router list
+bin/agentic-skill-router suggest --json
+bin/agentic-skill-router corpus search --all mail --any lark --limit 30 --json
+bin/agentic-skill-router corpus inspect corpus-abc123def0 --json
+bin/agentic-skill-router corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
+bin/agentic-skill-router disable user:lark-mail --yes
+bin/agentic-skill-router enable user:lark-mail
+bin/agentic-skill-router status
 ```
 
 已安装的 Codex 插件：
 
 ```bash
-bin/agentic-skill-router skills list
-bin/agentic-skill-router skills suggest --json
-bin/agentic-skill-router skills corpus search --all mail --any lark --limit 30 --json
-bin/agentic-skill-router skills corpus inspect corpus-abc123def0 --json
-bin/agentic-skill-router skills corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
-bin/agentic-skill-router skills disable user:codex:lark-mail --yes
-bin/agentic-skill-router skills enable user:codex:lark-mail
-bin/agentic-skill-router skills status
+bin/agentic-skill-router list
+bin/agentic-skill-router suggest --json
+bin/agentic-skill-router corpus search --all mail --any lark --limit 30 --json
+bin/agentic-skill-router corpus inspect corpus-abc123def0 --json
+bin/agentic-skill-router corpus select corpus-abc123def0 --query "draft a Lark mail reply" --confidence high --reason "metadata mentions Lark mail" --json
+bin/agentic-skill-router disable user:codex:lark-mail --yes
+bin/agentic-skill-router enable user:codex:lark-mail
+bin/agentic-skill-router status
 ```
 
 `--unused-for=<duration>` 支持 `30`、`30d`、`2w`、`3m` 和 `1y`。持久化默认配置位于 `~/.agentic-skill-router/config.json`：
@@ -112,12 +123,12 @@ bin/agentic-skill-router skills status
 
 同一个 Agent Skills 源通过多种宿主安装入口分发：
 
-- `skills/agentic-skill-router-skills/SKILL.md` 是唯一 source of truth。
-- `skills/agentic-skill-router-skills/references/` 存放共享工作流细节。
+- `skills/agentic-skill-router/SKILL.md` 是唯一 source of truth。
+- `skills/agentic-skill-router/references/` 存放共享工作流细节。
 - `bin/agentic-skill-router` 和 `lib/agentic-skill-router.mjs` 是共享 CLI runtime。
 - `plugins/claude-code/` 与 `plugins/codex/` 只提供宿主 manifest 和宿主入口。
 - 安装脚本会把共享 runtime 复制到 `~/.agentic-skill-router/runtime/<version>/`，再把宿主 manifest、skills 和一个很小的宿主 wrapper 复制到目标宿主的本地插件缓存中。wrapper 会设置 `AGENTIC_SKILL_ROUTER_HOST`，再转发到共享 runtime。
-- `plugins/codex/prompts/agentic-skill-router-skills.md` 是 Codex slash command 的生成 shim。
+- `plugins/codex/prompts/agentic-skill-router.md` 是 Codex slash command 的生成 shim。
 - `agentic-skill-router init` 可以在不安装宿主插件的情况下，为 Codex 或 Claude Code 创建项目级或全局 skill 入口。
 
 不要创建宿主专属的 `SKILL.md` 副本；应更新统一 skill 源，然后重新安装或构建。
@@ -145,10 +156,15 @@ Skill 来源：
 
 已禁用 skill 路由：
 
-- 默认 agent workflow 是 L-agentic：agent 先从用户请求里构造 must/probe terms，用 `skills corpus search` 搜索已禁用 skill 元数据；必要时用 `skills corpus inspect` 检查小候选集；最后用 `skills corpus select` 记录且只选择一个 skill。
+- 默认 agent workflow 是受 Agentic Search 启发的 L-agentic 路由：agent
+  先从用户请求里构造 must/probe terms，用 `corpus search` 搜索已禁用
+  skill 元数据；必要时用 `corpus inspect` 检查小候选集；最后用
+  `corpus select` 记录且只选择一个 skill。
+- 路由刻意保持无向量化。检索只面向结构化 frontmatter 和短 metadata 字段；
+  不需要 embedding、向量库或隐藏的语义索引。
 - 检索阶段不能读取已禁用 skill 正文；选择依据只来自元数据。
-- `skills corpus search` 读取 `id`、`name`、`description`、aliases、tags、tools、domains、intents 和 examples，返回稳定 `corpus-...` refs，不暴露本地文件路径。
-- `skills corpus select <ref>` 会写入路由使用记录，并返回 `selected.skillMdPath`；返回路径可能以 `SKILL.md.agentic-skill-router-disabled` 结尾，仍可作为指令安全读取。
+- `corpus search` 读取 `id`、`name`、`description`、aliases、tags、tools、domains、intents 和 examples，返回稳定 `corpus-...` refs，不暴露本地文件路径。
+- `corpus select <ref>` 会写入路由使用记录，并返回 `selected.skillMdPath`；返回路径可能以 `SKILL.md.agentic-skill-router-disabled` 结尾，仍可作为指令安全读取。
 - 如果元数据证据弱或歧义，应停止 router 路径，正常继续处理，不选择已禁用 skill。
 
 Skill metadata 编写建议：
@@ -198,7 +214,7 @@ frontmatter: skipped nested mapping under `metadata` (line 7)
 ```
 
 警告会附加在 skill 记录的可选字段 `frontmatterWarnings` 上，并在
-`skills list --json` 输出中体现，便于发现被静默跳过的字段。请把所有路由相关
+`list --json` 输出中体现，便于发现被静默跳过的字段。请把所有路由相关
 metadata 放在顶层（参考上面的 `lark-mail` 示例）。
 
 ## 故障排查

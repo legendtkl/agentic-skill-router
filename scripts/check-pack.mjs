@@ -16,19 +16,22 @@ const root = resolve(__dirname, "..");
 const REQUIRED_FILES = [
   "bin/agentic-skill-router",
   "lib/agentic-skill-router.mjs",
-  "skills/agentic-skill-router-skills/SKILL.md",
+  "skills/agentic-skill-router/SKILL.md",
   "plugins/claude-code/.claude-plugin/plugin.json",
   "plugins/codex/.codex-plugin/plugin.json",
-  "plugins/codex/prompts/agentic-skill-router-skills.md",
+  "plugins/codex/prompts/agentic-skill-router.md",
 ];
 
 const REQUIRED_DIRS = ["bin/", "lib/", "skills/", "plugins/codex/prompts/"];
 
 const FORBIDDEN_PACK_ENTRIES = [
   "bin/skill-router",
+  "bin/agentic-skill-router-skills",
   "lib/skill-router.mjs",
   "plugins/codex/prompts/skill-router-skills.md",
+  "plugins/codex/prompts/agentic-skill-router-skills.md",
   "skills/skill-router-skills/",
+  "skills/agentic-skill-router-skills/",
   "experiments/",
 ];
 

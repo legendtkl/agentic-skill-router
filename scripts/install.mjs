@@ -68,9 +68,9 @@ async function main() {
   log("");
   log("✓ installed.");
   log("");
-  log("Next: restart Claude Code, then in a new session ask the model to slim your skills.");
+  log("Next: restart Claude Code, then run /agentic-skill-router list or ask the model to slim your skills.");
   log("Manual CLI:");
-  log(`  ${installPath}/bin/agentic-skill-router skills suggest`);
+  log(`  ${installPath}/bin/agentic-skill-router suggest`);
 }
 
 async function registerPlugin() {

@@ -17,7 +17,11 @@ await build({
   entryPoints: [resolve(root, "src/cli.ts")],
   bundle: true,
   platform: "node",
-  target: "node18",
+  // Keep aligned with package.json `engines.node` (>=20). esbuild treats this
+  // as the minimum Node version the bundle is guaranteed to run on; lowering
+  // it would allow downlevel-incompatible syntax to ship into a runtime we
+  // do not claim to support.
+  target: "node20",
   format: "esm",
   outfile: out,
   banner: { js: "#!/usr/bin/env node" },
